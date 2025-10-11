@@ -106,9 +106,13 @@ class TenantDeploy extends Command
         try {
             $tenantPath = env('PRODUCTION_PATH') . $tenant->code;
 
-            if (!file_exists($tenantPath) || !is_dir($tenantPath)) {
-                throw new \Exception("Répertoire tenant introuvable: {$tenantPath}");
+            // Vérifier l'existence du répertoire seulement si on est sur le serveur de production
+            if ($this->isOnProductionServer()) {
+                if (!file_exists($tenantPath) || !is_dir($tenantPath)) {
+                    throw new \Exception("Répertoire tenant introuvable: {$tenantPath}");
+                }
             }
+            // Si on est en local, on ne peut pas vérifier (le répertoire est distant via SSH)
 
             // Étape 1: Backup (si non désactivé)
             if (!$skipBackup) {
@@ -222,8 +226,9 @@ class TenantDeploy extends Command
     {
         $fullCommand = "cd {$path} && {$command}";
 
-        // En local (développement)
-        if (app()->environment('local')) {
+        // Détecter si on est sur le même serveur que les tenants
+        if ($this->isOnProductionServer()) {
+            // On est sur le serveur cPanel, exécution directe
             $result = Process::run($fullCommand);
 
             if (!$result->successful()) {
@@ -233,7 +238,7 @@ class TenantDeploy extends Command
             return $returnOutput ? $result->output() : '';
         }
 
-        // En production (via SSH)
+        // On est en local/distant, utiliser SSH
         $host = env('PRODUCTION_HOST');
         $user = env('PRODUCTION_USER');
         $sshCommand = "ssh {$user}@{$host} '{$fullCommand}'";
@@ -245,6 +250,27 @@ class TenantDeploy extends Command
         }
 
         return $returnOutput ? $result->output() : '';
+    }
+
+    /**
+     * Vérifier si klassciMaster est sur le même serveur que les tenants
+     * Méthode : Vérifier si le répertoire PRODUCTION_PATH existe localement
+     */
+    private function isOnProductionServer(): bool
+    {
+        $productionPath = env('PRODUCTION_PATH');
+
+        // Si le chemin de production existe et est accessible, on est sur le serveur
+        if ($productionPath && file_exists($productionPath) && is_dir($productionPath)) {
+            // Vérifier également si c'est bien un chemin de production (pas un chemin local de dev)
+            // Le chemin de production contient généralement "public_html" ou "home"
+            if (strpos($productionPath, 'public_html') !== false || strpos($productionPath, '/home/c') === 0) {
+                return true;
+            }
+        }
+
+        // Par défaut, on suppose qu'on est en local (utiliser SSH)
+        return false;
     }
 
     private function displayDeploymentInfo(TenantDeployment $deployment): void

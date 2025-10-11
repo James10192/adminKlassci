@@ -3,231 +3,172 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\TenantDeploymentResource\Pages;
-use App\Filament\Resources\TenantDeploymentResource\RelationManagers;
 use App\Models\TenantDeployment;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Support\Colors\Color;
 
 class TenantDeploymentResource extends Resource
 {
     protected static ?string $model = TenantDeployment::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rocket-launch';
+    protected static ?string $navigationIcon = 'heroicon-o-arrow-path';
 
     protected static ?string $navigationLabel = 'Déploiements';
 
-    protected static ?string $modelLabel = 'Déploiement';
+    protected static ?string $modelLabel = 'déploiement';
 
-    protected static ?string $pluralModelLabel = 'Déploiements';
+    protected static ?string $pluralModelLabel = 'déploiements';
 
     protected static ?string $navigationGroup = 'Gestion Tenants';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Informations Déploiement')
-                    ->schema([
-                        Forms\Components\Select::make('tenant_id')
-                            ->label('Établissement')
-                            ->relationship('tenant', 'name')
-                            ->required()
-                            ->searchable()
-                            ->preload(),
+                Forms\Components\Select::make('tenant_id')
+                    ->relationship('tenant', 'name')
+                    ->required()
+                    ->disabled()
+                    ->dehydrated(false),
 
-                        Forms\Components\TextInput::make('git_branch')
-                            ->label('Branche Git')
-                            ->required()
-                            ->maxLength(100)
-                            ->default('main'),
+                Forms\Components\TextInput::make('git_branch')
+                    ->label('Branche Git')
+                    ->disabled()
+                    ->dehydrated(false),
 
-                        Forms\Components\TextInput::make('git_commit_hash')
-                            ->label('Commit Hash')
-                            ->required()
-                            ->maxLength(40)
-                            ->placeholder('SHA-1 du commit'),
+                Forms\Components\TextInput::make('git_commit_hash')
+                    ->label('Commit Hash')
+                    ->disabled()
+                    ->dehydrated(false),
 
-                        Forms\Components\Select::make('status')
-                            ->label('Statut')
-                            ->required()
-                            ->options([
-                                'pending' => 'En attente',
-                                'in_progress' => 'En cours',
-                                'completed' => 'Terminé',
-                                'failed' => 'Échoué',
-                                'rolled_back' => 'Annulé (Rollback)',
-                            ])
-                            ->default('pending'),
+                Forms\Components\Select::make('status')
+                    ->label('Statut')
+                    ->options([
+                        'in_progress' => 'En cours',
+                        'success' => 'Réussi',
+                        'failed' => 'Échoué',
                     ])
-                    ->columns(2),
+                    ->disabled()
+                    ->dehydrated(false),
 
-                Forms\Components\Section::make('Suivi Temporel')
-                    ->schema([
-                        Forms\Components\DateTimePicker::make('started_at')
-                            ->label('Début')
-                            ->seconds(false),
+                Forms\Components\Textarea::make('error_message')
+                    ->label('Message d\'erreur')
+                    ->rows(3)
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->visible(fn ($record) => $record && $record->status === 'failed'),
 
-                        Forms\Components\DateTimePicker::make('completed_at')
-                            ->label('Fin')
-                            ->seconds(false),
+                Forms\Components\DateTimePicker::make('started_at')
+                    ->label('Démarré le')
+                    ->disabled()
+                    ->dehydrated(false),
 
-                        Forms\Components\TextInput::make('duration_seconds')
-                            ->label('Durée (secondes)')
-                            ->numeric()
-                            ->disabled()
-                            ->default(null),
+                Forms\Components\DateTimePicker::make('completed_at')
+                    ->label('Terminé le')
+                    ->disabled()
+                    ->dehydrated(false),
 
-                        Forms\Components\Select::make('deployed_by_user_id')
-                            ->label('Déployé par')
-                            ->relationship('deployedBy', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->default(null),
-                    ])
-                    ->columns(2),
+                Forms\Components\TextInput::make('duration_seconds')
+                    ->label('Durée (secondes)')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->suffix('s'),
 
-                Forms\Components\Section::make('Logs & Erreurs')
-                    ->schema([
-                        Forms\Components\Textarea::make('deployment_log')
-                            ->label('Log de déploiement')
-                            ->rows(10)
-                            ->columnSpanFull(),
-
-                        Forms\Components\Textarea::make('error_message')
-                            ->label('Message d\'erreur')
-                            ->rows(3)
-                            ->columnSpanFull()
-                            ->visible(fn ($get) => $get('status') === 'failed'),
-
-                        Forms\Components\Textarea::make('error_details')
-                            ->label('Détails erreur (JSON)')
-                            ->rows(10)
-                            ->columnSpanFull()
-                            ->visible(fn ($get) => $get('status') === 'failed'),
-                    ]),
+                Forms\Components\Textarea::make('deployment_log')
+                    ->label('Logs de déploiement')
+                    ->rows(10)
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->columnSpanFull(),
             ]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('tenant.name')
-                    ->label('Établissement')
+                    ->label('Tenant')
                     ->searchable()
-                    ->sortable()
-                    ->weight('bold'),
-
-                Tables\Columns\TextColumn::make('tenant.code')
-                    ->label('Code')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\BadgeColumn::make('status')
-                    ->label('Statut')
-                    ->colors([
-                        'secondary' => 'pending',
-                        'warning' => 'in_progress',
-                        'success' => 'completed',
-                        'danger' => 'failed',
-                        'gray' => 'rolled_back',
-                    ])
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'pending' => 'En attente',
-                        'in_progress' => 'En cours',
-                        'completed' => 'Terminé',
-                        'failed' => 'Échoué',
-                        'rolled_back' => 'Annulé',
-                        default => $state,
-                    }),
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('git_branch')
                     ->label('Branche')
-                    ->searchable()
                     ->badge()
-                    ->color('primary'),
+                    ->color('info')
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('git_commit_hash')
                     ->label('Commit')
-                    ->searchable()
-                    ->limit(8)
-                    ->tooltip(fn ($record) => $record->git_commit_hash),
+                    ->formatStateUsing(fn ($state) => substr($state ?? 'N/A', 0, 8))
+                    ->copyable()
+                    ->copyMessage('Commit hash copié!')
+                    ->copyMessageDuration(1500),
+
+                Tables\Columns\TextColumn::make('status')
+                    ->label('Statut')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'in_progress' => 'warning',
+                        'success' => 'success',
+                        'failed' => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'in_progress' => 'En cours',
+                        'success' => 'Réussi',
+                        'failed' => 'Échoué',
+                        default => $state,
+                    }),
 
                 Tables\Columns\TextColumn::make('started_at')
                     ->label('Démarré')
                     ->dateTime('d/m/Y H:i')
-                    ->sortable()
-                    ->toggleable(),
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('duration_seconds')
+                    ->label('Durée')
+                    ->formatStateUsing(fn ($state) => $state ? "{$state}s" : 'N/A')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('deployedBy.name')
+                    ->label('Déployé par')
+                    ->default('CLI')
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('completed_at')
                     ->label('Terminé')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('duration_seconds')
-                    ->label('Durée')
-                    ->formatStateUsing(fn ($state) => $state ? gmdate('i:s', $state) . 'min' : '-')
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('deployedBy.name')
-                    ->label('Déployé par')
-                    ->searchable()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Créé le')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('tenant_id')
-                    ->label('Établissement')
-                    ->relationship('tenant', 'name')
-                    ->searchable()
-                    ->preload(),
-
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Statut')
                     ->options([
-                        'pending' => 'En attente',
                         'in_progress' => 'En cours',
-                        'completed' => 'Terminé',
+                        'success' => 'Réussi',
                         'failed' => 'Échoué',
-                        'rolled_back' => 'Annulé',
                     ]),
 
-                Tables\Filters\SelectFilter::make('git_branch')
-                    ->label('Branche')
-                    ->options([
-                        'main' => 'main',
-                        'develop' => 'develop',
-                        'staging' => 'staging',
-                    ]),
-
-                Tables\Filters\TrashedFilter::make(),
+                Tables\Filters\SelectFilter::make('tenant')
+                    ->label('Tenant')
+                    ->relationship('tenant', 'name'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->label('Voir détails'),
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                    Tables\Actions\ForceDeleteBulkAction::make(),
-                    Tables\Actions\RestoreBulkAction::make(),
-                ]),
-            ])
-            ->defaultSort('created_at', 'desc');
+                //
+            ]);
     }
 
     public static function getRelations(): array
@@ -241,17 +182,12 @@ class TenantDeploymentResource extends Resource
     {
         return [
             'index' => Pages\ListTenantDeployments::route('/'),
-            'create' => Pages\CreateTenantDeployment::route('/create'),
             'view' => Pages\ViewTenantDeployment::route('/{record}'),
-            'edit' => Pages\EditTenantDeployment::route('/{record}/edit'),
         ];
     }
 
-    public static function getEloquentQuery(): Builder
+    public static function canCreate(): bool
     {
-        return parent::getEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
+        return false; // Pas de création manuelle
     }
 }

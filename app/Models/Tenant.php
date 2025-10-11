@@ -40,6 +40,8 @@ class Tenant extends Model
         'phone',
         'address',
         'metadata',
+        'api_token',
+        'api_token_created_at',
     ];
 
     protected $casts = [
@@ -48,6 +50,7 @@ class Tenant extends Model
         'last_deployed_at' => 'datetime',
         'subscription_start_date' => 'date',
         'subscription_end_date' => 'date',
+        'api_token_created_at' => 'datetime',
         'monthly_fee' => 'decimal:2',
         'max_users' => 'integer',
         'max_staff' => 'integer',

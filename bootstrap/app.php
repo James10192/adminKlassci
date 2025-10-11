@@ -13,7 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        $middleware->alias([
+            'tenant.api' => \App\Http\Middleware\VerifyTenantApiToken::class,
+        ]);
     })
     ->withSchedule(function (Schedule $schedule) {
         // Mise à jour automatique des stats de tous les tenants actifs toutes les heures

@@ -419,6 +419,40 @@ class TenantResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->where('subscription_end_date', '<', now())),
             ])
             ->actions([
+                Tables\Actions\Action::make('deploy')
+                    ->label('Déployer')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn ($record) => "Déployer {$record->name}")
+                    ->modalDescription('Cette action va déployer les dernières mises à jour depuis GitHub vers le serveur de production.')
+                    ->modalSubmitActionLabel('Déployer')
+                    ->action(function ($record) {
+                        try {
+                            // Exécuter la commande tenant:deploy
+                            \Artisan::call('tenant:deploy', [
+                                'tenant' => $record->code,
+                            ]);
+
+                            \Filament\Notifications\Notification::make()
+                                ->success()
+                                ->title('Déploiement démarré')
+                                ->body("Le déploiement de {$record->name} a été lancé avec succès.")
+                                ->send();
+
+                            // Rediriger vers la page de déploiements pour voir le statut
+                            return redirect()->route('filament.admin.resources.tenant-deployments.index');
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('Erreur de déploiement')
+                                ->body("Erreur : {$e->getMessage()}")
+                                ->persistent()
+                                ->send();
+                        }
+                    })
+                    ->visible(fn ($record) => $record->status === 'active'),
+
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
