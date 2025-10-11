@@ -3,8 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Services\TenantConnectionManager;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 class TenantUpdateStats extends Command
 {
@@ -22,7 +22,15 @@ class TenantUpdateStats extends Command
      *
      * @var string
      */
-    protected $description = 'Mettre à jour les statistiques d\'usage des tenants (users, staff, students, storage)';
+    protected $description = 'Mettre à jour les statistiques d\'usage des tenants (staff, students, inscriptions, storage)';
+
+    protected TenantConnectionManager $connectionManager;
+
+    public function __construct(TenantConnectionManager $connectionManager)
+    {
+        parent::__construct();
+        $this->connectionManager = $connectionManager;
+    }
 
     /**
      * Execute the console command.
@@ -41,7 +49,7 @@ class TenantUpdateStats extends Command
                 return 1;
             }
 
-            $this->updateTenantStats($tenant);
+            $this->updateTenantStats($tenant, true);
         } else {
             // Mettre à jour plusieurs tenants
             $query = Tenant::query();
@@ -63,14 +71,21 @@ class TenantUpdateStats extends Command
             $bar = $this->output->createProgressBar($tenants->count());
             $bar->start();
 
+            $success = 0;
+            $failed = 0;
+
             foreach ($tenants as $tenant) {
-                $this->updateTenantStats($tenant, false);
+                if ($this->updateTenantStats($tenant, false)) {
+                    $success++;
+                } else {
+                    $failed++;
+                }
                 $bar->advance();
             }
 
             $bar->finish();
             $this->newLine(2);
-            $this->info('✅ Mise à jour terminée !');
+            $this->info("✅ Mise à jour terminée : {$success} réussis, {$failed} échoués");
         }
 
         return 0;
@@ -79,74 +94,55 @@ class TenantUpdateStats extends Command
     /**
      * Mettre à jour les statistiques d'un tenant
      */
-    private function updateTenantStats(Tenant $tenant, bool $verbose = true)
+    private function updateTenantStats(Tenant $tenant, bool $verbose = true): bool
     {
         if ($verbose) {
-            $this->info("📊 Mise à jour des statistiques pour '{$tenant->code}'...");
+            $this->info("📊 Mise à jour des statistiques pour '{$tenant->name}' ({$tenant->code})...");
         }
 
         try {
-            // Connexion à la base de données du tenant
-            $credentials = $tenant->database_credentials;
-
-            config([
-                'database.connections.tenant_temp' => [
-                    'driver' => 'mysql',
-                    'host' => $credentials['host'] ?? 'localhost',
-                    'port' => $credentials['port'] ?? 3306,
-                    'database' => $tenant->database_name,
-                    'username' => $credentials['username'],
-                    'password' => $credentials['password'],
-                    'charset' => 'utf8mb4',
-                    'collation' => 'utf8mb4_unicode_ci',
-                ]
-            ]);
-
-            // Compter les utilisateurs (table users)
-            $currentUsers = DB::connection('tenant_temp')->table('users')->count();
-
-            // Compter le personnel (users avec rôles enseignant/coordinateur/secrétaire via model_has_roles)
-            $currentStaff = DB::connection('tenant_temp')
-                ->table('model_has_roles')
-                ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-                ->whereIn('roles.name', ['enseignant', 'coordinateur', 'secretaire', 'serviceTechnique'])
-                ->where('model_has_roles.model_type', 'App\\Models\\User')
-                ->distinct('model_has_roles.model_id')
-                ->count('model_has_roles.model_id');
-
-            // Compter les étudiants (table esbtp_etudiants)
-            $currentStudents = DB::connection('tenant_temp')->table('esbtp_etudiants')->count();
-
-            // Calculer l'espace de stockage (dossier storage/ du tenant)
-            $storagePath = env('PRODUCTION_PATH') . $tenant->code . '/storage';
-            $currentStorageMb = 0;
-
-            if (file_exists($storagePath) && is_dir($storagePath)) {
-                $currentStorageMb = $this->getDirectorySize($storagePath) / 1024 / 1024; // Convertir en MB
-            }
+            // Utiliser le service TenantConnectionManager
+            $stats = $this->connectionManager->getTenantStats($tenant);
 
             // Mettre à jour le tenant
-            $tenant->update([
-                'current_users' => $currentUsers,
-                'current_staff' => $currentStaff,
-                'current_students' => $currentStudents,
-                'current_storage_mb' => (int) $currentStorageMb,
-            ]);
+            $tenant->update($stats);
 
             if ($verbose) {
                 $this->newLine();
                 $this->table(
-                    ['Statistique', 'Valeur actuelle', 'Limite'],
+                    ['Statistique', 'Valeur actuelle', 'Limite', 'Status'],
                     [
-                        ['Utilisateurs', $currentUsers, $tenant->max_users],
-                        ['Personnel', $currentStaff, $tenant->max_staff],
-                        ['Étudiants', $currentStudents, $tenant->max_students],
-                        ['Stockage (MB)', number_format($currentStorageMb, 2), $tenant->max_storage_mb],
+                        [
+                            'Staff (personnel)',
+                            $stats['current_staff'],
+                            $tenant->max_staff,
+                            $stats['current_staff'] > $tenant->max_staff ? '⚠️ Dépassé' : '✓ OK'
+                        ],
+                        [
+                            'Students (avec compte)',
+                            $stats['current_students'],
+                            $tenant->max_students,
+                            $stats['current_students'] > $tenant->max_students ? '⚠️ Dépassé' : '✓ OK'
+                        ],
+                        [
+                            'Inscriptions (année courante)',
+                            $stats['current_inscriptions_per_year'],
+                            $tenant->max_inscriptions_per_year,
+                            $stats['current_inscriptions_per_year'] > $tenant->max_inscriptions_per_year ? '⚠️ Dépassé' : '✓ OK'
+                        ],
+                        [
+                            'Stockage (MB)',
+                            number_format($stats['current_storage_mb'], 2),
+                            $tenant->max_storage_mb,
+                            $stats['current_storage_mb'] > $tenant->max_storage_mb ? '⚠️ Dépassé' : '✓ OK'
+                        ],
                     ]
                 );
                 $this->newLine();
                 $this->info('✅ Statistiques mises à jour avec succès !');
             }
+
+            return true;
 
         } catch (\Exception $e) {
             if ($verbose) {
@@ -156,20 +152,8 @@ class TenantUpdateStats extends Command
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            return false;
         }
-    }
-
-    /**
-     * Calculer la taille d'un répertoire (récursif)
-     */
-    private function getDirectorySize(string $path): int
-    {
-        $size = 0;
-
-        foreach (glob(rtrim($path, '/') . '/*', GLOB_NOSORT) as $file) {
-            $size += is_file($file) ? filesize($file) : $this->getDirectorySize($file);
-        }
-
-        return $size;
     }
 }
