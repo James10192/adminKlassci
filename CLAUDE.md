@@ -197,11 +197,36 @@ $ php artisan list | grep -E "saas:|tenant:"
    - Fix : Hostname MySQL `web44.klassci.com` → `web44.lws-hosting.com`
    - Fix : Méthode `isOverQuota()` ajoutée au modèle Tenant
 
+7. ✅ **Widgets SaaS Dashboard créés**
+   - **StatsOverviewWidget** - 4 KPI cards (sort: 0) :
+     - Établissements Actifs (avec mini-chart)
+     - Total Étudiants (agrégé tous tenants)
+     - MRR - Monthly Recurring Revenue en FCFA
+     - Alertes (quotas dépassés + expirations proches)
+   - **CustomAccountWidget** - Widget utilisateur full width (sort: -1)
+     - Extend Filament's AccountWidget
+     - columnSpan = 'full' pour prendre toute la largeur
+     - Affiche avatar, nom, email, bouton déconnexion
+   - **TenantsByPlanChart** - Doughnut chart (sort: 1)
+     - Distribution tenants par plan (Free, Essentiel, Professional, Elite)
+     - Couleurs distinctes par plan
+     - Chart.js intégré
+   - **TenantsTableWidget** - Table alertes (sort: 2, full width)
+     - Affiche tenants nécessitant attention :
+       - Quotas dépassés (users, staff, students, storage)
+       - Abonnement expirant dans 30 jours
+     - Badges colorés pour status
+     - Action "Voir" vers edit page
+
 **Fichiers créés :**
 - `app/Models/User.php` - Modèle authentification Filament
 - `app/Providers/Filament/AdminPanelProvider.php` - Configuration panel
 - `app/Filament/Resources/TenantResource.php` - Resource CRUD tenants (465 lignes)
 - `app/Filament/Resources/TenantResource/Pages/` - Pages Create, Edit, List
+- `app/Filament/Widgets/StatsOverviewWidget.php` - KPI dashboard (61 lignes)
+- `app/Filament/Widgets/CustomAccountWidget.php` - Account widget full width (12 lignes)
+- `app/Filament/Widgets/TenantsByPlanChart.php` - Doughnut chart (78 lignes)
+- `app/Filament/Widgets/TenantsTableWidget.php` - Table alertes (113 lignes)
 - `database/seeders/PresentationTenantSeeder.php` - Seeder tenant test
 - Migrations cache et sessions
 
@@ -211,13 +236,14 @@ $ php artisan list | grep -E "saas:|tenant:"
 - Login : http://localhost:8001/admin/login
 
 
-**Git Commit :**
-- Commit hash: `3fb289b`
-- Message: "feat(phase3): Filament dashboard avec Tenant Resource et connexion production"
-- 37 fichiers modifiés, +3090 lignes
+**Git Commits :**
+- Commit `3fb289b` : "feat(phase3): Filament dashboard avec Tenant Resource et connexion production" (37 fichiers, +3090 lignes)
+- Commit `3f8c8e0` : "fix(phase3): Add isOverQuota() method to Tenant model" (2 fichiers)
+- Commit `35ce5bd` : "feat(phase3): Add SaaS dashboard widgets (KPIs, chart, alerts table)" (3 fichiers, +249 lignes)
+- Commit `704079b` : "feat(phase3): Make AccountWidget full width on dashboard" (2 fichiers, +13 lignes)
 
 **Prochaines étapes Phase 3 :**
-- [ ] Créer widgets SaaS pour dashboard principal (KPI globaux)
+- [x] Créer widgets SaaS pour dashboard principal (KPI globaux) ✅
 - [ ] Créer TenantDeployment resource
 - [ ] Créer TenantHealthCheck resource
 - [ ] Créer TenantBackup resource
