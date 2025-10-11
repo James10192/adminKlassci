@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TenantBackup extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'tenant_id',
@@ -37,7 +38,7 @@ class TenantBackup extends Model
 
     public function createdBy()
     {
-        return $this->belongsTo(SaasAdmin::class, 'created_by_user_id');
+        return $this->belongsTo(User::class, 'created_by_user_id');
     }
 
     /**

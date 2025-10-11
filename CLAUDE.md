@@ -227,8 +227,11 @@ $ php artisan list | grep -E "saas:|tenant:"
 - `app/Filament/Widgets/CustomAccountWidget.php` - Account widget full width (12 lignes)
 - `app/Filament/Widgets/TenantsByPlanChart.php` - Doughnut chart (78 lignes)
 - `app/Filament/Widgets/TenantsTableWidget.php` - Table alertes (113 lignes)
+- `app/Filament/Resources/TenantDeploymentResource.php` + Pages (255 lignes)
+- `app/Filament/Resources/TenantHealthCheckResource.php` + Pages (240 lignes)
+- `app/Filament/Resources/TenantBackupResource.php` + Pages (95 lignes)
 - `database/seeders/PresentationTenantSeeder.php` - Seeder tenant test
-- Migrations cache et sessions
+- Migrations : cache, sessions, soft deletes (×3)
 
 **URLs importantes :**
 - Dashboard : http://localhost:8001/admin
@@ -242,12 +245,31 @@ $ php artisan list | grep -E "saas:|tenant:"
 - Commit `35ce5bd` : "feat(phase3): Add SaaS dashboard widgets (KPIs, chart, alerts table)" (3 fichiers, +249 lignes)
 - Commit `704079b` : "feat(phase3): Make AccountWidget full width on dashboard" (2 fichiers, +13 lignes)
 
+8. ✅ **Resources Filament créés (Gestion complète)**
+   - **TenantDeploymentResource** (Navigation: Gestion Tenants, sort 2)
+     - Form : 3 sections (Deployment Info, Time Tracking, Logs & Errors)
+     - Status badges : pending, in_progress, completed, failed, rolled_back
+     - Filtres : tenant, status, git branch
+     - Views : List, Create, View, Edit
+   - **TenantHealthCheckResource** (Navigation: Monitoring, sort 1)
+     - 7 check types : ping, database, storage, api, ssl, dns, performance
+     - Status badges : healthy (✓), degraded (⚠), unhealthy (✗), unknown (?)
+     - Response time color coding : <500ms=vert, <1000ms=orange, >1000ms=rouge
+     - Form : KeyValue metadata field pour données JSON
+     - diffForHumans() sur checked_at
+   - **TenantBackupResource** (Navigation: Monitoring, sort 2)
+     - 3 types : full (complet), database (BDD), storage (fichiers)
+     - Size display : auto-conversion bytes → MB
+     - Expiration tracking avec diffForHumans()
+     - Status : pending, in_progress, completed, failed
+   - Tous les resources : soft deletes, French labels, relations tenant
+
 **Prochaines étapes Phase 3 :**
 - [x] Créer widgets SaaS pour dashboard principal (KPI globaux) ✅
-- [ ] Créer TenantDeployment resource
-- [ ] Créer TenantHealthCheck resource
-- [ ] Créer TenantBackup resource
-- [ ] Créer Invoice resource (facturation)
+- [x] Créer TenantDeployment resource ✅
+- [x] Créer TenantHealthCheck resource ✅
+- [x] Créer TenantBackup resource ✅
+- [ ] Créer Invoice resource (facturation) - OPTIONNEL Phase 4
 
 ---
 
