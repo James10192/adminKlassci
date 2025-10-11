@@ -277,11 +277,24 @@ $ php artisan list | grep -E "saas:|tenant:"
 
 **Partie A : Récupération données réelles depuis cPanel (2 jours)**
 
-1. **Connexion base de données tenants depuis klassci-master**
-   - [ ] Ajouter connexions DB dynamiques dans `config/database.php`
-   - [ ] Créer service `TenantConnectionManager` pour gérer les connexions
-   - [ ] Tester connexion à `presentation` (web44.lws-hosting.com)
-   - [ ] Récupérer vraies stats : users, staff, students, storage
+1. **Connexion base de données tenants depuis klassci-master** ✅ COMPLÉTÉE
+   - [x] Créer service `TenantConnectionManager` pour gérer les connexions ✅
+   - [x] Tester connexion à `presentation` (web44.lws-hosting.com) ✅
+   - [x] Récupérer vraies stats : users, staff, students, storage ✅
+   - [x] Installed Laravel Tinker for debugging ✅
+   - **Fichiers créés :**
+     - `app/Services/TenantConnectionManager.php` (190 lignes)
+     - `app/Console/Commands/TestTenantConnection.php` (75 lignes)
+   - **Stats vérifiées pour 'presentation' :**
+     - Users: 1 (superAdmin/coordinateur/secretaire)
+     - Staff: 1 (enseignant/coordinateur/secretaire)
+     - Students: 3 (esbtp_etudiants table)
+     - Storage: 0 MB (TODO: cPanel API)
+   - **Notes techniques :**
+     - Connexions dynamiques via `Config::set()`
+     - Staff counting basé sur roles (enseignant/coordinateur/secretaire)
+     - Utilise `database_name` du tenant (pas credentials.database)
+     - Tables utilisées : users, model_has_roles, roles, esbtp_etudiants
 
 2. **Mise à jour commande `tenant:update-stats`**
    - [ ] Connecter à chaque tenant DB
