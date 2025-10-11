@@ -1,5 +1,129 @@
 # KLASSCI - Documentation Système SaaS Multi-Tenant
 
+## 🚨 PROBLÈME EN COURS : Déploiement Production - Erreur 404 Persistante
+
+**Date:** 11 octobre 2025 - 23h37 UTC
+**Statut:** ❌ BLOQUANT - À résoudre ultérieurement
+**Serveur:** web44.lws-hosting.com (cPanel/LWS)
+**URL:** https://admin.klassci.com
+
+### Symptômes
+
+Tous les URLs retournent HTTP 404, même les fichiers physiques :
+- `https://admin.klassci.com/admin` → 404
+- `https://admin.klassci.com/test.php` → 404
+- `https://admin.klassci.com/index.php` → 404
+
+### Configuration Vérifiée ✅
+
+**Subdomain cPanel :**
+- Subdomain: `admin.klassci.com`
+- Document Root: `/home/c2569688c/public_html/admin/public` ✅
+- Fichiers présents: `index.php`, `test.php`, `.htaccess` ✅
+
+**Fichiers .htaccess :**
+1. `/home/c2569688c/public_html/admin/.htaccess` (root) - Redirect vers `/public/`
+2. `/home/c2569688c/public_html/admin/public/.htaccess` - Laravel routing ✅
+
+**Permissions :**
+- Fichiers: 644 ✅
+- Répertoires: 755 ✅
+- Propriétaire: c2569688c:c2569688c ✅
+
+**Déploiement Laravel :**
+- ✅ PHP 8.3.25 activé (CloudLinux selectorctl)
+- ✅ Composer dependencies installées (101 packages)
+- ✅ APP_KEY généré
+- ✅ 17 migrations exécutées avec succès
+- ✅ 2 admins SaaS créés
+- ✅ Storage et cache directories créés avec bonnes permissions
+
+### Diagnostics Effectués
+
+```bash
+# Test curl - tous retournent 404
+curl -I https://admin.klassci.com/test.php
+curl -I https://admin.klassci.com/index.php
+
+# Vérification fichiers - existent bien
+ls -la /home/c2569688c/public_html/admin/public/index.php
+ls -la /home/c2569688c/public_html/admin/public/test.php
+ls -la /home/c2569688c/public_html/admin/public/.htaccess
+
+# Headers HTTP détectés
+HTTP/2 404
+server: fastestcache
+edge-cache-engine: varnish  # Cache edge actif
+```
+
+### Hypothèses À Tester
+
+1. **Cache Varnish** - Le cache edge pourrait servir des 404 obsolètes
+   - Action: Attendre expiration cache OU purger manuellement
+   - Command: Possible via cPanel ou support LWS
+
+2. **Conflit .htaccess root** - Le redirect root `RewriteRule ^(.*)$ /public/$1` pourrait interférer
+   - Action: Tester en renommant temporairement `.htaccess.backup`
+   - Risk: Minimal (peut rollback facilement)
+
+3. **Apache n'a pas rechargé** - Configuration subdomain pas prise en compte
+   - Action: Contact support LWS pour reload Apache
+   - Alternative: Attendre propagation automatique
+
+4. **Document Root mal configuré** - Malgré l'interface cPanel qui affiche `admin/public`
+   - Action: Vérifier via SSH avec commande cPanel API
+   - Command: `uapi --user=c2569688c SubDomain list_subdomains`
+
+5. **SELinux ou restrictions LWS** - Règles de sécurité empêchent accès
+   - Action: Vérifier logs Apache si accessibles
+   - Alternative: Demander au support LWS
+
+### Commandes SSH À Exécuter Plus Tard
+
+```bash
+# Se connecter au serveur
+ssh c2569688c@web44.lws-hosting.com
+
+# Aller dans le répertoire
+cd /home/c2569688c/public_html/admin
+
+# Test 1: Renommer .htaccess root temporairement
+mv .htaccess .htaccess.backup
+# Tester l'URL, puis restaurer si ça ne marche pas
+mv .htaccess.backup .htaccess
+
+# Test 2: Vérifier configuration subdomain via API cPanel
+uapi --user=c2569688c SubDomain list_subdomains domain=klassci.com | grep -A10 "admin"
+
+# Test 3: Chercher les logs d'erreur Apache
+find ~ -name "*error*log" -type f 2>/dev/null | head -5
+tail -50 ~/logs/error_log 2>/dev/null
+
+# Test 4: Tester avec curl depuis le serveur lui-même (bypass Varnish)
+curl -I http://localhost/admin/public/test.php
+curl -I http://127.0.0.1/admin/public/test.php
+
+# Test 5: Vérifier les permissions récursivement
+find public/ -type f -exec ls -l {} \; | head -10
+find public/ -type d -exec ls -ld {} \; | head -10
+```
+
+### Actions Support LWS Si Nécessaire
+
+- Demander purge cache Varnish pour `admin.klassci.com`
+- Demander reload Apache pour recharger configuration subdomain
+- Demander vérification logs Apache pour erreurs spécifiques
+- Demander si restrictions SELinux/mod_security bloquent l'accès
+
+### Workaround Temporaire (Si Urgent)
+
+Si l'accès au dashboard est urgent, déployer temporairement sur un autre subdomain de test :
+1. Créer `test-admin.klassci.com` dans cPanel
+2. Pointer vers `/home/c2569688c/public_html/admin/public`
+3. Tester si le problème persiste (diagnostic si c'est spécifique au subdomain `admin`)
+
+---
+
 ## 🎉 DÉVELOPPEMENT klassci-master - Statut Global
 
 ### ✅ Phase 1 : Infrastructure de base (Jours 1-2) - COMPLÉTÉ ✅
