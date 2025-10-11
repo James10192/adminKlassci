@@ -54,7 +54,7 @@ git push -u origin esbtp-yamoussoukro
 **⚠️ IMPORTANT:** Le `git clone` clone dans le **répertoire courant (pwd)**. Il faut donc **SE DÉPLACER dans public_html AVANT** de cloner !
 
 ```bash
-ssh c2569688c@web44.klassci.com << 'EOF'
+ssh c2569688c@web44.lws-hosting.com << 'EOF'
 # 1. Se déplacer dans public_html AVANT le clone (CRITIQUE!)
 cd /home/c2569688c/public_html/
 

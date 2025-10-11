@@ -2,7 +2,7 @@
 
 **Date:** 11 octobre 2025
 **Version:** 1.0
-**Environnement:** Production cPanel (web44.klassci.com)
+**Environnement:** Production cPanel (web44.lws-hosting.com)
 
 ---
 
@@ -265,18 +265,18 @@ php artisan tenant:provision \
 #### **Étape 1: Création base de données (API cPanel)**
 ```php
 // Via cPanel API UAPI/WHM
-POST https://web44.klassci.com:2083/execute/Mysql/create_database
+POST https://web44.lws-hosting.com:2083/execute/Mysql/create_database
 {
     "name": "esbtp_yamoussoukro"  // Devient automatiquement c2569688c_esbtp_yamoussoukro
 }
 
-POST https://web44.klassci.com:2083/execute/Mysql/create_user
+POST https://web44.lws-hosting.com:2083/execute/Mysql/create_user
 {
     "name": "esbtp_yam_user",
     "password": "GENERATED_SECURE_PASSWORD"
 }
 
-POST https://web44.klassci.com:2083/execute/Mysql/set_privileges_on_database
+POST https://web44.lws-hosting.com:2083/execute/Mysql/set_privileges_on_database
 {
     "user": "c2569688c_esbtp_yam_user",
     "database": "c2569688c_esbtp_yamoussoukro",
@@ -298,7 +298,7 @@ git push -u origin esbtp-yamoussoukro
 # Résultat: Branch origin/esbtp-yamoussoukro créée
 
 # === ÉTAPE 2B: Cloner avec la branche tenant (SSH sur serveur) ===
-ssh c2569688c@web44.klassci.com << 'EOF'
+ssh c2569688c@web44.lws-hosting.com << 'EOF'
 # 1. Se déplacer dans public_html AVANT le clone (CRITIQUE!)
 cd /home/c2569688c/public_html/
 
@@ -413,7 +413,7 @@ chown -R c2569688c:c2569688c .
 
 #### **Étape 11: Création sous-domaine (API cPanel)**
 ```php
-POST https://web44.klassci.com:2083/execute/SubDomain/addsubdomain
+POST https://web44.lws-hosting.com:2083/execute/SubDomain/addsubdomain
 {
     "domain": "esbtp-yamoussoukro",
     "rootdomain": "klassci.com",
@@ -424,7 +424,7 @@ POST https://web44.klassci.com:2083/execute/SubDomain/addsubdomain
 #### **Étape 12: Configuration SSL (AutoSSL cPanel)**
 ```php
 // Déclencher AutoSSL (Let's Encrypt gratuit intégré cPanel)
-POST https://web44.klassci.com:2083/execute/SSL/install_ssl
+POST https://web44.lws-hosting.com:2083/execute/SSL/install_ssl
 {
     "domain": "esbtp-yamoussoukro.klassci.com"
 }
@@ -979,12 +979,12 @@ curl http://test-local.localhost:8000
 **Configuration .env Master:**
 ```env
 # cPanel API
-CPANEL_URL=https://web44.klassci.com:2083
+CPANEL_URL=https://web44.lws-hosting.com:2083
 CPANEL_USERNAME=c2569688c
 CPANEL_API_TOKEN=YOUR_API_TOKEN_HERE
 
 # SSH
-SSH_HOST=web44.klassci.com
+SSH_HOST=web44.lws-hosting.com
 SSH_PORT=22
 SSH_USER=c2569688c
 SSH_KEY_PATH=/home/user/.ssh/id_rsa
@@ -1019,7 +1019,7 @@ php artisan tinker
 **Actions:**
 ```bash
 # 1. SSH vers serveur
-ssh c2569688c@web44.klassci.com
+ssh c2569688c@web44.lws-hosting.com
 
 # 2. Créer dossier
 cd /home/c2569688c/public_html/

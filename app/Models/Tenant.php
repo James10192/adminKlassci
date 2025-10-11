@@ -42,7 +42,7 @@ class Tenant extends Model
     ];
 
     protected $casts = [
-        'database_credentials' => 'encrypted:array',
+        'database_credentials' => 'array',
         'metadata' => 'array',
         'last_deployed_at' => 'datetime',
         'subscription_start_date' => 'date',
@@ -148,5 +148,13 @@ class Tenant extends Model
             'storage' => $this->current_storage_mb >= $this->max_storage_mb,
             default => false,
         };
+    }
+
+    public function isOverQuota(): bool
+    {
+        return $this->current_users > $this->max_users
+            || $this->current_staff > $this->max_staff
+            || $this->current_students > $this->max_students
+            || $this->current_storage_mb > $this->max_storage_mb;
     }
 }

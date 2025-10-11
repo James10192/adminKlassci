@@ -44,7 +44,13 @@ class SaasCreateAdmin extends Command
             ['super_admin', 'support', 'billing'],
             1 // default: support
         );
-        $phone = $this->option('phone') ?: $this->ask('Téléphone (optionnel)', null);
+
+        // Si --phone fourni, l'utiliser ; sinon demander seulement en mode interactif
+        $phone = $this->option('phone');
+        if ($phone === null && !$this->option('name')) {
+            // Mode interactif : demander le téléphone
+            $phone = $this->ask('Téléphone (optionnel)', null);
+        }
 
         // Vérifier si l'email existe déjà
         if (SaasAdmin::where('email', $email)->exists()) {
