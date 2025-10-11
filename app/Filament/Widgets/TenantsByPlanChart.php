@@ -11,8 +11,6 @@ class TenantsByPlanChart extends ChartWidget
 
     protected static ?int $sort = 1;
 
-    protected int | string | array $columnSpan = 'full';
-
     protected function getData(): array
     {
         // Compter les tenants par plan
