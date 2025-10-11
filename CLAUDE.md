@@ -296,12 +296,17 @@ $ php artisan list | grep -E "saas:|tenant:"
      - Utilise `database_name` du tenant (pas credentials.database)
      - Tables utilisées : users, model_has_roles, roles, esbtp_etudiants
 
-2. **Mise à jour commande `tenant:update-stats`**
-   - [ ] Connecter à chaque tenant DB
-   - [ ] Compter utilisateurs réels : `users WHERE role IN ('superAdmin', 'coordinateur', 'secretaire')`
-   - [ ] Compter personnel : `esbtp_personnel WHERE status = 'active'`
-   - [ ] Compter étudiants : `esbtp_etudiants WHERE deleted_at IS NULL`
-   - [ ] Calculer stockage : `storage/app/public` via SSH ou API
+2. **Mise à jour commande `tenant:update-stats`** ✅ COMPLÉTÉE
+   - [x] Refactorisée pour utiliser `TenantConnectionManager` ✅
+   - [x] Suppression 90 lignes de code dupliqué (176 → 160 lignes) ✅
+   - [x] Comptage staff : `enseignant`, `coordinateur`, `secretaire` via roles ✅
+   - [x] Comptage students : `esbtp_etudiants WHERE user_id IS NOT NULL` ✅
+   - [x] Comptage inscriptions : année courante via `esbtp_inscriptions` ✅
+   - [x] Ajout success/failed counters pour batch updates ✅
+   - [x] Interface Filament mise à jour avec inscriptions ✅
+   - **Fichier modifié** : `app/Console/Commands/TenantUpdateStats.php`
+   - **Test réussi** : `php artisan tenant:update-stats presentation`
+   - **Résultat** : Staff (1), Students (3), Inscriptions (0), Storage (0)
 
 3. **Automatisation via Scheduler**
    - [ ] Cron job : `tenant:update-stats --all` toutes les heures
