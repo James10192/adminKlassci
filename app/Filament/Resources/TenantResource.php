@@ -238,10 +238,18 @@ class TenantResource extends Resource
                                             ->disabled(),
 
                                         Forms\Components\TextInput::make('current_students')
-                                            ->label('Étudiants Actuels')
+                                            ->label('Étudiants Actuels (avec compte)')
                                             ->numeric()
                                             ->default(0)
-                                            ->disabled(),
+                                            ->disabled()
+                                            ->helperText('Étudiants ayant un compte utilisateur'),
+
+                                        Forms\Components\TextInput::make('current_inscriptions_per_year')
+                                            ->label('Inscriptions Année Courante')
+                                            ->numeric()
+                                            ->default(0)
+                                            ->disabled()
+                                            ->helperText('Inscriptions actives pour l\'année universitaire en cours'),
 
                                         Forms\Components\TextInput::make('current_storage_mb')
                                             ->label('Stockage Utilisé (MB)')
@@ -249,7 +257,7 @@ class TenantResource extends Resource
                                             ->suffix('MB')
                                             ->default(0)
                                             ->disabled(),
-                                    ])->columns(2),
+                                    ])->columns(3),
                             ]),
 
                         // Onglet 5: Contacts & Infos
@@ -351,10 +359,19 @@ class TenantResource extends Resource
                     ->label('Étudiants')
                     ->numeric()
                     ->sortable()
-                    ->alignCenter(),
+                    ->alignCenter()
+                    ->description('(avec compte)')
+                    ->toggleable(),
 
-                Tables\Columns\TextColumn::make('current_users')
-                    ->label('Users')
+                Tables\Columns\TextColumn::make('current_inscriptions_per_year')
+                    ->label('Inscriptions')
+                    ->numeric()
+                    ->sortable()
+                    ->alignCenter()
+                    ->description('(année courante)'),
+
+                Tables\Columns\TextColumn::make('current_staff')
+                    ->label('Personnel')
                     ->numeric()
                     ->sortable()
                     ->alignCenter()
