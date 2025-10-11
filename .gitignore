@@ -1,0 +1,60 @@
+# Laravel Specific
+/node_modules
+/public/hot
+/public/storage
+/storage/*.key
+/vendor
+.env
+.env.backup
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+
+# IDE & Editors
+/.idea
+/.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+storage/logs/*.log
+
+# Testing
+.phpunit.cache
+
+# Composer
+composer.phar
+
+# Node
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build artifacts
+/public/build
+/public/mix-manifest.json
+
+# Backups
+*.sql
+*.sql.gz
+*.tar.gz
+/backups/
+
+# Caches
+bootstrap/cache/*.php
+!bootstrap/cache/.gitkeep
+storage/framework/cache/*
+!storage/framework/cache/.gitkeep
+storage/framework/sessions/*
+!storage/framework/sessions/.gitkeep
+storage/framework/views/*
+!storage/framework/views/.gitkeep
+
+# Tenant-specific (for local development)
+/tenants/
+/tenant-backups/
