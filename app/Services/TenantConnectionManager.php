@@ -88,17 +88,8 @@ class TenantConnectionManager
         try {
             $connectionName = $this->createConnection($tenant);
 
-            // Compter les utilisateurs (superAdmin, coordinateur, secretaire)
-            $usersCount = DB::connection($connectionName)
-                ->table('users')
-                ->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
-                ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-                ->whereIn('roles.name', ['superAdmin', 'coordinateur', 'secretaire'])
-                ->where('model_has_roles.model_type', 'App\\Models\\User')
-                ->distinct()
-                ->count('users.id');
-
             // Compter le personnel (enseignant, coordinateur, secretaire)
+            // Note: users et staff comptent la même chose (personnel avec compte)
             $staffCount = DB::connection($connectionName)
                 ->table('users')
                 ->join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
@@ -108,10 +99,12 @@ class TenantConnectionManager
                 ->distinct()
                 ->count('users.id');
 
-            // Compter les étudiants (avec gestion d'erreur si table n'existe pas)
+            // Compter les étudiants ayant un compte utilisateur (user_id IS NOT NULL)
+            // Important: On compte les étudiants avec accès plateforme, pas les inscriptions
             try {
                 $studentsCount = DB::connection($connectionName)
                     ->table('esbtp_etudiants')
+                    ->whereNotNull('user_id')
                     ->whereNull('deleted_at')
                     ->count();
             } catch (\Exception $e) {
@@ -119,21 +112,47 @@ class TenantConnectionManager
                 $studentsCount = 0;
             }
 
+            // Compter les inscriptions actives pour l'année universitaire courante
+            // Important: Ceci est distinct du nombre d'étudiants - une école peut avoir 1000 étudiants
+            // dans la BDD mais seulement 300 inscriptions actives cette année
+            try {
+                // Trouver l'année universitaire courante
+                $currentYear = DB::connection($connectionName)
+                    ->table('esbtp_annee_universitaires')
+                    ->where('is_current', 1)
+                    ->first();
+
+                if ($currentYear) {
+                    $inscriptionsCount = DB::connection($connectionName)
+                        ->table('esbtp_inscriptions')
+                        ->where('annee_universitaire_id', $currentYear->id)
+                        ->where('status', 'active')
+                        ->count();
+                } else {
+                    Log::warning("No current academic year found for tenant {$tenant->code}");
+                    $inscriptionsCount = 0;
+                }
+            } catch (\Exception $e) {
+                Log::warning("Could not count inscriptions for tenant {$tenant->code}: " . $e->getMessage());
+                $inscriptionsCount = 0;
+            }
+
             // Calculer le stockage (approximatif - sans accès SSH)
             // On va utiliser la taille des uploads dans la DB comme approximation
             $storageMb = 0; // TODO: Implémenter avec SSH ou API cPanel
 
             Log::info("Stats retrieved for tenant {$tenant->code}", [
-                'users' => $usersCount,
                 'staff' => $staffCount,
-                'students' => $studentsCount,
+                'students_with_account' => $studentsCount,
+                'inscriptions_current_year' => $inscriptionsCount,
                 'storage_mb' => $storageMb,
             ]);
 
             return [
-                'current_users' => $usersCount,
-                'current_staff' => $staffCount,
-                'current_students' => $studentsCount,
+                'current_users' => $staffCount, // users = staff (personnel avec compte)
+                'current_staff' => $staffCount, // redondant mais pour clarté
+                'current_students' => $studentsCount, // étudiants avec user_id (compte plateforme)
+                'current_inscriptions_per_year' => $inscriptionsCount, // inscriptions année courante
                 'current_storage_mb' => $storageMb,
             ];
 

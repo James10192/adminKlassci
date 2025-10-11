@@ -46,9 +46,9 @@ class TestTenantConnection extends Command
                 $this->table(
                     ['Metric', 'Current', 'Max', 'Status'],
                     [
-                        ['Users', $stats['current_users'], $tenant->max_users, $stats['current_users'] > $tenant->max_users ? '⚠ Over' : '✓ OK'],
-                        ['Staff', $stats['current_staff'], $tenant->max_staff, $stats['current_staff'] > $tenant->max_staff ? '⚠ Over' : '✓ OK'],
-                        ['Students', $stats['current_students'], $tenant->max_students, $stats['current_students'] > $tenant->max_students ? '⚠ Over' : '✓ OK'],
+                        ['Staff (personnel)', $stats['current_staff'], $tenant->max_staff, $stats['current_staff'] > $tenant->max_staff ? '⚠ Over' : '✓ OK'],
+                        ['Students (avec compte)', $stats['current_students'], $tenant->max_students, $stats['current_students'] > $tenant->max_students ? '⚠ Over' : '✓ OK'],
+                        ['Inscriptions (année courante)', $stats['current_inscriptions_per_year'], $tenant->max_inscriptions_per_year, $stats['current_inscriptions_per_year'] > $tenant->max_inscriptions_per_year ? '⚠ Over' : '✓ OK'],
                         ['Storage (MB)', $stats['current_storage_mb'], $tenant->max_storage_mb, $stats['current_storage_mb'] > $tenant->max_storage_mb ? '⚠ Over' : '✓ OK'],
                     ]
                 );

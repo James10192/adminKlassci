@@ -32,6 +32,7 @@ class Tenant extends Model
         'current_users',
         'current_staff',
         'current_students',
+        'current_inscriptions_per_year',
         'current_storage_mb',
         'admin_name',
         'admin_email',
@@ -56,6 +57,7 @@ class Tenant extends Model
         'current_users' => 'integer',
         'current_staff' => 'integer',
         'current_students' => 'integer',
+        'current_inscriptions_per_year' => 'integer',
         'current_storage_mb' => 'integer',
     ];
 
@@ -145,6 +147,7 @@ class Tenant extends Model
             'users' => $this->current_users >= $this->max_users,
             'staff' => $this->current_staff >= $this->max_staff,
             'students' => $this->current_students >= $this->max_students,
+            'inscriptions' => $this->current_inscriptions_per_year >= $this->max_inscriptions_per_year,
             'storage' => $this->current_storage_mb >= $this->max_storage_mb,
             default => false,
         };
@@ -155,6 +158,7 @@ class Tenant extends Model
         return $this->current_users > $this->max_users
             || $this->current_staff > $this->max_staff
             || $this->current_students > $this->max_students
+            || $this->current_inscriptions_per_year > $this->max_inscriptions_per_year
             || $this->current_storage_mb > $this->max_storage_mb;
     }
 }
