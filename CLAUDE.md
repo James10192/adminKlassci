@@ -264,12 +264,109 @@ $ php artisan list | grep -E "saas:|tenant:"
      - Status : pending, in_progress, completed, failed
    - Tous les resources : soft deletes, French labels, relations tenant
 
-**Prochaines étapes Phase 3 :**
-- [x] Créer widgets SaaS pour dashboard principal (KPI globaux) ✅
-- [x] Créer TenantDeployment resource ✅
-- [x] Créer TenantHealthCheck resource ✅
-- [x] Créer TenantBackup resource ✅
-- [ ] Créer Invoice resource (facturation) - OPTIONNEL Phase 4
+**Phase 3 : TERMINÉE** ✅
+
+---
+
+### 🚀 Phase 4 : Connexion Données Réelles & API Paywall (Jours 11-14) - EN COURS 🔄
+
+**Date démarrage :** 11 octobre 2025 (20h30)
+**Objectif :** Connecter le dashboard aux données réelles des tenants cPanel + Modifier le système paywall
+
+#### 📋 Plan de développement Phase 4
+
+**Partie A : Récupération données réelles depuis cPanel (2 jours)**
+
+1. **Connexion base de données tenants depuis klassci-master**
+   - [ ] Ajouter connexions DB dynamiques dans `config/database.php`
+   - [ ] Créer service `TenantConnectionManager` pour gérer les connexions
+   - [ ] Tester connexion à `presentation` (web44.lws-hosting.com)
+   - [ ] Récupérer vraies stats : users, staff, students, storage
+
+2. **Mise à jour commande `tenant:update-stats`**
+   - [ ] Connecter à chaque tenant DB
+   - [ ] Compter utilisateurs réels : `users WHERE role IN ('superAdmin', 'coordinateur', 'secretaire')`
+   - [ ] Compter personnel : `esbtp_personnel WHERE status = 'active'`
+   - [ ] Compter étudiants : `esbtp_etudiants WHERE deleted_at IS NULL`
+   - [ ] Calculer stockage : `storage/app/public` via SSH ou API
+
+3. **Automatisation via Scheduler**
+   - [ ] Cron job : `tenant:update-stats --all` toutes les heures
+   - [ ] Logging des stats dans `tenant_stats_history` (nouvelle table)
+
+**Partie B : API REST pour Paywall centralisé (2 jours)**
+
+4. **Créer API REST dans klassci-master**
+   - [ ] Route : `GET /api/tenants/{code}/limits`
+   - [ ] Middleware : `auth:sanctum` + API tokens
+   - [ ] Réponse JSON :
+     ```json
+     {
+       "tenant_code": "presentation",
+       "plan": "free",
+       "limits": {
+         "max_users": 5,
+         "max_staff": 5,
+         "max_students": 50,
+         "max_storage_mb": 512
+       },
+       "current_usage": {
+         "users": 7,
+         "staff": 3,
+         "students": 3,
+         "storage_mb": 0.5
+       },
+       "subscription_end_date": "2026-10-11",
+       "is_over_quota": true,
+       "blocked_features": ["create_user", "create_student"]
+     }
+     ```
+   - [ ] Controller : `app/Http/Controllers/API/TenantLimitsController.php`
+   - [ ] Resource : `app/Http/Resources/TenantLimitsResource.php`
+
+5. **Modifier PaywallMiddleware dans KLASSCIv2 (local)**
+   - [ ] **IMPORTANT** : Travailler sur `/home/levraimd/workspace/KLASSCIv2/` (tenant local)
+   - [ ] Fichier : `app/Http/Middleware/PaywallMiddleware.php`
+   - [ ] Remplacer lecture locale `esbtp_system_settings` par appel API Master
+   - [ ] Ajouter fallback : si API échoue, utiliser ancien système local
+   - [ ] Variables .env à ajouter :
+     ```env
+     MASTER_API_URL=https://admin.klassci.com/api
+     MASTER_API_TOKEN=your_secure_token_here
+     TENANT_CODE=presentation
+     ```
+   - [ ] Gestion cache : stocker limites 5min pour éviter appels répétés
+   - [ ] Tests : vérifier blocage si quotas dépassés
+
+**Partie C : Test déploiement depuis klassci-master (1 jour)**
+
+6. **Créer commande `tenant:deploy`**
+   - [ ] Commande : `php artisan tenant:deploy {tenant_code} [--branch=main]`
+   - [ ] Étapes :
+     1. Connexion SSH au serveur tenant (cPanel)
+     2. `cd /home/klassci/public_html/{tenant_subdomain}`
+     3. `git pull origin main`
+     4. `composer install --no-dev --optimize-autoloader`
+     5. `php artisan migrate --force`
+     6. `php artisan config:cache`
+     7. `php artisan route:cache`
+     8. `chmod -R 775 storage bootstrap/cache`
+   - [ ] Logger dans `tenant_deployments`
+   - [ ] Envoyer notification email en cas d'erreur
+
+7. **Test complet : Modifier PaywallMiddleware localement → Déployer via Master**
+   - [ ] Modifier `PaywallMiddleware.php` dans `/home/levraimd/workspace/KLASSCIv2/`
+   - [ ] Commit + push sur GitHub
+   - [ ] Depuis klassci-master : `php artisan tenant:deploy presentation`
+   - [ ] Vérifier sur https://presentation.klassci.com que le nouveau paywall fonctionne
+   - [ ] Vérifier logs déploiement dans Filament
+
+**Résultat attendu Phase 4 :**
+- ✅ Dashboard affiche vraies données depuis cPanel
+- ✅ Widgets mis à jour automatiquement toutes les heures
+- ✅ API REST fonctionnelle pour paywall
+- ✅ PaywallMiddleware modifié et déployé avec succès
+- ✅ Système de déploiement Git automatisé testé
 
 ---
 
