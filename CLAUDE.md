@@ -1,126 +1,167 @@
 # KLASSCI - Documentation Système SaaS Multi-Tenant
 
-## 🚨 PROBLÈME EN COURS : Déploiement Production - Erreur 404 Persistante
+## ✅ DÉPLOIEMENT PRODUCTION RÉUSSI - admin.klassci.com
 
-**Date:** 11 octobre 2025 - 23h37 UTC
-**Statut:** ❌ BLOQUANT - À résoudre ultérieurement
-**Serveur:** web44.lws-hosting.com (cPanel/LWS)
+**Date début:** 11 octobre 2025 - 22h00 UTC
+**Date résolution:** 12 octobre 2025 - 15h45 UTC
+**Durée totale:** ~18 heures de debugging
+**Statut:** ✅ **RÉSOLU ET FONCTIONNEL**
+**Serveur:** web44.lws-hosting.com (cPanel/LWS CloudLinux)
 **URL:** https://admin.klassci.com
 
-### Symptômes
+### Résumé du Problème
 
-Tous les URLs retournent HTTP 404, même les fichiers physiques :
-- `https://admin.klassci.com/admin` → 404
-- `https://admin.klassci.com/test.php` → 404
-- `https://admin.klassci.com/index.php` → 404
+Après déploiement initial réussi (composer, migrations, admins créés), tous les URLs retournaient HTTP 404 ou téléchargeaient les fichiers PHP au lieu de les exécuter.
 
-### Configuration Vérifiée ✅
+### Cause Racine Identifiée
 
-**Subdomain cPanel :**
-- Subdomain: `admin.klassci.com`
-- Document Root: `/home/c2569688c/public_html/admin/public` ✅
-- Fichiers présents: `index.php`, `test.php`, `.htaccess` ✅
+**Conflit entre `AddHandler` dans `.htaccess` et CloudLinux PHP Selector** sur LWS hosting.
 
-**Fichiers .htaccess :**
-1. `/home/c2569688c/public_html/admin/.htaccess` (root) - Redirect vers `/public/`
-2. `/home/c2569688c/public_html/admin/public/.htaccess` - Laravel routing ✅
+LWS utilise **CloudLinux avec PHP Selector** (pas MultiPHP Manager standard). L'ajout manuel de directives `AddHandler application/x-httpd-ea-php83` ou `AddHandler application/x-httpd-ea-php83___lsphp` dans les fichiers `.htaccess` **créait des conflits** avec la configuration PHP Selector, empêchant PHP de s'exécuter correctement.
 
-**Permissions :**
-- Fichiers: 644 ✅
-- Répertoires: 755 ✅
-- Propriétaire: c2569688c:c2569688c ✅
+### Évolution des Symptômes
 
-**Déploiement Laravel :**
-- ✅ PHP 8.3.25 activé (CloudLinux selectorctl)
-- ✅ Composer dependencies installées (101 packages)
-- ✅ APP_KEY généré
-- ✅ 17 migrations exécutées avec succès
-- ✅ 2 admins SaaS créés
-- ✅ Storage et cache directories créés avec bonnes permissions
+1. **Phase 1 - HTTP 404** : Tous les URLs retournaient 404 (fichiers non trouvés)
+   - **Cause** : `.htaccess` manquant dans `public/`
+   - **Fix** : Création et commit du fichier `.htaccess` Laravel standard
 
-### Diagnostics Effectués
+2. **Phase 2 - HTTP 404 persistant** : 404 même après ajout `.htaccess`
+   - **Cause** : Handler PHP 8.2 configuré mais dépendances installées avec PHP 8.3
+   - **Fix** : Mise à jour handler vers PHP 8.3
 
-```bash
-# Test curl - tous retournent 404
-curl -I https://admin.klassci.com/test.php
-curl -I https://admin.klassci.com/index.php
+3. **Phase 3 - HTTP 503 + Téléchargement fichiers** : Service Unavailable et fichiers PHP téléchargés
+   - **Cause** : Tentatives de différents formats `AddHandler` (standard, lsphp avec 3 underscores)
+   - **Symptôme** : PHP ne s'exécutait plus du tout
 
-# Vérification fichiers - existent bien
-ls -la /home/c2569688c/public_html/admin/public/index.php
-ls -la /home/c2569688c/public_html/admin/public/test.php
-ls -la /home/c2569688c/public_html/admin/public/.htaccess
+4. **Phase 4 - RÉSOLUTION FINALE** : Dashboard Filament accessible ✅
+   - **Solution** : Suppression complète des directives `AddHandler` des `.htaccess`
+   - **Configuration** : PHP 8.3 géré uniquement via cPanel PHP Selector
 
-# Headers HTTP détectés
-HTTP/2 404
-server: fastestcache
-edge-cache-engine: varnish  # Cache edge actif
+### Solution Finale Appliquée
+
+**1. Configuration PHP via cPanel PHP Selector**
+
+Dans cPanel → PHP Selector :
+- Version sélectionnée : **PHP 8.3** (alt/php83)
+- S'applique à tout le compte c2569688c (pas de sélection par subdomain sur LWS)
+- Extensions activées selon besoins Laravel 12
+
+**2. Fichiers `.htaccess` nettoyés**
+
+**.htaccess root** (`/home/c2569688c/public_html/admin/.htaccess`) :
+```apache
+# Redirect to public folder
+# Note: PHP version configured via cPanel PHP Selector (PHP 8.3)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Redirect to public folder
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ /public/$1 [L]
+</IfModule>
 ```
 
-### Hypothèses À Tester
+**public/.htaccess** (`/home/c2569688c/public_html/admin/public/.htaccess`) :
+```apache
+# Laravel public directory .htaccess
+# Note: PHP version configured via cPanel PHP Selector (PHP 8.3)
 
-1. **Cache Varnish** - Le cache edge pourrait servir des 404 obsolètes
-   - Action: Attendre expiration cache OU purger manuellement
-   - Command: Possible via cPanel ou support LWS
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
 
-2. **Conflit .htaccess root** - Le redirect root `RewriteRule ^(.*)$ /public/$1` pourrait interférer
-   - Action: Tester en renommant temporairement `.htaccess.backup`
-   - Risk: Minimal (peut rollback facilement)
+    RewriteEngine On
 
-3. **Apache n'a pas rechargé** - Configuration subdomain pas prise en compte
-   - Action: Contact support LWS pour reload Apache
-   - Alternative: Attendre propagation automatique
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-4. **Document Root mal configuré** - Malgré l'interface cPanel qui affiche `admin/public`
-   - Action: Vérifier via SSH avec commande cPanel API
-   - Command: `uapi --user=c2569688c SubDomain list_subdomains`
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
 
-5. **SELinux ou restrictions LWS** - Règles de sécurité empêchent accès
-   - Action: Vérifier logs Apache si accessibles
-   - Alternative: Demander au support LWS
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+```
 
-### Commandes SSH À Exécuter Plus Tard
+**3. Commandes finales exécutées**
 
 ```bash
-# Se connecter au serveur
-ssh c2569688c@web44.lws-hosting.com
-
-# Aller dans le répertoire
 cd /home/c2569688c/public_html/admin
-
-# Test 1: Renommer .htaccess root temporairement
-mv .htaccess .htaccess.backup
-# Tester l'URL, puis restaurer si ça ne marche pas
-mv .htaccess.backup .htaccess
-
-# Test 2: Vérifier configuration subdomain via API cPanel
-uapi --user=c2569688c SubDomain list_subdomains domain=klassci.com | grep -A10 "admin"
-
-# Test 3: Chercher les logs d'erreur Apache
-find ~ -name "*error*log" -type f 2>/dev/null | head -5
-tail -50 ~/logs/error_log 2>/dev/null
-
-# Test 4: Tester avec curl depuis le serveur lui-même (bypass Varnish)
-curl -I http://localhost/admin/public/test.php
-curl -I http://127.0.0.1/admin/public/test.php
-
-# Test 5: Vérifier les permissions récursivement
-find public/ -type f -exec ls -l {} \; | head -10
-find public/ -type d -exec ls -ld {} \; | head -10
+git pull origin main
+php artisan cache:clear
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
 ```
 
-### Actions Support LWS Si Nécessaire
+### Configuration Finale Validée ✅
 
-- Demander purge cache Varnish pour `admin.klassci.com`
-- Demander reload Apache pour recharger configuration subdomain
-- Demander vérification logs Apache pour erreurs spécifiques
-- Demander si restrictions SELinux/mod_security bloquent l'accès
+**Infrastructure :**
+- ✅ Serveur : LWS web44.lws-hosting.com (CloudLinux + LiteSpeed)
+- ✅ PHP : 8.3.25 via CloudLinux PHP Selector
+- ✅ Subdomain : admin.klassci.com → `/home/c2569688c/public_html/admin/public`
+- ✅ Base de données : c2569688c_klassci_master (MySQL)
 
-### Workaround Temporaire (Si Urgent)
+**Application Laravel :**
+- ✅ Laravel 12.x déployé avec succès
+- ✅ Composer dependencies : 101 packages installés
+- ✅ APP_KEY généré
+- ✅ Migrations : 17 exécutées avec succès
+- ✅ Admins SaaS : 2 créés (Marcel Djedje-li, Issouf Ouedraogo)
+- ✅ Permissions : storage/ et bootstrap/cache/ configurés (775)
 
-Si l'accès au dashboard est urgent, déployer temporairement sur un autre subdomain de test :
-1. Créer `test-admin.klassci.com` dans cPanel
-2. Pointer vers `/home/c2569688c/public_html/admin/public`
-3. Tester si le problème persiste (diagnostic si c'est spécifique au subdomain `admin`)
+**Dashboard Filament :**
+- ✅ Accessible sur https://admin.klassci.com/admin
+- ✅ Interface de connexion fonctionnelle
+- ✅ Authentification SaaS opérationnelle
+
+### Leçons Apprises
+
+**Pour LWS Hosting (CloudLinux) :**
+
+1. ❌ **NE JAMAIS** ajouter `AddHandler` manuellement dans `.htaccess`
+2. ✅ **TOUJOURS** utiliser cPanel PHP Selector pour gérer la version PHP
+3. ✅ CloudLinux PHP Selector s'applique au **compte entier**, pas par subdomain
+4. ✅ Les handlers sont gérés automatiquement par CloudLinux (alt/php83)
+5. ✅ En cas de conflit, **supprimer toutes les directives `AddHandler`**
+
+**Pour Laravel sur cPanel :**
+
+1. ✅ Subdomain doit pointer vers le dossier `public/` (pas la racine de l'app)
+2. ✅ `.htaccess` root optionnel (juste pour redirect vers `public/`)
+3. ✅ `.htaccess` dans `public/` obligatoire (routing Laravel)
+4. ✅ Permissions critiques : `chmod -R 775 storage bootstrap/cache`
+5. ✅ Toujours vider les caches après changements de config
+
+**Debugging Production :**
+
+1. ✅ Tester avec `curl` depuis le serveur (bypass cache Varnish)
+2. ✅ Vérifier headers HTTP (`curl -I`) pour diagnostiquer
+3. ✅ 404 → problème routing/fichiers
+4. ✅ 503 → problème PHP/configuration
+5. ✅ Téléchargement fichier PHP → handler PHP non configuré/conflit
+
+### Commits de Résolution
+
+- `e28b31e` - fix: Add missing .htaccess file for Laravel routing in production
+- `8fc83a8` - fix: Update root .htaccess to use PHP 8.3 instead of 8.2 for web requests
+- `3153325` - fix: Add PHP 8.3 handler to public/.htaccess to execute PHP files correctly
+- `6cdbce1` - fix: Use correct LiteSpeed lsphp handler (ea-php83___lsphp with 3 underscores) for LWS hosting
+- `081e006` - **fix: Remove AddHandler directives - PHP version should be set via cPanel PHP Selector instead** ✅ (SOLUTION FINALE)
+
+### Prochaines Étapes
+
+1. ✅ Déploiement production réussi
+2. 🔄 Tester création tenant via dashboard (Phase 4)
+3. 🔄 Configurer cron jobs pour scheduler Laravel
+4. 🔄 Configurer backups automatiques
+5. 🔄 Monitoring et alertes
 
 ---
 
