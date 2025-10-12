@@ -498,6 +498,47 @@ class TenantResource extends Resource
                     })
                     ->visible(fn ($record) => $record->status === 'active'),
 
+                Tables\Actions\Action::make('health_check')
+                    ->label('Health Check')
+                    ->icon('heroicon-o-heart')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn ($record) => "Exécuter Health Check pour {$record->name}")
+                    ->modalDescription('Cette action va exécuter toutes les vérifications de santé (HTTP, Database, SSL, Storage, etc.) pour ce tenant.')
+                    ->modalSubmitActionLabel('Exécuter')
+                    ->action(function ($record) {
+                        try {
+                            $exitCode = \Artisan::call('tenant:health-check', [
+                                'tenant' => $record->code,
+                            ]);
+
+                            $output = \Artisan::output();
+
+                            if ($exitCode !== 0 || str_contains($output, '❌') || str_contains($output, 'CRITIQUE')) {
+                                \Filament\Notifications\Notification::make()
+                                    ->warning()
+                                    ->title('Health Check terminé avec des problèmes')
+                                    ->body("Certaines vérifications ont échoué pour {$record->name}. Consultez l'onglet Health Checks pour plus de détails.")
+                                    ->persistent()
+                                    ->send();
+                            } else {
+                                \Filament\Notifications\Notification::make()
+                                    ->success()
+                                    ->title('Health Check réussi')
+                                    ->body("Toutes les vérifications ont été effectuées avec succès pour {$record->name}.")
+                                    ->send();
+                            }
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('Erreur Health Check')
+                                ->body("Erreur : {$e->getMessage()}")
+                                ->persistent()
+                                ->send();
+                        }
+                    })
+                    ->visible(fn ($record) => $record->status === 'active'),
+
                 Tables\Actions\Action::make('deploy')
                     ->label('Déployer')
                     ->icon('heroicon-o-arrow-path')

@@ -630,7 +630,9 @@ use App\Filament\Resources\TenantResource\RelationManagers;
 
 ### Fichiers Modifiés
 
-- `app/Filament/Resources/TenantResource.php` (ligne 6) - Import RelationManagers namespace
+- `app/Filament/Resources/TenantResource.php` :
+  - Ligne 6 : Import RelationManagers namespace
+  - **Lignes 501-540 : Ajout bouton "Health Check" dans la liste des tenants** (comme "Mettre à jour les stats")
 - `app/Filament/Resources/TenantResource/RelationManagers/HealthChecksRelationManager.php` :
   - Lignes 17-27 : Formulaire vidé + isReadOnly()
   - Lignes 107-147 : Bouton "Exécuter Health Check" avec gestion erreurs
@@ -643,11 +645,17 @@ use App\Filament\Resources\TenantResource\RelationManagers;
 
 ### Résultat Après Fix
 
-Sur la page d'un tenant (`/admin/tenants/{id}`) :
+**Sur la liste des tenants (`/admin/tenants`)** :
+- ✅ **Bouton "Health Check"** ajouté dans les actions de ligne (à côté de "Mettre à jour les stats" et "Déployer")
+- ✅ Modal de confirmation avec description des vérifications
+- ✅ Notification différenciée : succès (tout OK) ou warning (problèmes détectés)
+- ✅ Accessible depuis la liste sans avoir à ouvrir le tenant
+
+**Sur la page d'un tenant (`/admin/tenants/{id}`)** :
 
 **Onglet "Health Checks"** :
 - ✅ Tableau avec historique des vérifications (HTTP Status, Database, Disk Space, SSL, etc.)
-- ✅ Bouton vert "Exécuter Health Check" en haut à droite
+- ✅ Bouton vert "Exécuter Health Check" en haut à droite de l'onglet
 - ✅ Badges colorés par statut (healthy=vert, critical=rouge, warning=orange)
 - ✅ Actions : Voir détails, Supprimer
 - ❌ Plus de bouton "Créer" manuel
