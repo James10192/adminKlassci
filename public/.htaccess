@@ -1,5 +1,6 @@
 # Force PHP 8.3 pour l'exécution des fichiers PHP
-AddHandler application/x-httpd-ea-php83 .php
+# LWS utilise LiteSpeed avec lsphp (3 underscores)
+AddHandler application/x-httpd-ea-php83___lsphp .php
 
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
