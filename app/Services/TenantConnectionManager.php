@@ -23,8 +23,22 @@ class TenantConnectionManager
         // Récupérer les credentials depuis le tenant
         $credentials = $tenant->database_credentials;
 
+        // Debug logging
+        Log::debug("Checking credentials for tenant {$tenant->code}", [
+            'credentials_type' => gettype($credentials),
+            'credentials_value' => $credentials,
+            'has_host' => isset($credentials['host']),
+            'has_username' => isset($credentials['username']),
+            'has_password' => isset($credentials['password']),
+        ]);
+
         if (!$credentials || !isset($credentials['host'], $credentials['username'], $credentials['password'])) {
-            throw new \Exception("Invalid database credentials for tenant {$tenant->code}");
+            $missing = [];
+            if (!isset($credentials['host'])) $missing[] = 'host';
+            if (!isset($credentials['username'])) $missing[] = 'username';
+            if (!isset($credentials['password'])) $missing[] = 'password';
+
+            throw new \Exception("Invalid database credentials for tenant {$tenant->code}. Missing fields: " . implode(', ', $missing));
         }
 
         // Configurer la connexion dynamiquement
