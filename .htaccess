@@ -1,7 +1,5 @@
-# Force PHP 8.3 pour klassciMaster (compatible Laravel 12)
-# LWS utilise LiteSpeed avec lsphp (3 underscores)
-AddHandler application/x-httpd-ea-php83___lsphp .php
-
+# Redirect to public folder
+# Note: PHP version configured via cPanel MultiPHP Manager (PHP 8.3)
 <IfModule mod_rewrite.c>
     RewriteEngine On
 

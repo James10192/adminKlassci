@@ -1,6 +1,5 @@
-# Force PHP 8.3 pour l'exécution des fichiers PHP
-# LWS utilise LiteSpeed avec lsphp (3 underscores)
-AddHandler application/x-httpd-ea-php83___lsphp .php
+# Laravel public directory .htaccess
+# Note: PHP version configured via cPanel MultiPHP Manager (PHP 8.3)
 
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
