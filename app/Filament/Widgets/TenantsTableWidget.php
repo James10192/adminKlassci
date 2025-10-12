@@ -9,14 +9,14 @@ use Filament\Widgets\TableWidget as BaseWidget;
 
 class TenantsTableWidget extends BaseWidget
 {
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 3;
 
     protected int | string | array $columnSpan = 'full';
 
     public function table(Table $table): Table
     {
         return $table
-            ->heading('Établissements Nécessitant une Attention')
+            ->heading('⚠️ Alertes Quotas & Abonnements')
             ->query(
                 Tenant::query()
                     ->where('status', 'active')

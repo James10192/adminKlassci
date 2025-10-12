@@ -1,5 +1,97 @@
 # KLASSCI - Documentation Système SaaS Multi-Tenant
 
+## 🏥 SYSTÈME DE HEALTH CHECK EN TEMPS RÉEL
+
+**Date implémentation:** 12 octobre 2025
+**Statut:** ✅ **FONCTIONNEL**
+
+### Architecture du Système
+
+Le système de health check utilise une architecture à 3 composants pour afficher uniquement les problèmes détectés, avec rafraîchissement automatique toutes les 30 secondes :
+
+1. **Widget Dashboard : TenantHealthOverview** (sort = 1)
+   - Affiche 3 stat cards : Tenants Healthy, Warning, Critical
+   - Rafraîchissement automatique via `->poll('30s')`
+   - Calcule le statut global de chaque tenant (si 1 check unhealthy → tenant Critical)
+
+2. **Widget Dashboard : TenantsWithIssues** (sort = 2)
+   - Table affichant **uniquement** les tenants avec problèmes (degraded/unhealthy)
+   - Filtre : checks des 10 dernières minutes
+   - Actions : Re-vérifier, Voir tenant
+   - Rafraîchissement automatique toutes les 30s
+
+3. **Page dédiée : TenantHealthCheckResource**
+   - Affiche **uniquement** les health issues (pas les checks healthy)
+   - Filtre par défaut : checks des dernières 24h en statut unhealthy/degraded
+   - Navigation badge : nombre de problèmes de la dernière heure
+   - Filtre par statut, type de check, tenant
+   - Actions : Re-vérifier, Voir tenant, Marquer comme résolu (soft delete)
+
+### Status Names (Important !)
+
+Les status utilisés par la commande `tenant:health-check` sont :
+- `healthy` - Tout fonctionne normalement
+- `degraded` - Problème mineur nécessitant attention
+- `unhealthy` - Problème critique nécessitant action immédiate
+
+**⚠️ Ne pas utiliser** `warning` ou `critical` (anciens noms, dépréciés)
+
+### Configuration du Polling
+
+**Tous les composants** utilisent Livewire polling :
+```php
+protected static ?string $pollingInterval = '30s';  // Widgets
+->poll('30s')  // Tables
+```
+
+Cela génère des requêtes XHR vers `/livewire/update` toutes les 30 secondes.
+
+### Commandes Disponibles
+
+```bash
+# Exécuter health check pour un tenant
+php artisan tenant:health-check presentation
+
+# Exécuter health check pour tous les tenants
+php artisan tenant:health-check --all
+
+# Mettre à jour les statistiques d'un tenant
+php artisan tenant:update-stats presentation
+```
+
+### Configuration Timezone
+
+- **Système** : `Africa/Abidjan` (GMT+0)
+- **Laravel** : `config/app.php → 'timezone' => 'Africa/Abidjan'`
+- **Vérification** : `timedatectl` (affiche GMT)
+
+### URLs de Test
+
+- Dashboard : `http://localhost:8001/admin` (widgets en temps réel)
+- Health Issues : `http://localhost:8001/admin/tenant-health-checks`
+- Identifiants : `test@klassci.com` / `TestKlassci2025!`
+
+### Tests de Polling en Temps Réel
+
+1. Ouvrir le dashboard dans le navigateur
+2. Ouvrir la console développeur (F12) → onglet Network
+3. Filtrer par XHR/Fetch
+4. Attendre 30 secondes → observer requête vers `/livewire/update`
+5. Générer un nouveau health check :
+   ```bash
+   php artisan tenant:health-check presentation
+   ```
+6. Observer le dashboard se mettre à jour automatiquement (max 30s)
+
+### Fichiers Modifiés
+
+- `app/Filament/Widgets/TenantHealthOverview.php` (nouveau)
+- `app/Filament/Widgets/TenantsWithIssues.php` (nouveau)
+- `app/Filament/Resources/TenantHealthCheckResource.php` (refactoré)
+- `app/Filament/Resources/TenantResource/Pages/ViewTenant.php` (nouveau)
+
+---
+
 ## ✅ DÉPLOIEMENT PRODUCTION RÉUSSI - admin.klassci.com
 
 **Date début:** 11 octobre 2025 - 22h00 UTC

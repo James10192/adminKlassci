@@ -9,7 +9,7 @@ class TenantsByPlanChart extends ChartWidget
 {
     protected static ?string $heading = 'Répartition des Établissements par Plan';
 
-    protected static ?int $sort = 1;
+    protected static ?int $sort = 4;
 
     protected function getData(): array
     {
