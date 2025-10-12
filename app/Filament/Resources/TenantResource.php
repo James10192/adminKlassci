@@ -546,7 +546,9 @@ class TenantResource extends Resource
     public static function getRelations(): array
     {
         return [
-            // Future: TenantDeploymentsRelationManager, TenantHealthChecksRelationManager
+            RelationManagers\DeploymentsRelationManager::class,
+            RelationManagers\HealthChecksRelationManager::class,
+            RelationManagers\BackupsRelationManager::class,
         ];
     }
 
