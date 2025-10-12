@@ -430,9 +430,23 @@ class TenantResource extends Resource
                     ->action(function ($record) {
                         try {
                             // Exécuter la commande tenant:update-stats
-                            \Artisan::call('tenant:update-stats', [
+                            $exitCode = \Artisan::call('tenant:update-stats', [
                                 'tenant' => $record->code,
                             ]);
+
+                            // Récupérer l'output de la commande
+                            $output = \Artisan::output();
+
+                            // Vérifier si la commande a échoué
+                            if ($exitCode !== 0 || str_contains($output, '❌') || str_contains($output, 'Erreur')) {
+                                \Filament\Notifications\Notification::make()
+                                    ->danger()
+                                    ->title('Erreur de mise à jour')
+                                    ->body("La mise à jour a échoué. Vérifiez les credentials de la base de données.")
+                                    ->persistent()
+                                    ->send();
+                                return;
+                            }
 
                             // Rafraîchir le record depuis la BDD pour voir les nouvelles valeurs
                             $record->refresh();
