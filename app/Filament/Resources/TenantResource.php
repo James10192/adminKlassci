@@ -93,7 +93,22 @@ class TenantResource extends Resource
                                             ->required()
                                             ->rows(4)
                                             ->placeholder('{"host":"localhost","port":3306,"username":"...","password":"..."}')
-                                            ->helperText('Format JSON avec host, port, username, password'),
+                                            ->helperText('Format JSON avec host, port, username, password')
+                                            ->dehydrateStateUsing(function ($state) {
+                                                // Convertir le JSON string en array pour éviter double encoding
+                                                if (is_string($state)) {
+                                                    $decoded = json_decode($state, true);
+                                                    return $decoded ?? $state;
+                                                }
+                                                return $state;
+                                            })
+                                            ->formatStateUsing(function ($state) {
+                                                // Afficher le JSON formaté lors de l'édition
+                                                if (is_array($state)) {
+                                                    return json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                                                }
+                                                return $state;
+                                            }),
                                     ])->columns(1),
 
                                 Forms\Components\Section::make('Git & Déploiement')
@@ -294,7 +309,22 @@ class TenantResource extends Resource
                                             ->label('Métadonnées (JSON)')
                                             ->rows(3)
                                             ->columnSpanFull()
-                                            ->helperText('Données supplémentaires au format JSON'),
+                                            ->helperText('Données supplémentaires au format JSON')
+                                            ->dehydrateStateUsing(function ($state) {
+                                                // Convertir le JSON string en array pour éviter double encoding
+                                                if (is_string($state) && !empty($state)) {
+                                                    $decoded = json_decode($state, true);
+                                                    return $decoded ?? $state;
+                                                }
+                                                return $state;
+                                            })
+                                            ->formatStateUsing(function ($state) {
+                                                // Afficher le JSON formaté lors de l'édition
+                                                if (is_array($state)) {
+                                                    return json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                                                }
+                                                return $state;
+                                            }),
                                     ])->columns(2),
                             ]),
                     ])
