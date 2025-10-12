@@ -419,6 +419,40 @@ class TenantResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->where('subscription_end_date', '<', now())),
             ])
             ->actions([
+                Tables\Actions\Action::make('update_stats')
+                    ->label('Mettre à jour les stats')
+                    ->icon('heroicon-o-arrow-path-rounded-square')
+                    ->color('info')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn ($record) => "Mettre à jour les statistiques de {$record->name}")
+                    ->modalDescription('Cette action va recalculer les statistiques d\'utilisation (utilisateurs, étudiants, personnel, stockage) depuis la base de données du tenant.')
+                    ->modalSubmitActionLabel('Mettre à jour')
+                    ->action(function ($record) {
+                        try {
+                            // Exécuter la commande tenant:update-stats
+                            \Artisan::call('tenant:update-stats', [
+                                'tenant' => $record->code,
+                            ]);
+
+                            // Rafraîchir le record depuis la BDD pour voir les nouvelles valeurs
+                            $record->refresh();
+
+                            \Filament\Notifications\Notification::make()
+                                ->success()
+                                ->title('Statistiques mises à jour')
+                                ->body("Les statistiques de {$record->name} ont été mises à jour avec succès.")
+                                ->send();
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('Erreur de mise à jour')
+                                ->body("Erreur : {$e->getMessage()}")
+                                ->persistent()
+                                ->send();
+                        }
+                    })
+                    ->visible(fn ($record) => $record->status === 'active'),
+
                 Tables\Actions\Action::make('deploy')
                     ->label('Déployer')
                     ->icon('heroicon-o-arrow-path')
