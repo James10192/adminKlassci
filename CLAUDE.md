@@ -646,12 +646,20 @@ use App\Filament\Resources\TenantResource\RelationManagers;
 ### Résultat Après Fix
 
 **Sur la liste des tenants (`/admin/tenants`)** :
-- ✅ **Bouton "Health Check"** ajouté dans les actions de ligne (à côté de "Mettre à jour les stats" et "Déployer")
-- ✅ Modal de confirmation avec description des vérifications
-- ✅ Notification différenciée : succès (tout OK) ou warning (problèmes détectés)
-- ✅ Accessible depuis la liste sans avoir à ouvrir le tenant
+- ✅ **Menu dropdown simplifié** : Seulement 3 actions (Voir, Modifier, Supprimer)
+- ✅ Clic sur une ligne → Ouvre la page **View** (au lieu de Edit)
+- ✅ Interface plus propre et moins encombrée
 
-**Sur la page d'un tenant (`/admin/tenants/{id}`)** :
+**Sur la page View d'un tenant (`/admin/tenants/{id}`)** :
+- ✅ **4 boutons dans le header** (en haut à droite) :
+  - 🔄 **Mettre à jour les stats** (bleu info)
+  - 🩺 **Health Check** (vert success)
+  - 🚀 **Déployer** (orange warning)
+  - ✏️ **Modifier** (gris)
+- ✅ Tous les boutons avec modals de confirmation
+- ✅ Onglets : Deployments, Health Checks, Backups (en bas de page)
+
+**Sur la page d'un tenant (onglets)** :
 
 **Onglet "Health Checks"** :
 - ✅ Tableau avec historique des vérifications (HTTP Status, Database, Disk Space, SSL, etc.)
@@ -674,7 +682,9 @@ use App\Filament\Resources\TenantResource\RelationManagers;
 
 ### Commits de Résolution
 
-- `[commit_hash]` - **fix: Make RelationManagers read-only with action buttons** - Disabled manual creation, added "Execute Health Check", "Create Backup", and "Deploy" buttons
+- `45d6448` - **fix: Make RelationManagers read-only with action buttons** - Disabled manual creation, added action buttons in headerActions
+- `d70d140` - **feat: Add Health Check button to tenant list actions** - Added Health Check button in table actions
+- `[commit_hash]` - **refactor: Move tenant actions to View page header** - Created ViewTenant page, moved Update Stats/Health Check/Deploy to header actions
 
 ### Leçons Apprises
 
@@ -683,6 +693,9 @@ use App\Filament\Resources\TenantResource\RelationManagers;
 3. ✅ Utiliser `Tables\Actions\Action::make()` pour lancer des commandes Artisan depuis Filament
 4. ✅ Vérifier l'exit code de `\Artisan::call()` pour détecter les échecs (ne lance pas d'exception)
 5. ✅ Ne pas oublier d'importer le namespace `RelationManagers` dans le Resource principal
+6. ✅ **Créer une page View dédiée** pour améliorer l'UX au lieu de surcharger le menu dropdown
+7. ✅ **Placer les actions opérationnelles** (Update Stats, Health Check, Deploy) dans le header de la page View
+8. ✅ **Garder le menu dropdown simple** avec seulement View/Edit/Delete
 
 ### Tests Recommandés
 

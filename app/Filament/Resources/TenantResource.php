@@ -450,129 +450,7 @@ class TenantResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->where('subscription_end_date', '<', now())),
             ])
             ->actions([
-                Tables\Actions\Action::make('update_stats')
-                    ->label('Mettre à jour les stats')
-                    ->icon('heroicon-o-arrow-path-rounded-square')
-                    ->color('info')
-                    ->requiresConfirmation()
-                    ->modalHeading(fn ($record) => "Mettre à jour les statistiques de {$record->name}")
-                    ->modalDescription('Cette action va recalculer les statistiques d\'utilisation (utilisateurs, étudiants, personnel, stockage) depuis la base de données du tenant.')
-                    ->modalSubmitActionLabel('Mettre à jour')
-                    ->action(function ($record) {
-                        try {
-                            // Exécuter la commande tenant:update-stats
-                            $exitCode = \Artisan::call('tenant:update-stats', [
-                                'tenant' => $record->code,
-                            ]);
-
-                            // Récupérer l'output de la commande
-                            $output = \Artisan::output();
-
-                            // Vérifier si la commande a échoué
-                            if ($exitCode !== 0 || str_contains($output, '❌') || str_contains($output, 'Erreur')) {
-                                \Filament\Notifications\Notification::make()
-                                    ->danger()
-                                    ->title('Erreur de mise à jour')
-                                    ->body("La mise à jour a échoué. Vérifiez les credentials de la base de données.")
-                                    ->persistent()
-                                    ->send();
-                                return;
-                            }
-
-                            // Rafraîchir le record depuis la BDD pour voir les nouvelles valeurs
-                            $record->refresh();
-
-                            \Filament\Notifications\Notification::make()
-                                ->success()
-                                ->title('Statistiques mises à jour')
-                                ->body("Les statistiques de {$record->name} ont été mises à jour avec succès.")
-                                ->send();
-                        } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
-                                ->danger()
-                                ->title('Erreur de mise à jour')
-                                ->body("Erreur : {$e->getMessage()}")
-                                ->persistent()
-                                ->send();
-                        }
-                    })
-                    ->visible(fn ($record) => $record->status === 'active'),
-
-                Tables\Actions\Action::make('health_check')
-                    ->label('Health Check')
-                    ->icon('heroicon-o-heart')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->modalHeading(fn ($record) => "Exécuter Health Check pour {$record->name}")
-                    ->modalDescription('Cette action va exécuter toutes les vérifications de santé (HTTP, Database, SSL, Storage, etc.) pour ce tenant.')
-                    ->modalSubmitActionLabel('Exécuter')
-                    ->action(function ($record) {
-                        try {
-                            $exitCode = \Artisan::call('tenant:health-check', [
-                                'tenant' => $record->code,
-                            ]);
-
-                            $output = \Artisan::output();
-
-                            if ($exitCode !== 0 || str_contains($output, '❌') || str_contains($output, 'CRITIQUE')) {
-                                \Filament\Notifications\Notification::make()
-                                    ->warning()
-                                    ->title('Health Check terminé avec des problèmes')
-                                    ->body("Certaines vérifications ont échoué pour {$record->name}. Consultez l'onglet Health Checks pour plus de détails.")
-                                    ->persistent()
-                                    ->send();
-                            } else {
-                                \Filament\Notifications\Notification::make()
-                                    ->success()
-                                    ->title('Health Check réussi')
-                                    ->body("Toutes les vérifications ont été effectuées avec succès pour {$record->name}.")
-                                    ->send();
-                            }
-                        } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
-                                ->danger()
-                                ->title('Erreur Health Check')
-                                ->body("Erreur : {$e->getMessage()}")
-                                ->persistent()
-                                ->send();
-                        }
-                    })
-                    ->visible(fn ($record) => $record->status === 'active'),
-
-                Tables\Actions\Action::make('deploy')
-                    ->label('Déployer')
-                    ->icon('heroicon-o-arrow-path')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->modalHeading(fn ($record) => "Déployer {$record->name}")
-                    ->modalDescription('Cette action va déployer les dernières mises à jour depuis GitHub vers le serveur de production.')
-                    ->modalSubmitActionLabel('Déployer')
-                    ->action(function ($record) {
-                        try {
-                            // Exécuter la commande tenant:deploy
-                            \Artisan::call('tenant:deploy', [
-                                'tenant' => $record->code,
-                            ]);
-
-                            \Filament\Notifications\Notification::make()
-                                ->success()
-                                ->title('Déploiement démarré')
-                                ->body("Le déploiement de {$record->name} a été lancé avec succès.")
-                                ->send();
-
-                            // Rediriger vers la page de déploiements pour voir le statut
-                            return redirect()->route('filament.admin.resources.tenant-deployments.index');
-                        } catch (\Exception $e) {
-                            \Filament\Notifications\Notification::make()
-                                ->danger()
-                                ->title('Erreur de déploiement')
-                                ->body("Erreur : {$e->getMessage()}")
-                                ->persistent()
-                                ->send();
-                        }
-                    })
-                    ->visible(fn ($record) => $record->status === 'active'),
-
+                // Actions simplifiées : seulement View, Edit, Delete
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
@@ -599,6 +477,7 @@ class TenantResource extends Resource
         return [
             'index' => Pages\ListTenants::route('/'),
             'create' => Pages\CreateTenant::route('/create'),
+            'view' => Pages\ViewTenant::route('/{record}'),
             'edit' => Pages\EditTenant::route('/{record}/edit'),
         ];
     }
