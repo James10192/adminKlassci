@@ -158,7 +158,9 @@ class BackupsRelationManager extends RelationManager
                     }),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->modalHeading(fn ($record) => "Détails du backup {$record->type}")
+                    ->modalContent(fn ($record) => view('filament.resources.tenant-resource.backup-details', ['record' => $record])),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
