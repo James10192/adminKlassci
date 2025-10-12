@@ -36,6 +36,36 @@ Les status utilisés par la commande `tenant:health-check` sont :
 
 **⚠️ Ne pas utiliser** `warning` ou `critical` (anciens noms, dépréciés)
 
+### Logique de Vérification par Type
+
+**1. HTTP Status** :
+- `healthy` : HTTP 200-299
+- `unhealthy` : HTTP 400+, timeout, erreur connexion
+
+**2. Database Connection** :
+- `healthy` : Connexion réussie, tables comptées
+- `unhealthy` : Échec connexion, credentials invalides
+
+**3. Disk Space** :
+- `healthy` : Utilisation < 75%
+- `degraded` : Utilisation 75-90%
+- `unhealthy` : Utilisation > 90% OU répertoire introuvable
+
+**4. SSL Certificate** :
+- `healthy` : Expire dans > 30 jours
+- `degraded` : Expire dans 7-30 jours
+- `unhealthy` : Expire dans < 7 jours OU erreur certificat
+
+**5. Application Errors** :
+- `healthy` : 0-10 erreurs (dernière heure)
+- `degraded` : 10-50 erreurs OU **aucun fichier de log** (permissions/config incorrecte)
+- `unhealthy` : > 50 erreurs (dernière heure)
+
+**6. Queue Workers** :
+- `healthy` : Vérification non implémentée (à venir)
+
+**🔍 Note importante** : Si le fichier `laravel.log` n'existe pas, le statut est **degraded** car cela indique un problème de permissions d'écriture ou de configuration du logging Laravel.
+
 ### Configuration du Polling
 
 **Tous les composants** utilisent Livewire polling :
@@ -89,6 +119,26 @@ php artisan tenant:update-stats presentation
 - `app/Filament/Widgets/TenantsWithIssues.php` (nouveau)
 - `app/Filament/Resources/TenantHealthCheckResource.php` (refactoré)
 - `app/Filament/Resources/TenantResource/Pages/ViewTenant.php` (nouveau)
+- `app/Console/Commands/TenantHealthCheck.php` - Logique de vérification
+
+### Changelog
+
+**12 octobre 2025 - 21h05 GMT**
+- 🐛 **Fix** : Correction statut "Application Errors" quand fichier log absent
+  - **Avant** : `healthy` si `laravel.log` n'existe pas
+  - **Après** : `degraded` si `laravel.log` n'existe pas
+  - **Raison** : Fichier log devrait toujours exister dans une app Laravel
+  - L'absence indique problème de permissions ou config logging incorrecte
+  - Détails enrichis : "Aucun fichier de log (permissions ou config logging incorrecte)"
+
+**12 octobre 2025 - 21h00 GMT**
+- 🎨 **UX** : Renommage widgets dashboard pour éviter confusion
+  - "Établissements Nécessitant une Attention" → "⚠️ Alertes Quotas & Abonnements"
+  - Ordre d'affichage réorganisé (sort: 0→1→2→3→4)
+
+**12 octobre 2025 - 20h45 GMT**
+- ✅ **Feature** : Système de health check en temps réel avec polling 30s
+- 🐛 **Fix** : Correction status names (warning/critical → degraded/unhealthy)
 
 ---
 

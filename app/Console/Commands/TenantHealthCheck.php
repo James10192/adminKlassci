@@ -299,10 +299,13 @@ class TenantHealthCheck extends Command
         if (!file_exists($logPath)) {
             return [
                 'type' => 'application_errors',
-                'status' => 'healthy',
+                'status' => 'degraded',  // ⚠️ Log file should exist - degraded status
                 'response_time_ms' => null,
-                'details' => "Aucun fichier de log",
-                'metadata' => ['log_path' => $logPath],
+                'details' => "Aucun fichier de log (permissions ou config logging incorrecte)",
+                'metadata' => [
+                    'log_path' => $logPath,
+                    'reason' => 'Log file does not exist - may indicate permission issues or logging misconfiguration',
+                ],
             ];
         }
 
