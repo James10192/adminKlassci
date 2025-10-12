@@ -16,12 +16,14 @@ class BackupsRelationManager extends RelationManager
 
     public function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\TextInput::make('file_name')
-                    ->required()
-                    ->maxLength(255),
-            ]);
+        // Les backups sont créés automatiquement par la commande tenant:backup
+        // Pas de formulaire de création/édition manuelle
+        return $form->schema([]);
+    }
+
+    public function isReadOnly(): bool
+    {
+        return false; // On garde false pour permettre la suppression
     }
 
     public function table(Table $table): Table
@@ -94,8 +96,46 @@ class BackupsRelationManager extends RelationManager
                 Tables\Filters\TrashedFilter::make()
             ])
             ->headerActions([
-                // Backups sont créés automatiquement par la commande tenant:backup
-                // Pas de création manuelle
+                Tables\Actions\Action::make('create_backup')
+                    ->label('Créer un Backup')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('primary')
+                    ->requiresConfirmation()
+                    ->modalHeading('Créer un Backup')
+                    ->modalDescription('Cette action va créer une sauvegarde complète de ce tenant (base de données + fichiers).')
+                    ->action(function ($livewire) {
+                        $tenant = $livewire->ownerRecord;
+
+                        try {
+                            $exitCode = \Artisan::call('tenant:backup', [
+                                'tenant' => $tenant->code,
+                            ]);
+
+                            $output = \Artisan::output();
+
+                            if ($exitCode !== 0 || str_contains($output, '❌') || str_contains($output, 'Erreur')) {
+                                \Filament\Notifications\Notification::make()
+                                    ->danger()
+                                    ->title('Backup échoué')
+                                    ->body('La sauvegarde a échoué. Consultez les logs pour plus de détails.')
+                                    ->persistent()
+                                    ->send();
+                            } else {
+                                \Filament\Notifications\Notification::make()
+                                    ->success()
+                                    ->title('Backup créé')
+                                    ->body('La sauvegarde a été créée avec succès.')
+                                    ->send();
+                            }
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('Erreur')
+                                ->body('Impossible de créer le backup: ' . $e->getMessage())
+                                ->persistent()
+                                ->send();
+                        }
+                    }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),

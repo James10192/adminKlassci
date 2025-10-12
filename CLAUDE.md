@@ -165,6 +165,106 @@ php artisan view:clear
 
 ---
 
+## 🐛 FIX : Double JSON Encoding dans Filament
+
+**Date:** 12 octobre 2025
+**Branche:** main
+**Statut:** ✅ RÉSOLU
+
+### Problème Découvert
+
+Lors du test de la commande `tenant:update-stats`, erreur : **"Invalid database credentials for tenant presentation. Missing fields: host, username, password"**
+
+**Investigation** :
+```bash
+# Valeur en BDD (via MySQL)
+"{\n  \"host\": \"localhost\",\n  \"port\": 3306,\n  \"username\": \"c2569688c_Marcel\",\n  \"password\": \"LeVraiMD@123\"\n}"
+```
+
+Le JSON était **stringifié deux fois** : `"{ ... }"` au lieu de `{ ... }` !
+
+### Cause Racine
+
+**Filament Textarea + Eloquent Cast `'array'`** créait un double encoding :
+
+1. User tape JSON dans Textarea → Filament reçoit une **string JSON**
+2. Eloquent avec `protected $casts = ['database_credentials' => 'array']` fait `json_encode()` de cette string
+3. Résultat : `"{\"host\":\"localhost\"}"` (JSON d'une string au lieu de JSON d'un objet)
+
+Le cast `'array'` fonctionne uniquement si on lui passe un **array PHP**, pas une **string JSON**.
+
+### Solution Implémentée
+
+Ajout de `dehydrateStateUsing()` et `formatStateUsing()` sur les champs Textarea JSON :
+
+```php
+Forms\Components\Textarea::make('database_credentials')
+    ->label('Credentials (JSON)')
+    ->dehydrateStateUsing(function ($state) {
+        // Convertir le JSON string en array AVANT sauvegarde
+        // Évite que le cast Eloquent fasse json_encode() d'une string
+        if (is_string($state)) {
+            $decoded = json_decode($state, true);
+            return $decoded ?? $state;
+        }
+        return $state;
+    })
+    ->formatStateUsing(function ($state) {
+        // Afficher le JSON formaté lors de l'édition (UX)
+        if (is_array($state)) {
+            return json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        }
+        return $state;
+    }),
+```
+
+**Appliqué aux champs :**
+- `database_credentials` (TenantResource)
+- `metadata` (TenantResource)
+
+### Fix Manuel des Données Existantes
+
+Pour le tenant `presentation` avec credentials corrompues :
+
+```php
+// Via tinker
+$tenant = \App\Models\Tenant::where('code', 'presentation')->first();
+$tenant->database_credentials = [
+  "host" => "localhost",
+  "port" => 3306,
+  "username" => "c2569688c_Marcel",
+  "password" => "LeVraiMD@123"
+];
+$tenant->save();
+```
+
+**Résultat après fix** :
+```bash
+php artisan tenant:update-stats presentation
+# ✅ Statistiques mises à jour avec succès !
+# Staff: 1 | Students: 3 | Inscriptions: 0
+```
+
+### Commits de Résolution
+
+- `b64a6d7` - **fix: Prevent double JSON encoding** in database_credentials and metadata fields by properly handling string to array conversion
+
+### Leçons Apprises
+
+1. ❌ **NE JAMAIS** utiliser `Textarea` pour stocker du JSON avec un cast `'array'` Eloquent sans `dehydrateStateUsing()`
+2. ✅ **TOUJOURS** décoder le JSON string → array avant que le cast Eloquent ne l'encode
+3. ✅ Utiliser `formatStateUsing()` pour améliorer l'UX (afficher JSON formaté)
+4. ✅ Tester manuellement avec `getRawOriginal()` pour voir la valeur brute en BDD
+5. ✅ Valider avec `json_decode()` + `json_last_error()` pour détecter JSON invalides
+
+### Impact
+
+✅ **Résolu** : Tous les futurs tenants créés/modifiés auront des credentials correctement stockés
+✅ **Résolu** : La commande `tenant:update-stats` fonctionne maintenant correctement
+⚠️ **Action requise** : Migrer manuellement les tenants existants si déjà créés avec double encoding
+
+---
+
 ## 🎉 DÉVELOPPEMENT klassci-master - Statut Global
 
 ### ✅ Phase 1 : Infrastructure de base (Jours 1-2) - COMPLÉTÉ ✅
@@ -430,6 +530,167 @@ $ php artisan list | grep -E "saas:|tenant:"
    - Tous les resources : soft deletes, French labels, relations tenant
 
 **Phase 3 : TERMINÉE** ✅
+
+---
+
+## 🐛 FIX : RelationManagers en Lecture Seule avec Boutons d'Action
+
+**Date :** 12 octobre 2025
+**Branche :** main
+**Problème résolu :** RelationManagers (HealthChecks, Backups, Deployments) affichaient un bouton "Créer" comme pour une création manuelle, alors que ces données doivent être générées automatiquement par des commandes Artisan.
+
+### Problème Découvert
+
+Sur la page d'un tenant (`/admin/tenants/{id}`), les onglets **Health Checks**, **Backups** et **Deployments** affichaient uniquement un bouton "Créer", suggérant une création manuelle. Cela n'avait aucun sens car :
+- Les **health checks** sont générés par `php artisan tenant:health-check`
+- Les **backups** sont générés par `php artisan tenant:backup`
+- Les **deployments** sont générés par `php artisan tenant:deploy`
+
+L'utilisateur ne devrait jamais créer ces enregistrements manuellement via un formulaire.
+
+### Cause Racine
+
+Les **RelationManagers** créés avaient :
+1. ✅ Un tableau configuré correctement (colonnes, badges, filtres)
+2. ❌ Un formulaire `form()` avec des champs (ex: `TextInput::make('label')`)
+3. ❌ Pas de bouton d'action pour lancer les commandes Artisan
+
+Résultat : Filament affichait le bouton "Créer" par défaut puisqu'un formulaire existait.
+
+### Solution Implémentée
+
+**1. Désactivation des formulaires de création/édition**
+
+Vidé les formulaires pour empêcher la création manuelle :
+
+```php
+public function form(Form $form): Form
+{
+    // Les health checks sont générés automatiquement par la commande
+    // Pas de formulaire de création/édition manuelle
+    return $form->schema([]);
+}
+
+public function isReadOnly(): bool
+{
+    return false; // On garde false pour permettre la suppression
+}
+```
+
+**2. Ajout de boutons d'action dans headerActions**
+
+**HealthChecksRelationManager** - Bouton "Exécuter Health Check" :
+```php
+Tables\Actions\Action::make('run_health_check')
+    ->label('Exécuter Health Check')
+    ->icon('heroicon-o-heart')
+    ->color('success')
+    ->requiresConfirmation()
+    ->modalHeading('Exécuter un Health Check')
+    ->action(function ($livewire) {
+        $tenant = $livewire->ownerRecord;
+        $exitCode = \Artisan::call('tenant:health-check', ['tenant' => $tenant->code]);
+        // Vérification exit code + notification succès/échec
+    })
+```
+
+**BackupsRelationManager** - Bouton "Créer un Backup" :
+```php
+Tables\Actions\Action::make('create_backup')
+    ->label('Créer un Backup')
+    ->icon('heroicon-o-arrow-down-tray')
+    ->color('primary')
+    ->requiresConfirmation()
+    ->action(function ($livewire) {
+        $tenant = $livewire->ownerRecord;
+        \Artisan::call('tenant:backup', ['tenant' => $tenant->code]);
+    })
+```
+
+**DeploymentsRelationManager** - Bouton "Déployer" :
+```php
+Tables\Actions\Action::make('deploy')
+    ->label('Déployer')
+    ->icon('heroicon-o-rocket-launch')
+    ->color('warning')
+    ->requiresConfirmation()
+    ->modalDescription('Cette opération peut prendre plusieurs minutes.')
+    ->action(function ($livewire) {
+        $tenant = $livewire->ownerRecord;
+        \Artisan::call('tenant:deploy', ['tenant' => $tenant->code]);
+    })
+```
+
+**3. Fix import namespace manquant**
+
+Ajout dans `TenantResource.php` :
+```php
+use App\Filament\Resources\TenantResource\RelationManagers;
+```
+
+### Fichiers Modifiés
+
+- `app/Filament/Resources/TenantResource.php` (ligne 6) - Import RelationManagers namespace
+- `app/Filament/Resources/TenantResource/RelationManagers/HealthChecksRelationManager.php` :
+  - Lignes 17-27 : Formulaire vidé + isReadOnly()
+  - Lignes 107-147 : Bouton "Exécuter Health Check" avec gestion erreurs
+- `app/Filament/Resources/TenantResource/RelationManagers/BackupsRelationManager.php` :
+  - Lignes 17-27 : Formulaire vidé
+  - Lignes 98-139 : Bouton "Créer un Backup"
+- `app/Filament/Resources/TenantResource/RelationManagers/DeploymentsRelationManager.php` :
+  - Lignes 17-27 : Formulaire vidé
+  - Lignes 93-124 : Bouton "Déployer"
+
+### Résultat Après Fix
+
+Sur la page d'un tenant (`/admin/tenants/{id}`) :
+
+**Onglet "Health Checks"** :
+- ✅ Tableau avec historique des vérifications (HTTP Status, Database, Disk Space, SSL, etc.)
+- ✅ Bouton vert "Exécuter Health Check" en haut à droite
+- ✅ Badges colorés par statut (healthy=vert, critical=rouge, warning=orange)
+- ✅ Actions : Voir détails, Supprimer
+- ❌ Plus de bouton "Créer" manuel
+
+**Onglet "Backups"** :
+- ✅ Tableau avec historique des sauvegardes
+- ✅ Bouton bleu "Créer un Backup"
+- ✅ Affichage taille (MB), date expiration, statut
+- ❌ Plus de bouton "Créer" manuel
+
+**Onglet "Deployments"** :
+- ✅ Tableau avec historique des déploiements
+- ✅ Bouton orange "Déployer"
+- ✅ Git commit hash (copiable), branche, durée, statut
+- ❌ Plus de bouton "Créer" manuel
+
+### Commits de Résolution
+
+- `[commit_hash]` - **fix: Make RelationManagers read-only with action buttons** - Disabled manual creation, added "Execute Health Check", "Create Backup", and "Deploy" buttons
+
+### Leçons Apprises
+
+1. ✅ **TOUJOURS** vider le formulaire `form()` si les données sont générées automatiquement
+2. ✅ Utiliser `headerActions` pour les actions globales (s'appliquent à toute la relation)
+3. ✅ Utiliser `Tables\Actions\Action::make()` pour lancer des commandes Artisan depuis Filament
+4. ✅ Vérifier l'exit code de `\Artisan::call()` pour détecter les échecs (ne lance pas d'exception)
+5. ✅ Ne pas oublier d'importer le namespace `RelationManagers` dans le Resource principal
+
+### Tests Recommandés
+
+```bash
+# En production après pull
+cd /home/c2569688c/public_html/admin
+git pull origin main
+php artisan optimize:clear
+
+# Tester dans le navigateur :
+# 1. Aller sur /admin/tenants → cliquer sur un tenant
+# 2. Onglet "Health Checks" → cliquer "Exécuter Health Check"
+# 3. Vérifier notification succès + tableau mis à jour
+# 4. Onglet "Backups" → cliquer "Créer un Backup"
+# 5. Onglet "Deployments" → cliquer "Déployer"
+```
 
 ---
 

@@ -16,12 +16,14 @@ class HealthChecksRelationManager extends RelationManager
 
     public function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\TextInput::make('label')
-                    ->required()
-                    ->maxLength(255),
-            ]);
+        // Les health checks sont générés automatiquement par la commande
+        // Pas de formulaire de création/édition manuelle
+        return $form->schema([]);
+    }
+
+    public function isReadOnly(): bool
+    {
+        return false; // On garde false pour permettre la suppression
     }
 
     public function table(Table $table): Table
@@ -103,11 +105,50 @@ class HealthChecksRelationManager extends RelationManager
                 Tables\Filters\TrashedFilter::make()
             ])
             ->headerActions([
-                // Health checks sont créés automatiquement par la commande tenant:health-check
-                // Pas de création manuelle
+                Tables\Actions\Action::make('run_health_check')
+                    ->label('Exécuter Health Check')
+                    ->icon('heroicon-o-heart')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Exécuter un Health Check')
+                    ->modalDescription('Cette action va exécuter toutes les vérifications de santé pour ce tenant.')
+                    ->action(function ($livewire) {
+                        $tenant = $livewire->ownerRecord;
+
+                        try {
+                            $exitCode = \Artisan::call('tenant:health-check', [
+                                'tenant' => $tenant->code,
+                            ]);
+
+                            $output = \Artisan::output();
+
+                            if ($exitCode !== 0 || str_contains($output, '❌')) {
+                                \Filament\Notifications\Notification::make()
+                                    ->danger()
+                                    ->title('Health Check échoué')
+                                    ->body('Certaines vérifications ont échoué. Consultez les détails ci-dessous.')
+                                    ->send();
+                            } else {
+                                \Filament\Notifications\Notification::make()
+                                    ->success()
+                                    ->title('Health Check exécuté')
+                                    ->body('Toutes les vérifications ont été effectuées avec succès.')
+                                    ->send();
+                            }
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('Erreur')
+                                ->body('Impossible d\'exécuter le health check: ' . $e->getMessage())
+                                ->persistent()
+                                ->send();
+                        }
+                    }),
             ])
             ->actions([
-                Tables\Columns\ViewAction::make(),
+                Tables\Actions\ViewAction::make()
+                    ->modalHeading('Détails du Health Check')
+                    ->modalContent(fn ($record) => view('filament.resources.tenant-resource.health-check-details', ['record' => $record])),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([

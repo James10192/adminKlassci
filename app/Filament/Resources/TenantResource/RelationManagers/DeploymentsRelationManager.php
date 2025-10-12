@@ -16,12 +16,14 @@ class DeploymentsRelationManager extends RelationManager
 
     public function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\TextInput::make('git_commit_hash')
-                    ->required()
-                    ->maxLength(255),
-            ]);
+        // Les deployments sont créés automatiquement par la commande tenant:deploy
+        // Pas de formulaire de création/édition manuelle
+        return $form->schema([]);
+    }
+
+    public function isReadOnly(): bool
+    {
+        return false; // On garde false pour permettre la suppression
     }
 
     public function table(Table $table): Table
@@ -89,8 +91,36 @@ class DeploymentsRelationManager extends RelationManager
                 Tables\Filters\TrashedFilter::make()
             ])
             ->headerActions([
-                // Deployments sont créés automatiquement par la commande tenant:deploy
-                // Pas de création manuelle
+                Tables\Actions\Action::make('deploy')
+                    ->label('Déployer')
+                    ->icon('heroicon-o-rocket-launch')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Déployer le tenant')
+                    ->modalDescription('Cette action va déployer la dernière version du code depuis Git vers ce tenant. Cette opération peut prendre plusieurs minutes.')
+                    ->action(function ($livewire) {
+                        $tenant = $livewire->ownerRecord;
+
+                        try {
+                            // Lancer le déploiement en arrière-plan
+                            \Artisan::call('tenant:deploy', [
+                                'tenant' => $tenant->code,
+                            ]);
+
+                            \Filament\Notifications\Notification::make()
+                                ->success()
+                                ->title('Déploiement démarré')
+                                ->body('Le déploiement du tenant a été démarré. Consultez l\'onglet Deployments pour suivre la progression.')
+                                ->send();
+                        } catch (\Exception $e) {
+                            \Filament\Notifications\Notification::make()
+                                ->danger()
+                                ->title('Erreur de déploiement')
+                                ->body('Impossible de démarrer le déploiement: ' . $e->getMessage())
+                                ->persistent()
+                                ->send();
+                        }
+                    }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
