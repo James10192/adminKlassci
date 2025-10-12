@@ -309,36 +309,134 @@ class TenantHealthCheck extends Command
             ];
         }
 
-        // Lire les 1000 dernières lignes
-        $logLines = array_slice(file($logPath), -1000);
-        $recentErrors = 0;
-        $recentTime = time() - 3600; // Dernière heure
+        // Configuration de la fenêtre temporelle (24h par défaut pour avoir plus de contexte)
+        $timeWindow = 24 * 3600; // 24 heures
+        $recentTime = time() - $timeWindow;
+
+        // Lire les 2000 dernières lignes (augmenté pour capturer plus d'erreurs)
+        $logLines = array_slice(file($logPath), -2000);
+
+        // Compteurs par niveau de sévérité
+        $errorsByLevel = [
+            'EMERGENCY' => 0,
+            'ALERT' => 0,
+            'CRITICAL' => 0,
+            'ERROR' => 0,
+            'WARNING' => 0,
+        ];
+
+        // Compteurs par catégorie
+        $errorsByCategory = [
+            'sql' => 0,
+            'php_exception' => 0,
+            'http' => 0,
+            'queue' => 0,
+            'other' => 0,
+        ];
+
+        // Stocker les 5 erreurs les plus récentes avec détails
+        $recentErrors = [];
+        $errorCount = 0;
+
+        // Pattern pour capturer tous les niveaux de log importants
+        $pattern = '/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\].*\.(EMERGENCY|ALERT|CRITICAL|ERROR|WARNING):\s*(.+)/';
 
         foreach ($logLines as $line) {
-            if (preg_match('/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\].*ERROR/', $line, $matches)) {
+            if (preg_match($pattern, $line, $matches)) {
                 $timestamp = strtotime($matches[1]);
-                if ($timestamp >= $recentTime) {
-                    $recentErrors++;
+
+                // Ignorer les erreurs en dehors de la fenêtre temporelle
+                if ($timestamp < $recentTime) {
+                    continue;
+                }
+
+                $level = $matches[2];
+                $message = trim($matches[3]);
+
+                // Compter par niveau
+                if (isset($errorsByLevel[$level])) {
+                    $errorsByLevel[$level]++;
+                    $errorCount++;
+                }
+
+                // Catégoriser l'erreur
+                $category = $this->categorizeError($message);
+                $errorsByCategory[$category]++;
+
+                // Stocker les 5 plus récentes (avec plus de contexte)
+                if (count($recentErrors) < 5) {
+                    $recentErrors[] = [
+                        'timestamp' => $matches[1],
+                        'level' => $level,
+                        'message' => strlen($message) > 200 ? substr($message, 0, 200) . '...' : $message,
+                        'category' => $category,
+                    ];
                 }
             }
         }
 
+        // Calcul du statut avec pondération des niveaux critiques
+        $criticalScore = ($errorsByLevel['EMERGENCY'] * 10)
+                       + ($errorsByLevel['ALERT'] * 8)
+                       + ($errorsByLevel['CRITICAL'] * 5)
+                       + ($errorsByLevel['ERROR'] * 2)
+                       + ($errorsByLevel['WARNING'] * 1);
+
         $status = match(true) {
-            $recentErrors > 50 => 'unhealthy',
-            $recentErrors > 10 => 'degraded',
+            $errorsByLevel['EMERGENCY'] > 0 || $errorsByLevel['ALERT'] > 0 => 'unhealthy',
+            $errorsByLevel['CRITICAL'] > 5 || $criticalScore > 100 => 'unhealthy',
+            $errorsByLevel['ERROR'] > 50 || $criticalScore > 50 => 'degraded',
+            $errorsByLevel['WARNING'] > 100 => 'degraded',
             default => 'healthy',
+        };
+
+        // Construction du message détaillé
+        $totalErrors = $errorCount;
+        $criticalCount = $errorsByLevel['EMERGENCY'] + $errorsByLevel['ALERT'] + $errorsByLevel['CRITICAL'];
+
+        $details = match(true) {
+            $totalErrors === 0 => "Aucune erreur détectée (24h)",
+            $criticalCount > 0 => "{$totalErrors} erreurs ({$criticalCount} critiques) dans les 24h",
+            default => "{$totalErrors} erreurs dans les 24h",
         };
 
         return [
             'type' => 'application_errors',
             'status' => $status,
             'response_time_ms' => null,
-            'details' => "{$recentErrors} erreurs (dernière heure)",
+            'details' => $details,
             'metadata' => [
-                'recent_errors' => $recentErrors,
                 'log_path' => $logPath,
+                'time_window' => '24 heures',
+                'total_errors' => $totalErrors,
+                'errors_by_level' => array_filter($errorsByLevel), // Retirer les 0
+                'errors_by_category' => array_filter($errorsByCategory),
+                'recent_errors' => $recentErrors,
+                'critical_score' => $criticalScore,
             ],
         ];
+    }
+
+    /**
+     * Catégoriser une erreur selon son message
+     */
+    private function categorizeError(string $message): string
+    {
+        // Patterns pour identifier les catégories
+        $patterns = [
+            'sql' => '/SQLSTATE|Query|Database|PDOException|Integrity constraint/i',
+            'php_exception' => '/Exception|Error|Fatal|Call to undefined|Class .* not found/i',
+            'http' => '/HTTP|cURL|GuzzleHttp|Response|RequestException/i',
+            'queue' => '/Queue|Job|Worker|Redis|Horizon/i',
+        ];
+
+        foreach ($patterns as $category => $pattern) {
+            if (preg_match($pattern, $message)) {
+                return $category;
+            }
+        }
+
+        return 'other';
     }
 
     private function checkQueueWorkers(Tenant $tenant): array

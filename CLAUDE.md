@@ -56,10 +56,33 @@ Les status utilisés par la commande `tenant:health-check` sont :
 - `degraded` : Expire dans 7-30 jours
 - `unhealthy` : Expire dans < 7 jours OU erreur certificat
 
-**5. Application Errors** :
-- `healthy` : 0-10 erreurs (dernière heure)
-- `degraded` : 10-50 erreurs OU **aucun fichier de log** (permissions/config incorrecte)
-- `unhealthy` : > 50 erreurs (dernière heure)
+**5. Application Errors** (système enrichi) :
+- `healthy` : Score de criticité < 50 ET aucune erreur EMERGENCY/ALERT
+- `degraded` : Score 50-100 OU **aucun fichier de log** (permissions/config incorrecte) OU > 100 WARNING
+- `unhealthy` : Score > 100 OU présence EMERGENCY/ALERT OU > 5 CRITICAL
+
+**Calcul du score de criticité** :
+```
+Score = (EMERGENCY × 10) + (ALERT × 8) + (CRITICAL × 5) + (ERROR × 2) + (WARNING × 1)
+```
+
+**Niveaux détectés** : EMERGENCY, ALERT, CRITICAL, ERROR, WARNING
+**Fenêtre temporelle** : 24 heures (2000 dernières lignes du log)
+
+**Catégories d'erreurs** :
+- 💾 **SQL Errors** : SQLSTATE, Query, Database, PDOException, Integrity constraint
+- 🐘 **PHP Exceptions** : Exception, Error, Fatal, Call to undefined, Class not found
+- 🌐 **HTTP Errors** : HTTP, cURL, GuzzleHttp, Response, RequestException
+- 📮 **Queue Errors** : Queue, Job, Worker, Redis, Horizon
+- 📄 **Autres** : Toutes les autres erreurs non catégorisées
+
+**Métadonnées enrichies** :
+- `errors_by_level` : Compteurs par niveau (EMERGENCY, ALERT, CRITICAL, ERROR, WARNING)
+- `errors_by_category` : Compteurs par catégorie (sql, php_exception, http, queue, other)
+- `recent_errors` : Top 5 erreurs les plus récentes avec timestamp, niveau, message, catégorie
+- `critical_score` : Score pondéré de criticité
+- `time_window` : "24 heures"
+- `total_errors` : Nombre total d'erreurs détectées
 
 **6. Queue Workers** :
 - `healthy` : Vérification non implémentée (à venir)
@@ -122,6 +145,16 @@ php artisan tenant:update-stats presentation
 - `app/Console/Commands/TenantHealthCheck.php` - Logique de vérification
 
 ### Changelog
+
+**12 octobre 2025 - 22h00 GMT**
+- ✨ **Feature** : Système enrichi d'analyse des erreurs d'application
+  - **Niveaux détectés** : EMERGENCY, ALERT, CRITICAL, ERROR, WARNING (vs seulement ERROR avant)
+  - **Catégorisation automatique** : SQL, PHP Exceptions, HTTP, Queue, Autres
+  - **Top 5 erreurs récentes** : Affichage dans métadonnées avec timestamp, niveau, catégorie
+  - **Score de criticité** : Pondération EMERGENCY×10 + ALERT×8 + CRITICAL×5 + ERROR×2 + WARNING×1
+  - **Fenêtre temporelle** : 24h (2000 dernières lignes) vs 1h (1000 lignes) avant
+  - **Vue enrichie** : Modal avec statistiques par niveau, par catégorie, score critique
+  - **Seuils adaptatifs** : Basés sur le score au lieu de compteurs simples
 
 **12 octobre 2025 - 21h05 GMT**
 - 🐛 **Fix** : Correction statut "Application Errors" quand fichier log absent
