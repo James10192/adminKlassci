@@ -1,5 +1,83 @@
 # KLASSCI - Documentation Système SaaS Multi-Tenant
 
+## 📋 CHANGELOG
+
+### 12 octobre 2025 - 22h30 GMT
+
+**🔧 Amélioration majeure du système de backup**
+
+**Problèmes résolus :**
+1. ✅ **Pas de choix de type de backup** - Le bouton "Créer un Backup" créait toujours un backup complet sans possibilité de choisir
+2. ✅ **Pas de système automatique** - Les backups devaient être créés manuellement, aucun backup quotidien automatique
+3. ✅ **Pas de nettoyage automatique** - Les anciens backups s'accumulaient indéfiniment, aucun système de rétention
+
+**Solutions implémentées :**
+
+1. **Formulaire de sélection du type de backup** (BackupsRelationManager)
+   - Modal avec dropdown permettant de choisir le type :
+     - 💾 Full Backup (Base de données + Fichiers)
+     - 🗄️ Base de données uniquement (défaut)
+     - 📁 Fichiers uniquement
+   - Helper text explicatif
+   - Passage du paramètre `--type` à la commande `tenant:backup`
+   - Message de confirmation adapté au type sélectionné
+
+2. **Vue détaillée des backups** (backup-details.blade.php)
+   - Affichage du type et statut avec badges colorés
+   - Statistiques de taille (total, database, storage)
+   - Dates importantes avec warnings d'expiration
+   - Affichage des erreurs si backup échoué
+   - Métadonnées JSON complètes
+   - Bouton de téléchargement (conditionnel)
+   - Avertissement visuel si backup expiré
+
+3. **Commande de nettoyage automatique** (CleanupOldBackups)
+   - Signature : `tenant:cleanup-backups {--days=30} {--tenant=} {--dry-run}`
+   - Supprime backups expirés ou trop anciens (> X jours)
+   - Mode simulation avec `--dry-run` (aucune suppression réelle)
+   - Suppression des fichiers physiques + enregistrements DB
+   - Rapport détaillé : nombre supprimé, espace libéré
+   - Protection des backups en cours (`in_progress`)
+
+4. **Système de tâches planifiées automatiques** (routes/console.php)
+   - **Health checks** : Toutes les 5 minutes (`*/5 * * * *`)
+   - **Backups quotidiens** : 2h du matin (`0 2 * * *`) - database_only uniquement
+   - **Nettoyage quotidien** : 3h du matin (`0 3 * * *`) - rétention 30 jours
+   - **Mise à jour stats** : Toutes les heures (`0 * * * *`)
+   - Tous avec `withoutOverlapping()` et `runInBackground()`
+   - Callbacks `onSuccess` et `onFailure` avec logging
+
+**Fichiers créés :**
+- `app/Console/Commands/CleanupOldBackups.php` (142 lignes)
+- `resources/views/filament/resources/tenant-resource/backup-details.blade.php` (193 lignes)
+
+**Fichiers modifiés :**
+- `app/Filament/Resources/TenantResource/RelationManagers/BackupsRelationManager.php`
+  - Lignes 103-158 : Formulaire de sélection du type avec modal
+  - Remplacement de `requiresConfirmation()` par `form()` avec Select component
+  - Ajout de labels dynamiques selon le type sélectionné
+- `routes/console.php`
+  - Lignes 11-56 : Ajout des 4 tâches planifiées automatiques
+  - Documentation inline avec notes d'activation en production
+
+**Commandes disponibles :**
+```bash
+# Tester le nettoyage en mode simulation
+php artisan tenant:cleanup-backups --dry-run
+
+# Vérifier les tâches planifiées
+php artisan schedule:list
+
+# Lancer le scheduler en développement
+php artisan schedule:work
+```
+
+**Activation en production :**
+Ajouter au crontab : `* * * * * cd /var/www/klassci-master && php artisan schedule:run >> /dev/null 2>&1`
+
+---
+
+
 ## 🏥 SYSTÈME DE HEALTH CHECK EN TEMPS RÉEL
 
 **Date implémentation:** 12 octobre 2025
@@ -99,6 +177,170 @@ protected static ?string $pollingInterval = '30s';  // Widgets
 
 Cela génère des requêtes XHR vers `/livewire/update` toutes les 30 secondes.
 
+
+---
+
+## 💾 SYSTÈME DE BACKUP AUTOMATIQUE
+
+**Date implémentation:** 12 octobre 2025 (22h30 GMT)
+**Statut:** ✅ **FONCTIONNEL**
+
+### Architecture du Système
+
+Le système de backup est conçu pour fonctionner automatiquement avec 3 composants principaux :
+
+1. **Commande de backup** : `tenant:backup`
+   - Crée des backups on-demand ou automatiques
+   - Support de 3 types : `database_only`, `files_only`, `full`
+   - Gestion des erreurs et logging complet
+
+2. **Commande de nettoyage** : `tenant:cleanup-backups`
+   - Supprime les backups expirés ou trop anciens
+   - Rétention configurable (défaut: 30 jours)
+   - Mode simulation avec `--dry-run`
+
+3. **Tâches planifiées automatiques** (routes/console.php)
+   - Backups quotidiens à 2h du matin
+   - Nettoyage quotidien à 3h du matin
+   - Health checks toutes les 5 minutes
+   - Mise à jour des stats toutes les heures
+
+### Types de Backup
+
+**1. Database Only (🗄️)** - *Par défaut*
+- Backup uniquement de la base de données MySQL
+- Utilise `mysqldump`
+- Léger et rapide (quelques Mo)
+- **Recommandé pour les backups automatiques quotidiens**
+
+**2. Files Only (📁)**
+- Backup uniquement des fichiers storage
+- Utilise `tar.gz`
+- Peut être volumineux (selon volume de fichiers)
+
+**3. Full Backup (💾)**
+- Backup complet : Base de données + Fichiers
+- Combinaison des deux précédents
+- Le plus volumineux mais le plus complet
+
+### Interface Utilisateur (BackupsRelationManager)
+
+**Création de backup** :
+- Bouton "Créer un Backup" dans l'onglet Backups du tenant
+- Modal avec sélection du type (dropdown avec icônes et descriptions)
+- Valeur par défaut : `database_only`
+- Exécution via `Artisan::call('tenant:backup', ['tenant' => $code, '--type' => $type])`
+
+**Vue détaillée** (backup-details.blade.php) :
+- Type de backup avec badge coloré (vert/bleu/orange)
+- Statut avec badge (Completed/In Progress/Failed)
+- Statistiques de taille (total, database, storage)
+- Dates importantes : Créé le, Expire le (avec warning si expiré)
+- Message d'erreur détaillé si échec
+- Métadonnées JSON (tous les détails techniques)
+- Bouton de téléchargement (si backup complété et non expiré)
+- Avertissement visuel si backup expiré
+
+**Colonnes du tableau** :
+- Type (badge coloré)
+- Taille (en MB)
+- Statut (badge coloré)
+- Créé le (avec "il y a X temps")
+- Expire le (avec couleur rouge si expiré)
+
+**Filtres disponibles** :
+- Par type (Full/Database/Files)
+- Par statut (Completed/In Progress/Failed)
+- Par soft delete (TrashedFilter)
+
+### Commande de Nettoyage
+
+**Signature** :
+```bash
+php artisan tenant:cleanup-backups
+    {--days=30 : Nombre de jours de rétention}
+    {--tenant= : Code du tenant (optionnel)}
+    {--dry-run : Mode simulation}
+```
+
+**Exemples d'utilisation** :
+```bash
+# Simulation (aucune suppression réelle)
+php artisan tenant:cleanup-backups --dry-run
+
+# Supprimer les backups > 30 jours pour tous les tenants
+php artisan tenant:cleanup-backups
+
+# Supprimer les backups > 15 jours pour un tenant spécifique
+php artisan tenant:cleanup-backups --tenant=presentation --days=15
+
+# Supprimer les backups > 60 jours (rétention longue)
+php artisan tenant:cleanup-backups --days=60
+```
+
+**Critères de suppression** :
+1. Backups avec `expires_at` < maintenant OU
+2. Backups avec `created_at` < maintenant - X jours
+3. **Exclusion** : Backups en statut `in_progress` (ne sont jamais supprimés)
+
+**Actions effectuées** :
+1. Supprime les fichiers physiques (backup_path, database_backup_path, storage_backup_path)
+2. Supprime l'enregistrement en base de données
+3. Calcule l'espace libéré total
+4. Affiche un résumé détaillé
+
+### Tâches Planifiées Automatiques
+
+**Fichier** : `routes/console.php` (Laravel 11+)
+
+**Planification** :
+- Health Check : Toutes les 5 minutes
+- Backups automatiques : Quotidien à 2h du matin (Base de données uniquement)
+- Nettoyage backups expirés : Quotidien à 3h du matin (rétention 30 jours)
+- Mise à jour des statistiques : Toutes les heures
+
+**Vérification de la planification** :
+```bash
+php artisan schedule:list
+```
+
+### Activation en Production
+
+**Ajouter au crontab du serveur** :
+```bash
+crontab -e
+```
+
+**Ligne à ajouter** :
+```cron
+* * * * * cd /var/www/klassci-master && php artisan schedule:run >> /dev/null 2>&1
+```
+
+**En développement** :
+```bash
+php artisan schedule:work
+```
+
+### Fichiers Modifiés/Créés
+
+**Créés** :
+- `app/Console/Commands/CleanupOldBackups.php` - Commande de nettoyage
+- `resources/views/filament/resources/tenant-resource/backup-details.blade.php` - Vue détaillée
+
+**Modifiés** :
+- `app/Filament/Resources/TenantResource/RelationManagers/BackupsRelationManager.php` - Ajout formulaire type
+- `routes/console.php` - Ajout tâches planifiées
+
+### Avantages du Système
+
+✅ **Automatique** : Plus besoin d'intervention manuelle quotidienne
+✅ **Flexible** : Choix du type de backup selon les besoins
+✅ **Sécurisé** : Nettoyage automatique pour économiser l'espace
+✅ **Traçable** : Logs détaillés de toutes les opérations
+✅ **Simulable** : Mode dry-run pour tester sans risque
+✅ **Scalable** : Fonctionne pour 1 ou 100 tenants
+
+
 ### Commandes Disponibles
 
 ```bash
@@ -145,6 +387,18 @@ php artisan tenant:update-stats presentation
 - `app/Console/Commands/TenantHealthCheck.php` - Logique de vérification
 
 ### Changelog
+
+**12 octobre 2025 - 22h15 GMT**
+- ✨ **Feature** : Vue détaillée des backups
+  - Création de `backup-details.blade.php` pour afficher les détails d'un backup
+  - Affichage du type (Full/Database/Files), statut (Completed/In Progress/Failed)
+  - Statistiques de taille (total, archive, database, storage)
+  - Dates importantes (création, expiration avec avertissement si expiré)
+  - Message d'erreur si backup échoué
+  - Métadonnées JSON affichées proprement
+  - Bouton téléchargement (si backup disponible et non expiré)
+  - Avertissement visuel si backup expiré
+  - **Note** : Le RelationManager était déjà bien configuré avec formulaire vide + bouton "Créer un Backup"
 
 **12 octobre 2025 - 22h00 GMT**
 - ✨ **Feature** : Système enrichi d'analyse des erreurs d'application

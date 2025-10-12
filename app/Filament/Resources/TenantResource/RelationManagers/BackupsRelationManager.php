@@ -100,15 +100,29 @@ class BackupsRelationManager extends RelationManager
                     ->label('Créer un Backup')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('primary')
-                    ->requiresConfirmation()
+                    ->form([
+                        Forms\Components\Select::make('type')
+                            ->label('Type de backup')
+                            ->options([
+                                'full' => '💾 Full Backup (Base de données + Fichiers)',
+                                'database_only' => '🗄️ Base de données uniquement',
+                                'files_only' => '📁 Fichiers uniquement',
+                            ])
+                            ->default('database_only')
+                            ->required()
+                            ->helperText('Sélectionnez le type de sauvegarde à effectuer.'),
+                    ])
                     ->modalHeading('Créer un Backup')
-                    ->modalDescription('Cette action va créer une sauvegarde complète de ce tenant (base de données + fichiers).')
-                    ->action(function ($livewire) {
+                    ->modalDescription('Créez une sauvegarde de ce tenant. Choisissez le type de backup selon vos besoins.')
+                    ->modalSubmitActionLabel('Créer le backup')
+                    ->action(function (array $data, $livewire) {
                         $tenant = $livewire->ownerRecord;
+                        $type = $data['type'];
 
                         try {
                             $exitCode = \Artisan::call('tenant:backup', [
                                 'tenant' => $tenant->code,
+                                '--type' => $type,
                             ]);
 
                             $output = \Artisan::output();
@@ -121,10 +135,16 @@ class BackupsRelationManager extends RelationManager
                                     ->persistent()
                                     ->send();
                             } else {
+                                $typeLabel = match($type) {
+                                    'full' => 'Full Backup',
+                                    'database_only' => 'Base de données',
+                                    'files_only' => 'Fichiers',
+                                };
+
                                 \Filament\Notifications\Notification::make()
                                     ->success()
                                     ->title('Backup créé')
-                                    ->body('La sauvegarde a été créée avec succès.')
+                                    ->body("La sauvegarde ({$typeLabel}) a été créée avec succès.")
                                     ->send();
                             }
                         } catch (\Exception $e) {
