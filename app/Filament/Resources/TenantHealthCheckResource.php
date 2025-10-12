@@ -19,82 +19,59 @@ class TenantHealthCheckResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-heart';
 
-    protected static ?string $navigationLabel = 'Health Checks';
+    protected static ?string $navigationLabel = 'Health Issues';
 
-    protected static ?string $modelLabel = 'Health Check';
+    protected static ?string $modelLabel = 'Health Issue';
 
-    protected static ?string $pluralModelLabel = 'Health Checks';
+    protected static ?string $pluralModelLabel = 'Health Issues';
 
     protected static ?string $navigationGroup = 'Monitoring';
 
     protected static ?int $navigationSort = 1;
 
+    // Afficher badge avec nombre de problèmes
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::whereIn('status', ['degraded', 'unhealthy'])
+            ->where('created_at', '>=', now()->subHours(1))
+            ->count() ?: null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        $count = static::getNavigationBadge();
+        if (!$count) return null;
+
+        $criticalCount = static::getModel()::where('status', 'unhealthy')
+            ->where('created_at', '>=', now()->subHours(1))
+            ->count();
+
+        return $criticalCount > 0 ? 'danger' : 'warning';
+    }
+
+    // Query par défaut : SEULEMENT les problèmes récents
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->whereIn('status', ['degraded', 'unhealthy'])
+            ->where('created_at', '>=', now()->subHours(24)) // Dernières 24h
+            ->latest('created_at');
+    }
+
     public static function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\Section::make('Informations Check')
-                    ->schema([
-                        Forms\Components\Select::make('tenant_id')
-                            ->label('Établissement')
-                            ->relationship('tenant', 'name')
-                            ->required()
-                            ->searchable()
-                            ->preload(),
+        // Formulaire en lecture seule - les health checks sont générés automatiquement
+        return $form->schema([]);
+    }
 
-                        Forms\Components\Select::make('check_type')
-                            ->label('Type de Check')
-                            ->required()
-                            ->options([
-                                'ping' => 'Ping (Availability)',
-                                'database' => 'Database Connection',
-                                'storage' => 'Storage Access',
-                                'api' => 'API Endpoints',
-                                'ssl' => 'SSL Certificate',
-                                'dns' => 'DNS Resolution',
-                                'performance' => 'Performance',
-                            ])
-                            ->default('ping'),
+    public static function canCreate(): bool
+    {
+        return false; // Pas de création manuelle
+    }
 
-                        Forms\Components\Select::make('status')
-                            ->label('Statut')
-                            ->required()
-                            ->options([
-                                'healthy' => 'Sain',
-                                'degraded' => 'Dégradé',
-                                'unhealthy' => 'Défaillant',
-                                'unknown' => 'Inconnu',
-                            ])
-                            ->default('unknown'),
-
-                        Forms\Components\TextInput::make('response_time_ms')
-                            ->label('Temps de réponse (ms)')
-                            ->numeric()
-                            ->suffix('ms')
-                            ->default(null),
-
-                        Forms\Components\DateTimePicker::make('checked_at')
-                            ->label('Vérifié le')
-                            ->required()
-                            ->default(now())
-                            ->seconds(false),
-                    ])
-                    ->columns(2),
-
-                Forms\Components\Section::make('Détails & Métadonnées')
-                    ->schema([
-                        Forms\Components\Textarea::make('details')
-                            ->label('Détails')
-                            ->rows(5)
-                            ->columnSpanFull()
-                            ->helperText('Message d\'erreur ou information complémentaire'),
-
-                        Forms\Components\KeyValue::make('metadata')
-                            ->label('Métadonnées (JSON)')
-                            ->columnSpanFull()
-                            ->helperText('Données supplémentaires au format clé-valeur'),
-                    ]),
-            ]);
+    public static function canEdit($record): bool
+    {
+        return false; // Pas d'édition manuelle
     }
 
     public static function table(Table $table): Table
@@ -102,139 +79,152 @@ class TenantHealthCheckResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('tenant.name')
-                    ->label('Établissement')
+                    ->label('Tenant')
                     ->searchable()
                     ->sortable()
+                    ->url(fn ($record) => route('filament.admin.resources.tenants.view', $record->tenant_id))
+                    ->icon('heroicon-o-building-office-2')
+                    ->color('primary')
                     ->weight('bold'),
 
-                Tables\Columns\TextColumn::make('tenant.code')
-                    ->label('Code')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\BadgeColumn::make('check_type')
+                Tables\Columns\TextColumn::make('check_type')
                     ->label('Type')
-                    ->colors([
-                        'primary' => 'ping',
-                        'success' => 'database',
-                        'warning' => 'storage',
-                        'info' => 'api',
-                        'secondary' => 'ssl',
-                        'gray' => 'dns',
-                        'danger' => 'performance',
-                    ])
+                    ->badge()
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'ping' => 'Ping',
-                        'database' => 'Database',
-                        'storage' => 'Storage',
-                        'api' => 'API',
-                        'ssl' => 'SSL',
-                        'dns' => 'DNS',
-                        'performance' => 'Performance',
+                        'http_status' => 'HTTP Status',
+                        'database_connection' => 'Database',
+                        'disk_space' => 'Disk Space',
+                        'ssl_certificate' => 'SSL',
+                        'application_errors' => 'App Errors',
+                        'queue_workers' => 'Queue Workers',
                         default => $state,
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'http_status' => 'info',
+                        'database_connection' => 'primary',
+                        'disk_space' => 'warning',
+                        'ssl_certificate' => 'success',
+                        'application_errors' => 'danger',
+                        'queue_workers' => 'secondary',
+                        default => 'gray',
                     }),
 
-                Tables\Columns\BadgeColumn::make('status')
-                    ->label('Statut')
-                    ->colors([
-                        'success' => 'healthy',
-                        'warning' => 'degraded',
-                        'danger' => 'unhealthy',
-                        'secondary' => 'unknown',
-                    ])
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'healthy' => '✓ Sain',
-                        'degraded' => '⚠ Dégradé',
-                        'unhealthy' => '✗ Défaillant',
-                        'unknown' => '? Inconnu',
-                        default => $state,
-                    }),
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'healthy' => 'success',
+                        'degraded' => 'warning',
+                        'unhealthy' => 'danger',
+                        default => 'gray',
+                    })
+                    ->icon(fn (string $state): string => match ($state) {
+                        'healthy' => 'heroicon-o-check-circle',
+                        'degraded' => 'heroicon-o-exclamation-triangle',
+                        'unhealthy' => 'heroicon-o-x-circle',
+                        default => 'heroicon-o-question-mark-circle',
+                    })
+                    ->size('lg'),
+
+                Tables\Columns\TextColumn::make('details')
+                    ->label('Problème')
+                    ->limit(60)
+                    ->tooltip(fn ($record) => $record->details)
+                    ->wrap()
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('response_time_ms')
-                    ->label('Temps (ms)')
-                    ->sortable()
-                    ->formatStateUsing(fn ($state) => $state ? $state . ' ms' : '-')
-                    ->color(fn ($state) => $state === null ? 'gray' : ($state < 500 ? 'success' : ($state < 1000 ? 'warning' : 'danger'))),
+                    ->label('Response')
+                    ->formatStateUsing(fn ($state) => $state ? $state . ' ms' : 'N/A')
+                    ->color(fn ($state) => match (true) {
+                        $state === null => 'gray',
+                        $state < 500 => 'success',
+                        $state < 1000 => 'warning',
+                        default => 'danger',
+                    })
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('checked_at')
-                    ->label('Vérifié le')
+                    ->label('Détecté')
                     ->dateTime('d/m/Y H:i')
+                    ->since()
                     ->sortable()
-                    ->description(fn ($record) => $record->checked_at?->diffForHumans()),
-
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Créé le')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->description(fn ($record) => $record->checked_at->format('d/m/Y à H:i')),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->options([
+                        'degraded' => 'Degraded',
+                        'unhealthy' => 'Unhealthy',
+                    ])
+                    ->default('unhealthy'), // Par défaut, afficher les critiques
+
+                Tables\Filters\SelectFilter::make('check_type')
+                    ->label('Type de check')
+                    ->options([
+                        'http_status' => 'HTTP Status',
+                        'database_connection' => 'Database',
+                        'disk_space' => 'Disk Space',
+                        'ssl_certificate' => 'SSL Certificate',
+                        'application_errors' => 'App Errors',
+                        'queue_workers' => 'Queue Workers',
+                    ]),
+
                 Tables\Filters\SelectFilter::make('tenant_id')
-                    ->label('Établissement')
                     ->relationship('tenant', 'name')
                     ->searchable()
                     ->preload(),
 
-                Tables\Filters\SelectFilter::make('check_type')
-                    ->label('Type de Check')
-                    ->options([
-                        'ping' => 'Ping',
-                        'database' => 'Database',
-                        'storage' => 'Storage',
-                        'api' => 'API',
-                        'ssl' => 'SSL',
-                        'dns' => 'DNS',
-                        'performance' => 'Performance',
-                    ]),
-
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('Statut')
-                    ->options([
-                        'healthy' => 'Sain',
-                        'degraded' => 'Dégradé',
-                        'unhealthy' => 'Défaillant',
-                        'unknown' => 'Inconnu',
-                    ]),
-
-                Tables\Filters\TrashedFilter::make(),
+                Tables\Filters\Filter::make('recent')
+                    ->label('Dernière heure')
+                    ->query(fn (Builder $query): Builder => $query->where('created_at', '>=', now()->subHour()))
+                    ->default(),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('rerun')
+                    ->label('Re-vérifier')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('info')
+                    ->action(function ($record) {
+                        \Artisan::call('tenant:health-check', [
+                            'tenant' => $record->tenant->code,
+                        ]);
+
+                        \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title('Health Check relancé')
+                            ->body("Vérification exécutée pour {$record->tenant->name}")
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('view_tenant')
+                    ->label('Voir tenant')
+                    ->icon('heroicon-o-eye')
+                    ->url(fn ($record) => route('filament.admin.resources.tenants.view', $record->tenant_id))
+                    ->color('gray'),
+
+                Tables\Actions\DeleteAction::make()
+                    ->label('Résoudre')
+                    ->modalHeading('Marquer comme résolu')
+                    ->modalDescription('Cette action va archiver ce problème. Le tenant sera re-vérifié lors du prochain health check.')
+                    ->successNotificationTitle('Problème marqué comme résolu'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                    Tables\Actions\ForceDeleteBulkAction::make(),
-                    Tables\Actions\RestoreBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->label('Marquer comme résolus'),
                 ]),
             ])
-            ->defaultSort('checked_at', 'desc');
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
+            ->defaultSort('checked_at', 'desc')
+            ->poll('30s') // Rafraîchissement auto toutes les 30s
+            ->emptyStateHeading('🎉 Aucun problème détecté')
+            ->emptyStateDescription('Tous les tenants sont en bonne santé')
+            ->emptyStateIcon('heroicon-o-check-circle');
     }
 
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListTenantHealthChecks::route('/'),
-            'create' => Pages\CreateTenantHealthCheck::route('/create'),
-            'view' => Pages\ViewTenantHealthCheck::route('/{record}'),
-            'edit' => Pages\EditTenantHealthCheck::route('/{record}/edit'),
+            'index' => Pages\ManageTenantHealthChecks::route('/'),
         ];
-    }
-
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
     }
 }

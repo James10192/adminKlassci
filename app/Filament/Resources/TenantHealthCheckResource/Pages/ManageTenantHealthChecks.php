@@ -4,18 +4,16 @@ namespace App\Filament\Resources\TenantHealthCheckResource\Pages;
 
 use App\Filament\Resources\TenantHealthCheckResource;
 use Filament\Actions;
-use Filament\Resources\Pages\EditRecord;
+use Filament\Resources\Pages\ManageRecords;
 
-class EditTenantHealthCheck extends EditRecord
+class ManageTenantHealthChecks extends ManageRecords
 {
     protected static string $resource = TenantHealthCheckResource::class;
 
     protected function getHeaderActions(): array
     {
         return [
-            Actions\DeleteAction::make(),
-            Actions\ForceDeleteAction::make(),
-            Actions\RestoreAction::make(),
+            Actions\CreateAction::make(),
         ];
     }
 }
