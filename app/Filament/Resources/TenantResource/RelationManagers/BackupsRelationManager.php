@@ -101,16 +101,22 @@ class BackupsRelationManager extends RelationManager
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('primary')
                     ->form([
-                        Forms\Components\Select::make('type')
+                        Forms\Components\Radio::make('type')
                             ->label('Type de backup')
                             ->options([
-                                'full' => '💾 Full Backup (Base de données + Fichiers)',
-                                'database_only' => '🗄️ Base de données uniquement',
-                                'files_only' => '📁 Fichiers uniquement',
+                                'database_only' => 'Base de données uniquement',
+                                'files_only' => 'Fichiers uniquement',
+                                'full' => 'Full Backup (Base de données + Fichiers)',
+                            ])
+                            ->descriptions([
+                                'database_only' => 'Sauvegarde rapide de la base de données MySQL uniquement (recommandé pour backups quotidiens)',
+                                'files_only' => 'Sauvegarde des fichiers storage uniquement (photos, documents, uploads)',
+                                'full' => 'Sauvegarde complète : Base de données + Fichiers storage (le plus volumineux)',
                             ])
                             ->default('database_only')
                             ->required()
-                            ->helperText('Sélectionnez le type de sauvegarde à effectuer.'),
+                            ->inline()
+                            ->columnSpanFull(),
                     ])
                     ->modalHeading('Créer un Backup')
                     ->modalDescription('Créez une sauvegarde de ce tenant. Choisissez le type de backup selon vos besoins.')

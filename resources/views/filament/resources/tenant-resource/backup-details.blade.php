@@ -12,9 +12,9 @@
                         default => 'gray',
                     }">
                     {{ match($record->type) {
-                        'full' => '💾 Full Backup',
-                        'database_only' => '🗄️ Database Only',
-                        'files_only' => '📁 Files Only',
+                        'full' => 'Full Backup',
+                        'database_only' => 'Database Only',
+                        'files_only' => 'Files Only',
                         default => $record->type,
                     } }}
                 </x-filament::badge>
@@ -32,9 +32,9 @@
                         default => 'gray',
                     }">
                     {{ match($record->status) {
-                        'completed' => '✅ Completed',
-                        'in_progress' => '⏳ In Progress',
-                        'failed' => '❌ Failed',
+                        'completed' => 'Completed',
+                        'in_progress' => 'In Progress',
+                        'failed' => 'Failed',
                         default => $record->status,
                     } }}
                 </x-filament::badge>
@@ -96,7 +96,7 @@
                 {{ $record->expires_at->format('d/m/Y H:i:s') }}
             </p>
             <p class="text-xs {{ $record->expires_at->isPast() ? 'text-red-500' : 'text-gray-500 dark:text-gray-400' }}">
-                {{ $record->expires_at->isPast() ? '⚠️ Expiré' : $record->expires_at->diffForHumans() }}
+                {{ $record->expires_at->isPast() ? 'Expiré' : $record->expires_at->diffForHumans() }}
             </p>
         </div>
         @endif
@@ -124,7 +124,7 @@
     {{-- Métadonnées JSON si présentes --}}
     @if($record->metadata && is_array($record->metadata) && count($record->metadata) > 0)
     <div>
-        <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">📊 Métadonnées</p>
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Métadonnées</p>
         <div class="rounded-lg bg-gray-50 dark:bg-gray-800 p-4 space-y-2">
             @foreach($record->metadata as $key => $value)
                 <div class="flex justify-between text-sm">
@@ -133,7 +133,9 @@
                     </span>
                     <span class="text-gray-900 dark:text-gray-100">
                         @if(is_bool($value))
-                            {{ $value ? '✅ Oui' : '❌ Non' }}
+                            <x-filament::badge :color="$value ? 'success' : 'danger'">
+                                {{ $value ? 'Oui' : 'Non' }}
+                            </x-filament::badge>
                         @elseif(is_array($value))
                             {{ json_encode($value) }}
                         @elseif(is_numeric($value) && $value > 1000000)
@@ -148,30 +150,6 @@
     </div>
     @endif
 
-    {{-- Actions disponibles --}}
-    @if($record->status === 'completed' && !$record->expires_at?->isPast())
-    <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Actions disponibles</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Télécharger ou restaurer ce backup
-                </p>
-            </div>
-            <div class="flex gap-2">
-                @if($record->backup_path && file_exists($record->backup_path))
-                <a href="{{ route('filament.admin.resources.tenants.backups.download', ['tenant' => $record->tenant_id, 'backup' => $record->id]) }}"
-                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                    <svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                    </svg>
-                    Télécharger
-                </a>
-                @endif
-            </div>
-        </div>
-    </div>
-    @endif
 
     {{-- Avertissement si expiré --}}
     @if($record->expires_at && $record->expires_at->isPast())
