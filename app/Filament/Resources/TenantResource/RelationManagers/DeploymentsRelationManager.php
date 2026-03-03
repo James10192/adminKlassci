@@ -4,6 +4,8 @@ namespace App\Filament\Resources\TenantResource\RelationManagers;
 
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Infolists;
+use Filament\Infolists\Infolist;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -24,6 +26,91 @@ class DeploymentsRelationManager extends RelationManager
     public function isReadOnly(): bool
     {
         return false; // On garde false pour permettre la suppression
+    }
+
+    public function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist->schema([
+            Infolists\Components\Section::make('Informations générales')
+                ->columns(2)
+                ->schema([
+                    Infolists\Components\TextEntry::make('git_commit_hash')
+                        ->label('Commit Hash')
+                        ->copyable()
+                        ->copyMessage('Hash copié!')
+                        ->fontFamily('mono'),
+
+                    Infolists\Components\TextEntry::make('git_branch')
+                        ->label('Branche')
+                        ->badge()
+                        ->color('info'),
+
+                    Infolists\Components\TextEntry::make('status')
+                        ->label('Statut')
+                        ->badge()
+                        ->color(fn (string $state): string => match ($state) {
+                            'success', 'completed' => 'success',
+                            'in_progress'           => 'info',
+                            'failed'                => 'danger',
+                            'rolled_back'           => 'warning',
+                            default                 => 'gray',
+                        }),
+
+                    Infolists\Components\TextEntry::make('duration_seconds')
+                        ->label('Durée')
+                        ->formatStateUsing(fn ($state) => $state ? $state . ' secondes' : 'N/A'),
+
+                    Infolists\Components\TextEntry::make('started_at')
+                        ->label('Démarré le')
+                        ->dateTime('d/m/Y H:i:s'),
+
+                    Infolists\Components\TextEntry::make('completed_at')
+                        ->label('Terminé le')
+                        ->dateTime('d/m/Y H:i:s'),
+                ]),
+
+            Infolists\Components\Section::make('Résultat')
+                ->schema([
+                    Infolists\Components\TextEntry::make('error_message')
+                        ->label('Message d\'erreur')
+                        ->color('danger')
+                        ->visible(fn ($record) => !empty($record->error_message))
+                        ->columnSpanFull(),
+
+                    Infolists\Components\RepeatableEntry::make('deployment_log')
+                        ->label('Étapes du déploiement')
+                        ->schema([
+                            Infolists\Components\TextEntry::make('step')
+                                ->label('Étape')
+                                ->badge()
+                                ->color(fn (string $state): string => match ($state) {
+                                    'error'  => 'danger',
+                                    default  => 'gray',
+                                }),
+
+                            Infolists\Components\TextEntry::make('status')
+                                ->label('Statut')
+                                ->badge()
+                                ->color(fn (string $state): string => match ($state) {
+                                    'ok'     => 'success',
+                                    'failed' => 'danger',
+                                    default  => 'gray',
+                                }),
+
+                            Infolists\Components\TextEntry::make('duration_ms')
+                                ->label('Durée')
+                                ->formatStateUsing(fn ($state) => $state ? $state . ' ms' : 'N/A'),
+
+                            Infolists\Components\TextEntry::make('output')
+                                ->label('Output')
+                                ->columnSpanFull()
+                                ->fontFamily('mono')
+                                ->limit(500),
+                        ])
+                        ->columns(3)
+                        ->columnSpanFull(),
+                ]),
+        ]);
     }
 
     public function table(Table $table): Table
@@ -47,16 +134,11 @@ class DeploymentsRelationManager extends RelationManager
                     ->label('Statut')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'completed' => 'success',
-                        'in_progress' => 'info',
-                        'failed' => 'danger',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'completed' => 'Completed',
-                        'in_progress' => 'In Progress',
-                        'failed' => 'Failed',
-                        default => $state,
+                        'success', 'completed' => 'success',
+                        'in_progress'           => 'info',
+                        'failed'                => 'danger',
+                        'rolled_back'           => 'warning',
+                        default                 => 'gray',
                     }),
 
                 Tables\Columns\TextColumn::make('duration_seconds')
