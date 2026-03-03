@@ -27,6 +27,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->passwordReset()
             ->brandName('KLASSCI Master')
             ->brandLogo(asset('images/LOGO-KLASSCI-PNG.png'))
             ->brandLogoHeight('2.5rem')
