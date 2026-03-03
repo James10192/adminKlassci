@@ -15,59 +15,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // ─────────────────────────────────────────────────
-        // Health Checks — toutes les heures
-        // ─────────────────────────────────────────────────
-        $schedule->command('tenant:health-check --all')
-            ->hourly()
-            ->withoutOverlapping()
-            ->runInBackground()
-            ->appendOutputTo(storage_path('logs/health-checks.log'));
-
-        // ─────────────────────────────────────────────────
-        // Backup DB quotidien — chaque nuit à 02h00
-        // ─────────────────────────────────────────────────
-        $schedule->command('tenant:backup --type=database_only')
-            ->dailyAt('02:00')
-            ->withoutOverlapping()
-            ->runInBackground()
-            ->appendOutputTo(storage_path('logs/backups.log'));
-
-        // ─────────────────────────────────────────────────
-        // Backup complet (DB + fichiers) — chaque dimanche à 03h00
-        // ─────────────────────────────────────────────────
-        $schedule->command('tenant:backup --type=full')
-            ->weekly()
-            ->sundays()
-            ->at('03:00')
-            ->withoutOverlapping()
-            ->runInBackground()
-            ->appendOutputTo(storage_path('logs/backups.log'));
-
-        // ─────────────────────────────────────────────────
-        // Nettoyage des backups expirés — chaque jour à 04h00
-        // ─────────────────────────────────────────────────
-        $schedule->command('tenant:cleanup-backups --days=30')
-            ->dailyAt('04:00')
-            ->withoutOverlapping()
-            ->appendOutputTo(storage_path('logs/backups.log'));
-
-        // ─────────────────────────────────────────────────
-        // Mise à jour des statistiques tenants — chaque jour à 01h00
-        // ─────────────────────────────────────────────────
-        $schedule->command('tenant:update-stats --all')
-            ->dailyAt('01:00')
-            ->withoutOverlapping()
-            ->runInBackground()
-            ->appendOutputTo(storage_path('logs/stats.log'));
-
-        // ─────────────────────────────────────────────────
-        // Alertes tenants — chaque jour à 09h00
-        // ─────────────────────────────────────────────────
-        $schedule->command('tenant:send-alerts')
-            ->dailyAt('09:00')
-            ->withoutOverlapping()
-            ->appendOutputTo(storage_path('logs/alerts.log'));
+        // Toutes les tâches planifiées sont définies dans routes/console.php
+        // (format Laravel 11+). Ne pas ajouter de tâches ici pour éviter les doublons.
     }
 
     /**
