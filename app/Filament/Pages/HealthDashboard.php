@@ -28,6 +28,9 @@ class HealthDashboard extends Page
     public array $stats = ['healthy' => 0, 'degraded' => 0, 'unhealthy' => 0];
     public mixed $lastCheckedAt = null;
 
+    public int $logRotateDays = 30;
+    public bool $logRotateDryRun = false;
+
     private const CHECK_TYPES = [
         'http_status',
         'database_connection',
@@ -170,6 +173,28 @@ class HealthDashboard extends Page
         Notification::make()
             ->title('Check terminé')
             ->body("Vérification de {$tenantCode} effectuée.")
+            ->success()
+            ->send();
+    }
+
+    public function rotateLogs(): void
+    {
+        $args = ['tenant:rotate-logs', '--days=' . $this->logRotateDays, '--all'];
+
+        if ($this->logRotateDryRun) {
+            $args[] = '--dry-run';
+        }
+
+        $this->runArtisan($args);
+
+        $title = $this->logRotateDryRun ? 'Simulation terminée' : 'Rotation terminée';
+        $body  = $this->logRotateDryRun
+            ? "Simulation sur {$this->logRotateDays} jours — aucun fichier modifié."
+            : "Rotation effectuée — logs de plus de {$this->logRotateDays} jours supprimés.";
+
+        Notification::make()
+            ->title($title)
+            ->body($body)
             ->success()
             ->send();
     }
