@@ -64,7 +64,11 @@ jobs:
       - name: "✅ Ajouter le serveur aux known hosts"
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -p ${{ secrets.SSH_PORT || 22 }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          chmod 700 ~/.ssh
+          # Forcer IPv4 pour les serveurs LWS (IPv6 non routable depuis GitHub Actions)
+          ssh-keyscan -4 -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || \
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "Known hosts mis à jour"
 
       - name: "🚀 Lancer le déploiement via artisan"
         run: |
@@ -90,9 +94,12 @@ jobs:
           echo "Commande : $CMD"
           echo "---"
 
-          ssh -p ${{ secrets.SSH_PORT || 22 }} \
+          # -4 force IPv4 (LWS shared hosting)
+          ssh -4 \
+            -p ${{ secrets.SSH_PORT }} \
             -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
+            -o ConnectTimeout=30 \
+            -o ServerAliveInterval=10 \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "$CMD"
 
