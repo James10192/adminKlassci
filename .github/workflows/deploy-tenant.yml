@@ -1,12 +1,12 @@
-name: Deploy Tenant via SSH
+name: Deploy Tenant via Webhook
 
 # Déclenchement manuel depuis l'interface GitHub Actions
 # Secrets requis dans le repo adminKlassci :
-#   SSH_HOST      → web44.greathost.fr
-#   SSH_PORT      → 22 (ou le port SSH du serveur LWS)
-#   SSH_USER      → c2569688c
-#   SSH_KEY       → Clé privée SSH (générer avec ssh-keygen, ajouter la clé publique dans authorized_keys du serveur)
-#   ADMIN_PATH    → /home/c2569688c/public_html/admin
+#   DEPLOY_WEBHOOK_TOKEN  → Token secret (généré avec openssl rand -hex 32)
+#   DEPLOY_WEBHOOK_URL    → https://admin.klassci.com/api/deploy
+#
+# Ces secrets doivent aussi être définis dans le .env du serveur :
+#   DEPLOY_WEBHOOK_TOKEN=<même valeur>
 
 on:
   workflow_dispatch:
@@ -40,13 +40,13 @@ jobs:
   deploy:
     name: "Deploy ${{ inputs.tenant_code || 'all tenants' }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
 
     steps:
       - name: "📋 Afficher les paramètres"
         run: |
           echo "==========================================="
-          echo "  KLASSCI — Déploiement tenant"
+          echo "  KLASSCI — Déploiement tenant (webhook)"
           echo "==========================================="
           echo "  Tenant     : ${{ inputs.tenant_code || '(tous les tenants actifs)' }}"
           echo "  Branche    : ${{ inputs.branch || '(branche configurée du tenant)' }}"
@@ -56,69 +56,66 @@ jobs:
           echo "  Date       : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "==========================================="
 
-      - name: "🔑 Configurer SSH"
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_KEY }}
-
-      - name: "✅ Ajouter le serveur aux known hosts"
+      - name: "🚀 Appeler le webhook de déploiement"
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          # Forcer IPv4 pour les serveurs LWS (IPv6 non routable depuis GitHub Actions)
-          ssh-keyscan -4 -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || \
-          ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-          echo "Known hosts mis à jour"
+          # Construire le payload JSON
+          PAYLOAD=$(cat <<EOF
+          {
+            "tenant_code": "${{ inputs.tenant_code }}",
+            "branch": "${{ inputs.branch }}",
+            "skip_backup": ${{ inputs.skip_backup }},
+            "skip_migrations": ${{ inputs.skip_migrations }}
+          }
+          EOF
+          )
 
-      - name: "🚀 Lancer le déploiement via artisan"
-        run: |
-          # Construire la commande artisan
-          CMD="php ${{ secrets.ADMIN_PATH }}/artisan tenant:deploy"
-
-          if [ -n "${{ inputs.tenant_code }}" ]; then
-            CMD="$CMD ${{ inputs.tenant_code }}"
-          fi
-
-          if [ -n "${{ inputs.branch }}" ]; then
-            CMD="$CMD --branch=${{ inputs.branch }}"
-          fi
-
-          if [ "${{ inputs.skip_backup }}" = "true" ]; then
-            CMD="$CMD --skip-backup"
-          fi
-
-          if [ "${{ inputs.skip_migrations }}" = "true" ]; then
-            CMD="$CMD --skip-migrations"
-          fi
-
-          echo "Commande : $CMD"
+          echo "Envoi du webhook vers ${{ secrets.DEPLOY_WEBHOOK_URL }}..."
           echo "---"
 
-          # -4 force IPv4 (LWS shared hosting)
-          ssh -4 \
-            -p ${{ secrets.SSH_PORT }} \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=30 \
-            -o ServerAliveInterval=10 \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "$CMD"
+          RESPONSE=$(curl --silent --show-error \
+            --max-time 30 \
+            --retry 2 \
+            --retry-delay 3 \
+            -X POST "${{ secrets.DEPLOY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: ${{ github.actor }}" \
+            -H "X-GitHub-Run-ID: ${{ github.run_id }}" \
+            -d "$PAYLOAD" \
+            -w "\n%{http_code}")
 
-      - name: "✅ Déploiement terminé"
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Réponse HTTP: $HTTP_CODE"
+          echo "Corps: $BODY"
+          echo "---"
+
+          # Vérifier le code HTTP (202 = Accepted = mis en file d'attente)
+          if [ "$HTTP_CODE" != "202" ]; then
+            echo "❌ Le webhook a retourné HTTP $HTTP_CODE (attendu 202)"
+            exit 1
+          fi
+
+          echo "✅ Déploiement mis en file d'attente avec succès !"
+
+      - name: "✅ Déploiement déclenché"
         if: success()
         run: |
           echo ""
           echo "==========================================="
-          echo "  ✅ Déploiement réussi !"
+          echo "  ✅ Déploiement mis en file d'attente !"
+          echo "  Le déploiement s'exécute en arrière-plan."
           echo "  Voir les détails dans KLASSCI Master :"
           echo "  https://admin.klassci.com/admin/tenant-deployments"
           echo "==========================================="
 
-      - name: "❌ Déploiement échoué"
+      - name: "❌ Déclenchement échoué"
         if: failure()
         run: |
           echo ""
           echo "==========================================="
-          echo "  ❌ Le déploiement a échoué."
-          echo "  Consultez les logs ci-dessus pour le détail."
-          echo "  Le tenant a été remis en ligne automatiquement."
+          echo "  ❌ Impossible de déclencher le déploiement."
+          echo "  Vérifiez que DEPLOY_WEBHOOK_URL et DEPLOY_WEBHOOK_TOKEN"
+          echo "  sont correctement configurés dans les secrets GitHub."
           echo "==========================================="

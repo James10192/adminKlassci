@@ -28,4 +28,7 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    // Token secret pour l'endpoint webhook de déploiement GitHub Actions → serveur
+    'deploy_webhook_token' => env('DEPLOY_WEBHOOK_TOKEN'),
+
 ];

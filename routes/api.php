@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\API\DeployWebhookController;
 use App\Http\Controllers\API\TenantLimitsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -13,3 +14,6 @@ Route::middleware(['tenant.api'])->group(function () {
     Route::get('/tenants/{code}/limits', [TenantLimitsController::class, 'show'])
         ->name('api.tenants.limits');
 });
+
+// Deploy Webhook — appelé par GitHub Actions (pas de CSRF, auth par Bearer token)
+Route::post('/deploy', DeployWebhookController::class)->name('api.deploy');
