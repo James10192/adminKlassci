@@ -313,8 +313,27 @@ class TenantHealthCheck extends Command
         $timeWindow = 24 * 3600; // 24 heures
         $recentTime = time() - $timeWindow;
 
-        // Lire les 2000 dernières lignes (augmenté pour capturer plus d'erreurs)
-        $logLines = array_slice(file($logPath), -2000);
+        // Lire les 500 dernières lignes via tail pour éviter de charger
+        // l'intégralité du fichier log en mémoire (peut dépasser 256 MB)
+        $logLines = [];
+        if (function_exists('shell_exec')) {
+            $raw = shell_exec('tail -n 500 ' . escapeshellarg($logPath) . ' 2>/dev/null');
+            if ($raw !== null) {
+                $logLines = explode("\n", $raw);
+            }
+        }
+        // Fallback : lecture partielle via SplFileObject si shell_exec indisponible
+        if (empty($logLines)) {
+            $file = new \SplFileObject($logPath, 'r');
+            $file->seek(PHP_INT_MAX);
+            $total = $file->key();
+            $start = max(0, $total - 500);
+            $file->seek($start);
+            while (!$file->eof()) {
+                $logLines[] = $file->current();
+                $file->next();
+            }
+        }
 
         // Compteurs par niveau de sévérité
         $errorsByLevel = [

@@ -8,6 +8,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Artisan;
+use Symfony\Component\Process\Process;
 
 class HealthDashboard extends Page
 {
@@ -132,9 +133,24 @@ class HealthDashboard extends Page
         $this->lastCheckedAt = $latest?->checked_at;
     }
 
+    /**
+     * Lance l'Artisan command dans un process PHP séparé pour contourner
+     * la limite mémoire du web server (Artisan::call hérite des 256 MB
+     * alloués à la requête HTTP, causant un fatal error sur les gros logs).
+     */
+    private function runArtisan(array $args): void
+    {
+        $php     = PHP_BINARY;
+        $artisan = base_path('artisan');
+
+        $process = new Process([$php, '-d', 'memory_limit=512M', $artisan, ...$args]);
+        $process->setTimeout(120);
+        $process->run();
+    }
+
     public function runAllChecks(): void
     {
-        Artisan::call('tenant:health-check', ['--all' => true]);
+        $this->runArtisan(['tenant:health-check', '--all']);
 
         $this->loadData();
 
@@ -147,7 +163,7 @@ class HealthDashboard extends Page
 
     public function runTenantCheck(string $tenantCode): void
     {
-        Artisan::call('tenant:health-check', ['tenant' => $tenantCode]);
+        $this->runArtisan(['tenant:health-check', $tenantCode]);
 
         $this->loadData();
 

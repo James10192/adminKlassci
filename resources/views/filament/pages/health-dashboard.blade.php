@@ -2,14 +2,12 @@
 
     {{-- Page Header --}}
     <div class="flex items-center justify-between mb-8">
-        <div>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Dernière vérification :
-                <span class="font-semibold text-gray-700 dark:text-gray-300">
-                    {{ $lastCheckedAt ? $lastCheckedAt->diffForHumans() : 'Jamais effectuée' }}
-                </span>
-            </p>
-        </div>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+            Dernière vérification :
+            <span class="font-semibold text-gray-700 dark:text-gray-300">
+                {{ $lastCheckedAt ? $lastCheckedAt->diffForHumans() : 'Jamais effectuée' }}
+            </span>
+        </p>
         <x-filament::button
             wire:click="runAllChecks"
             wire:loading.attr="disabled"
@@ -27,48 +25,48 @@
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
 
         {{-- Healthy --}}
-        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
-            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/25 flex items-center justify-center">
-                <x-heroicon-o-check-circle class="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+        <div class="rounded-2xl bg-emerald-500 shadow-md px-6 py-5 flex items-center gap-4 text-white">
+            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                <x-heroicon-o-check-circle class="w-6 h-6 text-white" />
             </div>
             <div>
-                <div class="text-3xl font-bold text-gray-900 dark:text-white leading-none">{{ $stats['healthy'] }}</div>
-                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Tenants sains</div>
+                <div class="text-3xl font-bold leading-none">{{ $stats['healthy'] }}</div>
+                <div class="text-sm text-emerald-100 mt-1">Tenants sains</div>
             </div>
             <div class="ml-auto">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/25 text-white">
                     Sain
                 </span>
             </div>
         </div>
 
         {{-- Degraded --}}
-        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
-            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-900/25 flex items-center justify-center">
-                <x-heroicon-o-exclamation-triangle class="w-6 h-6 text-amber-500 dark:text-amber-400" />
+        <div class="rounded-2xl bg-amber-400 shadow-md px-6 py-5 flex items-center gap-4 text-white">
+            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                <x-heroicon-o-exclamation-triangle class="w-6 h-6 text-white" />
             </div>
             <div>
-                <div class="text-3xl font-bold text-gray-900 dark:text-white leading-none">{{ $stats['degraded'] }}</div>
-                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Dégradés</div>
+                <div class="text-3xl font-bold leading-none">{{ $stats['degraded'] }}</div>
+                <div class="text-sm text-amber-100 mt-1">Dégradés</div>
             </div>
             <div class="ml-auto">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/25 text-white">
                     Avertissement
                 </span>
             </div>
         </div>
 
         {{-- Critical --}}
-        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
-            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-red-50 dark:bg-red-900/25 flex items-center justify-center">
-                <x-heroicon-o-x-circle class="w-6 h-6 text-red-600 dark:text-red-400" />
+        <div class="rounded-2xl bg-red-500 shadow-md px-6 py-5 flex items-center gap-4 text-white">
+            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                <x-heroicon-o-x-circle class="w-6 h-6 text-white" />
             </div>
             <div>
-                <div class="text-3xl font-bold text-gray-900 dark:text-white leading-none">{{ $stats['unhealthy'] }}</div>
-                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Critiques</div>
+                <div class="text-3xl font-bold leading-none">{{ $stats['unhealthy'] }}</div>
+                <div class="text-sm text-red-100 mt-1">Critiques</div>
             </div>
             <div class="ml-auto">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-white/25 text-white">
                     Critique
                 </span>
             </div>
@@ -90,9 +88,9 @@
                     default     => 'border-l-emerald-500',
                 };
                 $headerBg = match($globalStatus) {
-                    'unhealthy' => 'bg-red-50 dark:bg-red-900/10',
-                    'degraded'  => 'bg-amber-50 dark:bg-amber-900/10',
-                    default     => 'bg-emerald-50 dark:bg-emerald-900/10',
+                    'unhealthy' => 'bg-red-50 dark:bg-red-950/30',
+                    'degraded'  => 'bg-amber-50 dark:bg-amber-950/30',
+                    default     => 'bg-emerald-50 dark:bg-emerald-950/30',
                 };
                 $statusLabel = match($globalStatus) {
                     'unhealthy' => 'Critique',
@@ -100,11 +98,11 @@
                     default     => 'Sain',
                 };
                 $statusBadge = match($globalStatus) {
-                    'unhealthy' => 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-                    'degraded'  => 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-                    default     => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+                    'unhealthy' => 'bg-red-500 text-white',
+                    'degraded'  => 'bg-amber-400 text-white',
+                    default     => 'bg-emerald-500 text-white',
                 };
-                $statusIcon = match($globalStatus) {
+                $statusIconComp = match($globalStatus) {
                     'unhealthy' => 'heroicon-o-x-circle',
                     'degraded'  => 'heroicon-o-exclamation-triangle',
                     default     => 'heroicon-o-check-circle',
@@ -121,7 +119,7 @@
                 {{-- Tenant header --}}
                 <div class="{{ $headerBg }} px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
                     <div class="flex items-center gap-3">
-                        <x-dynamic-component :component="$statusIcon" class="w-5 h-5 flex-shrink-0 {{ $statusIconColor }}" />
+                        <x-dynamic-component :component="$statusIconComp" class="w-5 h-5 flex-shrink-0 {{ $statusIconColor }}" />
                         <div>
                             <h3 class="font-semibold text-gray-900 dark:text-white text-base leading-tight">
                                 {{ $tenant->name }}
@@ -180,10 +178,12 @@
                                 default               => $checkType,
                             };
                             $statusValue = $check['status'] ?? 'unknown';
+
+                            // Fonds colorés bien visibles
                             $cardBg = match($statusValue) {
-                                'healthy'   => 'bg-emerald-50 dark:bg-emerald-900/15 border-emerald-200 dark:border-emerald-800',
-                                'degraded'  => 'bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-800',
-                                'unhealthy' => 'bg-red-50 dark:bg-red-900/15 border-red-200 dark:border-red-800',
+                                'healthy'   => 'bg-emerald-50 dark:bg-emerald-900/25 border-emerald-300 dark:border-emerald-700',
+                                'degraded'  => 'bg-amber-50 dark:bg-amber-900/25 border-amber-300 dark:border-amber-700',
+                                'unhealthy' => 'bg-red-50 dark:bg-red-900/25 border-red-300 dark:border-red-700',
                                 default     => 'bg-gray-50 dark:bg-gray-700/30 border-gray-200 dark:border-gray-700',
                             };
                             $dotColor = match($statusValue) {
@@ -198,7 +198,7 @@
                                 'unhealthy' => 'text-red-600 dark:text-red-400',
                                 default     => 'text-gray-400 dark:text-gray-500',
                             };
-                            $textColor = match($statusValue) {
+                            $labelColor = match($statusValue) {
                                 'healthy'   => 'text-emerald-700 dark:text-emerald-300',
                                 'degraded'  => 'text-amber-700 dark:text-amber-300',
                                 'unhealthy' => 'text-red-700 dark:text-red-300',
@@ -219,11 +219,11 @@
                         >
                             <x-dynamic-component :component="$checkIcon" class="w-5 h-5 {{ $iconColor }}" />
 
-                            <div class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ $checkLabel }}</div>
+                            <div class="text-xs font-semibold text-gray-700 dark:text-gray-200">{{ $checkLabel }}</div>
 
                             <div class="flex items-center gap-1.5">
-                                <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 {{ $dotColor }}"></span>
-                                <span class="text-xs font-medium {{ $textColor }}">{{ $statusDisplay }}</span>
+                                <span class="w-2 h-2 rounded-full flex-shrink-0 {{ $dotColor }}"></span>
+                                <span class="text-xs font-bold {{ $labelColor }}">{{ $statusDisplay }}</span>
                             </div>
 
                             @if (!empty($check['response_time_ms']))
@@ -231,7 +231,7 @@
                             @endif
 
                             @if (!empty($check['details']) && $statusValue !== 'healthy')
-                                <div class="text-xs {{ $textColor }} leading-tight line-clamp-2" title="{{ $check['details'] }}">
+                                <div class="text-xs {{ $labelColor }} leading-tight line-clamp-2 opacity-80" title="{{ $check['details'] }}">
                                     {{ Str::limit($check['details'], 32) }}
                                 </div>
                             @endif
