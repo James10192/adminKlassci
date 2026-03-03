@@ -1,5 +1,21 @@
 <x-filament-panels::page>
 
+    {{-- Poll toutes les 3s quand un check global est en cours --}}
+    @if ($isRunningAll)
+        <div wire:poll.3000ms="pollCheck"></div>
+    @endif
+
+    {{-- Bannière "en cours" --}}
+    @if ($isRunningAll)
+        <div class="flex items-center gap-3 rounded-xl px-5 py-3 mb-6 text-sm font-medium" style="background-color:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;">
+            <svg class="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+            Vérification de tous les tenants en cours — la page se mettra à jour automatiquement dès la fin...
+        </div>
+    @endif
+
     {{-- Page Header --}}
     <div class="flex items-center justify-between mb-8">
         <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -10,14 +26,12 @@
         </p>
         <x-filament::button
             wire:click="runAllChecks"
-            wire:loading.attr="disabled"
-            wire:loading.class="opacity-60 cursor-not-allowed"
+            :disabled="$isRunningAll"
             color="primary"
             icon="heroicon-o-arrow-path"
             size="md"
         >
-            <span wire:loading.remove wire:target="runAllChecks">Vérifier tous les tenants</span>
-            <span wire:loading wire:target="runAllChecks">Vérification en cours...</span>
+            {{ $isRunningAll ? 'Vérification en cours...' : 'Vérifier tous les tenants' }}
         </x-filament::button>
     </div>
 

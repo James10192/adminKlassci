@@ -4,7 +4,6 @@ namespace App\Filament\Pages;
 
 use App\Models\Tenant;
 use App\Models\TenantHealthCheck;
-use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Artisan;
@@ -30,6 +29,15 @@ class HealthDashboard extends Page
 
     public int $logRotateDays = 30;
     public bool $logRotateDryRun = false;
+
+    /** Indique si un health-check global est en cours (affiche un spinner) */
+    public bool $isRunningAll = false;
+
+    /** Code du tenant en cours de vérification individuelle */
+    public string $isRunningTenant = '';
+
+    /** Timestamp (microtime) du dernier lancement pour détecter la fin */
+    public float $runStartedAt = 0;
 
     private const CHECK_TYPES = [
         'http_status',
@@ -63,17 +71,47 @@ class HealthDashboard extends Page
         $this->loadData();
     }
 
+    /**
+     * Appelé toutes les 3 secondes par wire:poll quand un check est en cours.
+     * Rafraîchit les données et détecte la fin du process.
+     */
+    public function pollCheck(): void
+    {
+        if (! $this->isRunningAll && $this->isRunningTenant === '') {
+            return;
+        }
+
+        // Vérifier si de nouveaux checks sont apparus depuis le lancement
+        $latest = TenantHealthCheck::latest('checked_at')->first();
+        $latestTs = $latest?->checked_at?->timestamp ?? 0;
+
+        if ($latestTs >= (int) $this->runStartedAt) {
+            // Des nouvelles données sont disponibles : recharger et arrêter le poll
+            $this->loadData();
+            $this->isRunningAll    = false;
+            $this->isRunningTenant = '';
+            $this->runStartedAt    = 0;
+        }
+
+        // Timeout de sécurité : 3 minutes sans résultats → arrêter le spinner
+        if ($this->runStartedAt > 0 && (microtime(true) - $this->runStartedAt) > 180) {
+            $this->loadData();
+            $this->isRunningAll    = false;
+            $this->isRunningTenant = '';
+            $this->runStartedAt    = 0;
+        }
+    }
+
     public function loadData(): void
     {
         $tenants = Tenant::active()->orderBy('name')->get();
 
-        $tenantChecks = [];
-        $healthyCount = 0;
+        $tenantChecks  = [];
+        $healthyCount  = 0;
         $degradedCount = 0;
         $unhealthyCount = 0;
 
         foreach ($tenants as $tenant) {
-            // Dernier check de chaque type pour ce tenant
             $checks = [];
             $tenantGlobalStatus = 'healthy';
             $lastCheck = null;
@@ -85,13 +123,12 @@ class HealthDashboard extends Page
                     ->first();
 
                 $checks[$checkType] = [
-                    'status'          => $latest?->status ?? 'unknown',
-                    'response_time_ms'=> $latest?->response_time_ms,
-                    'details'         => $latest?->details,
-                    'checked_at'      => $latest?->checked_at,
+                    'status'           => $latest?->status ?? 'unknown',
+                    'response_time_ms' => $latest?->response_time_ms,
+                    'details'          => $latest?->details,
+                    'checked_at'       => $latest?->checked_at,
                 ];
 
-                // Calculer le statut global du tenant
                 if (($latest?->status ?? 'unknown') === 'unhealthy') {
                     $tenantGlobalStatus = 'unhealthy';
                 } elseif (($latest?->status ?? 'unknown') === 'degraded' && $tenantGlobalStatus !== 'unhealthy') {
@@ -118,7 +155,6 @@ class HealthDashboard extends Page
             };
         }
 
-        // Trier : critiques en premier, puis dégradés, puis sains
         usort($tenantChecks, function ($a, $b) {
             $order = ['unhealthy' => 0, 'degraded' => 1, 'healthy' => 2];
             return ($order[$a['global_status']] ?? 3) <=> ($order[$b['global_status']] ?? 3);
@@ -131,44 +167,62 @@ class HealthDashboard extends Page
             'unhealthy' => $unhealthyCount,
         ];
 
-        // Dernier check global toutes entités confondues
         $latest = TenantHealthCheck::latest('checked_at')->first();
         $this->lastCheckedAt = $latest?->checked_at;
     }
 
     /**
-     * Lance l'Artisan command dans un process PHP séparé pour contourner
-     * la limite mémoire du web server (Artisan::call hérite des 256 MB
-     * alloués à la requête HTTP, causant un fatal error sur les gros logs).
+     * Lance la commande Artisan en background (non-bloquant).
+     * Le poll Livewire détectera la fin et rafraîchira les données.
      */
-    private function runArtisan(array $args): void
+    private function runArtisanBackground(array $args): void
+    {
+        $php     = PHP_BINARY;
+        $artisan = base_path('artisan');
+        $log     = storage_path('logs/health-checks.log');
+
+        $cmd = implode(' ', array_map('escapeshellarg', [
+            $php, '-d', 'memory_limit=512M', $artisan, ...$args,
+        ]));
+
+        // Lancer en background : la requête HTTP retourne immédiatement
+        exec("{$cmd} >> " . escapeshellarg($log) . ' 2>&1 &');
+    }
+
+    /**
+     * Lance en foreground (bloquant) — pour les commandes rapides (un seul tenant).
+     */
+    private function runArtisanSync(array $args): void
     {
         $php     = PHP_BINARY;
         $artisan = base_path('artisan');
 
         $process = new Process([$php, '-d', 'memory_limit=512M', $artisan, ...$args]);
-        $process->setTimeout(120);
+        $process->setTimeout(60);
         $process->run();
     }
 
     public function runAllChecks(): void
     {
-        $this->runArtisan(['tenant:health-check', '--all']);
+        $this->runStartedAt = microtime(true);
+        $this->isRunningAll = true;
 
-        $this->loadData();
-
-        Notification::make()
-            ->title('Health checks terminés')
-            ->body('Tous les tenants actifs ont été vérifiés.')
-            ->success()
-            ->send();
+        // Lance en background — ne bloque pas la requête HTTP
+        $this->runArtisanBackground(['tenant:health-check', '--all']);
     }
 
     public function runTenantCheck(string $tenantCode): void
     {
-        $this->runArtisan(['tenant:health-check', $tenantCode]);
+        $this->runStartedAt    = microtime(true);
+        $this->isRunningTenant = $tenantCode;
 
+        // Un seul tenant : suffisamment rapide pour être synchrone
+        $this->runArtisanSync(['tenant:health-check', $tenantCode]);
+
+        // Recharger immédiatement après
         $this->loadData();
+        $this->isRunningTenant = '';
+        $this->runStartedAt    = 0;
 
         Notification::make()
             ->title('Check terminé')
@@ -185,7 +239,7 @@ class HealthDashboard extends Page
             $args[] = '--dry-run';
         }
 
-        $this->runArtisan($args);
+        $this->runArtisanSync($args);
 
         $title = $this->logRotateDryRun ? 'Simulation terminée' : 'Rotation terminée';
         $body  = $this->logRotateDryRun
