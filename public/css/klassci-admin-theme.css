@@ -29,11 +29,11 @@
     --s-active-t:  #ffffff;
 
     /* ── Content ── */
-    --bg:          #f8fafc;
+    --bg:          #f0f0f0;
     --card:        #ffffff;
-    --border:      #e5e7eb;
-    --shadow:      0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.05);
-    --shadow-hover: 0 4px 8px rgba(0,0,0,.07), 0 16px 40px rgba(0,0,0,.09);
+    --border:      #e0e0e0;
+    --shadow:      0 1px 4px rgba(0,0,0,.06);
+    --shadow-hover: 0 4px 16px rgba(0,0,0,.10);
 
     /* ── Typography ── */
     --f-head: 'Syne', system-ui, sans-serif;
@@ -294,6 +294,7 @@ a.fi-sidebar-item-button.bg-primary-50 {
 
 /* ================================================================
    ████  PAGE HEADER  ████
+   JSON: title 24px 700 #111111, subtitle 12px #888888
    ================================================================ */
 .fi-header { padding-bottom: 1.25rem !important; }
 
@@ -302,21 +303,31 @@ a.fi-sidebar-item-button.bg-primary-50 {
     font-size: 1.5rem !important;
     font-weight: 700 !important;
     letter-spacing: -.025em !important;
-    color: #111827 !important;
+    color: #111111 !important;
     line-height: 1.2 !important;
 }
 
-.fi-breadcrumbs      { font-size: .72rem !important; color: var(--s-muted) !important; font-family: var(--f-body) !important; }
-.fi-breadcrumbs-item-separator { color: #d1d5db !important; }
+/* Sous-titre de page si présent */
+.fi-header-subheading,
+.fi-page-sub-navigation-select-ctn {
+    font-family: var(--f-body) !important;
+    font-size: .75rem !important;
+    color: #888888 !important;
+}
+
+.fi-breadcrumbs      { font-size: .72rem !important; color: #999999 !important; font-family: var(--f-body) !important; }
+.fi-breadcrumbs-item-separator { color: #cccccc !important; }
 
 /* ================================================================
    ████  STAT CARDS  ████
+   Inspiré dashboard-moderne.json : border-none, shadow légère,
+   valeur 36px, label 12px normal-case
    ================================================================ */
 .fi-wi-stats-overview-stat {
     background: var(--card) !important;
-    border-radius: var(--r) !important;
-    box-shadow: var(--shadow) !important;
-    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
+    border: none !important;
     transition: transform var(--dur) var(--ease),
                 box-shadow var(--dur) var(--ease) !important;
     position: relative;
@@ -324,36 +335,40 @@ a.fi-sidebar-item-button.bg-primary-50 {
 }
 
 .fi-wi-stats-overview-stat:hover {
-    box-shadow: var(--shadow-hover) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.10) !important;
     transform: translateY(-2px);
 }
 
+/* Valeur principale — 36px bold comme dans le JSON */
 .fi-wi-stats-overview-stat-value {
     font-family: var(--f-head) !important;
-    font-size: 1.875rem !important;
+    font-size: 2.25rem !important;
     font-weight: 700 !important;
     letter-spacing: -.03em !important;
     line-height: 1.1 !important;
-    color: #111827 !important;
+    color: #111111 !important;
 }
 
+/* Label — 12px medium, normal-case, gris moyen (JSON: 12px, weight 500, #666666) */
 .fi-wi-stats-overview-stat-label {
     font-family: var(--f-body) !important;
-    font-size: .675rem !important;
-    font-weight: 700 !important;
-    color: var(--s-muted) !important;
-    letter-spacing: .06em !important;
-    text-transform: uppercase !important;
+    font-size: .75rem !important;
+    font-weight: 500 !important;
+    color: #666666 !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
 }
 
+/* Description — 12px, gris clair (JSON: color #999999) */
 .fi-wi-stats-overview-stat-description {
     font-family: var(--f-body) !important;
     font-size: .72rem !important;
-    color: #9ca3af !important;
+    color: #999999 !important;
     line-height: 1.45 !important;
 }
 
-.fi-wi-stats-overview-stat-chart { opacity: .5; }
+/* Mini chart — légèrement visible */
+.fi-wi-stats-overview-stat-chart { opacity: .65; }
 
 /* ── Animations entrée ──────────────────────────────── */
 .fi-wi-container { gap: 1.25rem !important; }
@@ -427,25 +442,26 @@ a.fi-sidebar-item-button.bg-primary-50 {
 
 /* ================================================================
    ████  TABLE  ████
+   JSON: border none, shadow légère 0 1px 4px
    ================================================================ */
 .fi-ta-ctn {
     background: var(--card) !important;
-    border-radius: var(--r) !important;
-    box-shadow: var(--shadow) !important;
-    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
+    border: none !important;
     overflow: hidden;
 }
 
 .fi-ta-header-cell {
-    background: #f9fafb !important;
+    background: #fafafa !important;
     font-family: var(--f-body) !important;
     font-size: .675rem !important;
-    font-weight: 700 !important;
-    letter-spacing: .065em !important;
+    font-weight: 600 !important;
+    letter-spacing: .04em !important;
     text-transform: uppercase !important;
-    color: var(--s-muted) !important;
+    color: #999999 !important;
     padding: .75rem 1rem !important;
-    border-bottom: 1px solid var(--border) !important;
+    border-bottom: 1px solid #f0f0f0 !important;
 }
 
 .fi-ta-row { transition: background .1s ease !important; }
@@ -453,21 +469,22 @@ a.fi-sidebar-item-button.bg-primary-50 {
 
 .fi-ta-cell {
     padding: .825rem 1rem !important;
-    border-bottom: 1px solid rgba(0,0,0,.04) !important;
+    border-bottom: 1px solid #f5f5f5 !important;
     font-size: .825rem !important;
     font-family: var(--f-body) !important;
-    color: #374151 !important;
+    color: #333333 !important;
 }
 .fi-ta-row:last-child .fi-ta-cell { border-bottom: none !important; }
 
 /* ================================================================
    ████  SECTIONS  ████
+   JSON: border none, shadow légère
    ================================================================ */
 .fi-section {
     background: var(--card) !important;
-    border-radius: var(--r) !important;
-    box-shadow: var(--shadow) !important;
-    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
+    border: none !important;
 }
 .fi-section-header {
     border-bottom: 1px solid var(--border) !important;
@@ -553,12 +570,13 @@ a.fi-sidebar-item-button.bg-primary-50 {
 
 /* ================================================================
    ████  CHART  ████
+   JSON: border none, shadow légère
    ================================================================ */
 .fi-wi-chart {
     background: var(--card) !important;
-    border-radius: var(--r) !important;
-    box-shadow: var(--shadow) !important;
-    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
+    border: none !important;
 }
 .fi-wi-chart canvas { border-radius: 0 0 var(--r) var(--r) !important; }
 
