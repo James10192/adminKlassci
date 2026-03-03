@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TenantResource\Pages;
 use App\Filament\Resources\TenantResource\RelationManagers;
+use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -148,31 +149,36 @@ class TenantResource extends Resource
                                             ])
                                             ->default('active'),
 
-                                        Forms\Components\Select::make('plan')
+                                        Forms\Components\Select::make('subscription_plan_id')
                                             ->label('Plan Tarifaire')
-                                            ->required()
-                                            ->options([
-                                                'free' => 'Free',
-                                                'essentiel' => 'Essentiel',
-                                                'professional' => 'Professional',
-                                                'elite' => 'Elite',
-                                            ])
-                                            ->default('free')
+                                            ->relationship('subscriptionPlan', 'name')
+                                            ->options(
+                                                SubscriptionPlan::active()
+                                                    ->ordered()
+                                                    ->get()
+                                                    ->mapWithKeys(fn ($p) => [
+                                                        $p->id => $p->name . ' — ' . number_format($p->monthly_fee, 0, ',', ' ') . ' FCFA/mois',
+                                                    ])
+                                            )
+                                            ->searchable()
+                                            ->preload()
                                             ->live()
                                             ->afterStateUpdated(function ($state, callable $set) {
-                                                $plans = [
-                                                    'free' => ['fee' => 0, 'users' => 5, 'inscriptions' => 50, 'storage' => 512],
-                                                    'essentiel' => ['fee' => 100000, 'users' => 20, 'inscriptions' => 700, 'storage' => 2048],
-                                                    'professional' => ['fee' => 200000, 'users' => 30, 'inscriptions' => 3000, 'storage' => 5120],
-                                                    'elite' => ['fee' => 400000, 'users' => 999999, 'inscriptions' => 999999, 'storage' => 20480],
-                                                ];
-                                                if (isset($plans[$state])) {
-                                                    $set('monthly_fee', $plans[$state]['fee']);
-                                                    $set('max_users', $plans[$state]['users']);
-                                                    $set('max_inscriptions_per_year', $plans[$state]['inscriptions']);
-                                                    $set('max_storage_mb', $plans[$state]['storage']);
-                                                }
-                                            }),
+                                                if (! $state) return;
+                                                $plan = SubscriptionPlan::find($state);
+                                                if (! $plan) return;
+                                                $set('plan', $plan->slug);
+                                                $set('monthly_fee', $plan->monthly_fee);
+                                                $set('max_users', $plan->max_users);
+                                                $set('max_staff', $plan->max_staff);
+                                                $set('max_students', $plan->max_students);
+                                                $set('max_inscriptions_per_year', $plan->max_inscriptions_per_year);
+                                                $set('max_storage_mb', $plan->max_storage_mb);
+                                            })
+                                            ->helperText('Sélectionnez un plan pour remplir automatiquement les limites.'),
+
+                                        Forms\Components\Hidden::make('plan')
+                                            ->default('free'),
 
                                         Forms\Components\TextInput::make('monthly_fee')
                                             ->label('Frais Mensuels (FCFA)')

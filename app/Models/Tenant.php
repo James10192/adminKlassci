@@ -21,6 +21,7 @@ class Tenant extends Model
         'last_deployed_at',
         'status',
         'plan',
+        'subscription_plan_id',
         'monthly_fee',
         'subscription_start_date',
         'subscription_end_date',
@@ -95,6 +96,11 @@ class Tenant extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function subscriptionPlan()
+    {
+        return $this->belongsTo(SubscriptionPlan::class);
     }
 
     /**
