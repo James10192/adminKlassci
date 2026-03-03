@@ -48,106 +48,72 @@ class AdminPanelProvider extends PanelProvider
                 ],
                 'gray' => Color::Slate,
             ])
-            // Thème CSS premium KLASSCI
+            // Fonts + Thème CSS Obsidian Control Room
             ->renderHook(
                 'panels::styles.after',
                 fn () => '<link rel="preconnect" href="https://fonts.googleapis.com">'
                     . '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-                    . '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">'
+                    . '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">'
                     . '<link rel="stylesheet" href="' . asset('css/klassci-admin-theme.css') . '?v=' . (@filemtime(public_path('css/klassci-admin-theme.css')) ?: time()) . '">'
             )
-            // JS : logo visible quand sidebar collapsed + transition smooth
+            // JS : préserver le logo KLASSCI en mode collapsed
             ->renderHook(
                 'panels::scripts.after',
                 fn () => <<<'HTML'
 <script>
-(function() {
-    // Attend que le DOM soit prêt
-    function initSidebarLogo() {
-        const sidebar = document.querySelector('.fi-sidebar');
-        if (!sidebar) return;
+(function () {
+    'use strict';
 
-        // Observer les changements de classe/style sur la sidebar (collapse Filament)
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(m) {
-                if (m.type === 'attributes') {
-                    updateLogoState();
+    function initCollapsedLogo() {
+        var sidebar = document.querySelector('.fi-sidebar');
+        var logo    = document.querySelector('.fi-sidebar-header .fi-logo');
+        if (!sidebar || !logo) return;
+
+        // Rendre le logo toujours visible, même quand Alpine le cache via x-show
+        // Filament utilise x-show="$store.sidebar.isOpen" sur le contenu du logo
+        // On force display:flex sur le conteneur et on laisse l'image se redimensionner
+        var logoImg = logo.querySelector('img');
+
+        function sync() {
+            var isCollapsed = sidebar.offsetWidth < 150;
+            if (isCollapsed) {
+                // Sidebar collapsed : centrer le logo et le réduire
+                logo.style.cssText = 'display:flex!important;align-items:center;justify-content:center;';
+                if (logoImg) {
+                    logoImg.style.cssText = 'max-height:1.75rem!important;width:auto!important;opacity:1!important;';
                 }
-            });
-        });
-        observer.observe(sidebar, { attributes: true, attributeFilter: ['class', 'style'] });
+            } else {
+                // Sidebar ouverte : rétablir
+                logo.style.cssText = '';
+                if (logoImg) logoImg.style.cssText = '';
+            }
+        }
 
-        // Observer Alpine.js store si disponible
+        // Observer la largeur via ResizeObserver
+        if (window.ResizeObserver) {
+            var ro = new ResizeObserver(sync);
+            ro.observe(sidebar);
+        }
+
+        // Fallback Alpine effect
         if (window.Alpine) {
-            Alpine.effect(function() {
+            document.addEventListener('alpine:initialized', function () {
                 try {
-                    var isOpen = Alpine.store('sidebar').isOpen;
-                    updateLogoState(isOpen);
-                } catch(e) {}
+                    Alpine.effect(function () {
+                        var _ = Alpine.store('sidebar').isOpen;
+                        setTimeout(sync, 50);
+                    });
+                } catch (e) {}
             });
         }
 
-        function updateLogoState(isOpen) {
-            var logo = document.querySelector('.fi-sidebar-header .fi-logo');
-            var header = document.querySelector('.fi-sidebar-header');
-            if (!logo || !header) return;
-
-            // Supprimer l'indicateur "K" si déjà présent
-            var existing = header.querySelector('.klassci-k-logo');
-            if (existing) existing.remove();
-
-            // Tenter de détecter si la sidebar est collapsed via Alpine store
-            var collapsed = false;
-            try {
-                collapsed = !Alpine.store('sidebar').isOpen;
-            } catch(e) {
-                // Fallback : vérifier la largeur
-                collapsed = sidebar.offsetWidth < 80;
-            }
-
-            if (collapsed) {
-                // Afficher l'indicateur "K" centré
-                var kLogo = document.createElement('div');
-                kLogo.className = 'klassci-k-logo';
-                kLogo.textContent = 'K';
-                kLogo.style.cssText = [
-                    'display:flex',
-                    'align-items:center',
-                    'justify-content:center',
-                    'width:2rem',
-                    'height:2rem',
-                    'background:linear-gradient(135deg,#6366f1,#4f46e5)',
-                    'border-radius:.5rem',
-                    'color:white',
-                    'font-weight:800',
-                    'font-size:.9rem',
-                    'font-family:Inter,sans-serif',
-                    'letter-spacing:-.02em',
-                    'box-shadow:0 2px 8px rgba(99,102,241,.35)',
-                    'margin:auto',
-                    'cursor:pointer',
-                    'transition:transform .15s ease',
-                    'flex-shrink:0'
-                ].join(';');
-                header.appendChild(kLogo);
-            }
-        }
-
-        // Init
-        updateLogoState();
-
-        // Réécouter les clics sur le bouton toggle
-        document.addEventListener('click', function(e) {
-            if (e.target.closest('.fi-sidebar-close-btn') || e.target.closest('[wire\\:click*="sidebar"]')) {
-                setTimeout(updateLogoState, 250);
-            }
-        });
+        sync();
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initSidebarLogo);
+        document.addEventListener('DOMContentLoaded', initCollapsedLogo);
     } else {
-        setTimeout(initSidebarLogo, 100);
+        setTimeout(initCollapsedLogo, 80);
     }
 })();
 </script>
