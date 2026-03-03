@@ -1,99 +1,143 @@
 <x-filament-panels::page>
 
-    {{-- Header actions --}}
-    <div class="flex items-center justify-between mb-6">
+    {{-- Page Header --}}
+    <div class="flex items-center justify-between mb-8">
         <div>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Dernière vérification :
-                <span class="font-medium text-gray-700 dark:text-gray-300">
-                    {{ $lastCheckedAt ? $lastCheckedAt->diffForHumans() : 'Jamais' }}
+                <span class="font-semibold text-gray-700 dark:text-gray-300">
+                    {{ $lastCheckedAt ? $lastCheckedAt->diffForHumans() : 'Jamais effectuée' }}
                 </span>
             </p>
         </div>
-        <div class="flex gap-3">
-            <x-filament::button
-                wire:click="runAllChecks"
-                wire:loading.attr="disabled"
-                color="primary"
-                icon="heroicon-o-arrow-path"
-                wire:loading.class="opacity-50"
-            >
-                <span wire:loading.remove wire:target="runAllChecks">Vérifier tous les tenants</span>
-                <span wire:loading wire:target="runAllChecks">Vérification en cours...</span>
-            </x-filament::button>
-        </div>
+        <x-filament::button
+            wire:click="runAllChecks"
+            wire:loading.attr="disabled"
+            wire:loading.class="opacity-60 cursor-not-allowed"
+            color="primary"
+            icon="heroicon-o-arrow-path"
+            size="md"
+        >
+            <span wire:loading.remove wire:target="runAllChecks">Vérifier tous les tenants</span>
+            <span wire:loading wire:target="runAllChecks">Vérification en cours...</span>
+        </x-filament::button>
     </div>
 
-    {{-- Summary bar --}}
-    <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <x-heroicon-o-check-circle class="w-5 h-5 text-green-600 dark:text-green-400" />
+    {{-- Summary cards --}}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+
+        {{-- Healthy --}}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-900/25 flex items-center justify-center">
+                <x-heroicon-o-check-circle class="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-                <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ $stats['healthy'] }}</div>
-                <div class="text-xs text-gray-500">Tenants sains</div>
+                <div class="text-3xl font-bold text-gray-900 dark:text-white leading-none">{{ $stats['healthy'] }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Tenants sains</div>
+            </div>
+            <div class="ml-auto">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    Sain
+                </span>
             </div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                <x-heroicon-o-exclamation-triangle class="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+
+        {{-- Degraded --}}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-900/25 flex items-center justify-center">
+                <x-heroicon-o-exclamation-triangle class="w-6 h-6 text-amber-500 dark:text-amber-400" />
             </div>
             <div>
-                <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ $stats['degraded'] }}</div>
-                <div class="text-xs text-gray-500">Dégradés</div>
+                <div class="text-3xl font-bold text-gray-900 dark:text-white leading-none">{{ $stats['degraded'] }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Dégradés</div>
+            </div>
+            <div class="ml-auto">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                    Avertissement
+                </span>
             </div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                <x-heroicon-o-x-circle class="w-5 h-5 text-red-600 dark:text-red-400" />
+
+        {{-- Critical --}}
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
+            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-red-50 dark:bg-red-900/25 flex items-center justify-center">
+                <x-heroicon-o-x-circle class="w-6 h-6 text-red-600 dark:text-red-400" />
             </div>
             <div>
-                <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ $stats['unhealthy'] }}</div>
-                <div class="text-xs text-gray-500">Critiques</div>
+                <div class="text-3xl font-bold text-gray-900 dark:text-white leading-none">{{ $stats['unhealthy'] }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Critiques</div>
+            </div>
+            <div class="ml-auto">
+                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                    Critique
+                </span>
             </div>
         </div>
+
     </div>
 
-    {{-- Tenant cards --}}
-    <div class="grid grid-cols-1 gap-4">
+    {{-- Tenant list --}}
+    <div class="space-y-5">
         @forelse ($tenantChecks as $data)
             @php
-                $tenant = $data['tenant'];
-                $checks = $data['checks'];
+                $tenant       = $data['tenant'];
+                $checks       = $data['checks'];
                 $globalStatus = $data['global_status'];
+
                 $borderColor = match($globalStatus) {
-                    'unhealthy' => 'border-red-500',
-                    'degraded'  => 'border-yellow-500',
-                    default     => 'border-green-500',
+                    'unhealthy' => 'border-l-red-500',
+                    'degraded'  => 'border-l-amber-400',
+                    default     => 'border-l-emerald-500',
                 };
                 $headerBg = match($globalStatus) {
                     'unhealthy' => 'bg-red-50 dark:bg-red-900/10',
-                    'degraded'  => 'bg-yellow-50 dark:bg-yellow-900/10',
-                    default     => 'bg-green-50 dark:bg-green-900/10',
+                    'degraded'  => 'bg-amber-50 dark:bg-amber-900/10',
+                    default     => 'bg-emerald-50 dark:bg-emerald-900/10',
+                };
+                $statusLabel = match($globalStatus) {
+                    'unhealthy' => 'Critique',
+                    'degraded'  => 'Dégradé',
+                    default     => 'Sain',
+                };
+                $statusBadge = match($globalStatus) {
+                    'unhealthy' => 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+                    'degraded'  => 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+                    default     => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
                 };
                 $statusIcon = match($globalStatus) {
-                    'unhealthy' => '🔴',
-                    'degraded'  => '🟡',
-                    default     => '🟢',
+                    'unhealthy' => 'heroicon-o-x-circle',
+                    'degraded'  => 'heroicon-o-exclamation-triangle',
+                    default     => 'heroicon-o-check-circle',
+                };
+                $statusIconColor = match($globalStatus) {
+                    'unhealthy' => 'text-red-500',
+                    'degraded'  => 'text-amber-500',
+                    default     => 'text-emerald-500',
                 };
             @endphp
 
-            <div class="bg-white dark:bg-gray-800 rounded-xl border-l-4 {{ $borderColor }} shadow-sm overflow-hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 border-l-4 {{ $borderColor }} shadow-sm overflow-hidden">
 
                 {{-- Tenant header --}}
-                <div class="{{ $headerBg }} px-5 py-3 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+                <div class="{{ $headerBg }} px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
                     <div class="flex items-center gap-3">
-                        <span class="text-lg">{{ $statusIcon }}</span>
+                        <x-dynamic-component :component="$statusIcon" class="w-5 h-5 flex-shrink-0 {{ $statusIconColor }}" />
                         <div>
-                            <h3 class="font-semibold text-gray-900 dark:text-white text-sm">
+                            <h3 class="font-semibold text-gray-900 dark:text-white text-base leading-tight">
                                 {{ $tenant->name }}
                             </h3>
-                            <p class="text-xs text-gray-500">{{ $tenant->subdomain }}.klassci.com &bull; {{ ucfirst($tenant->plan) }}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                {{ $tenant->subdomain }}.klassci.com
+                                <span class="mx-1 text-gray-300 dark:text-gray-600">&bull;</span>
+                                {{ ucfirst($tenant->plan) }}
+                            </p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs text-gray-400">
+                    <div class="flex items-center gap-3">
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ $statusBadge }}">
+                            {{ $statusLabel }}
+                        </span>
+                        <span class="text-xs text-gray-400 dark:text-gray-500">
                             @if ($data['last_check'])
                                 {{ $data['last_check']->diffForHumans() }}
                             @else
@@ -103,6 +147,7 @@
                         <x-filament::button
                             wire:click="runTenantCheck('{{ $tenant->code }}')"
                             wire:loading.attr="disabled"
+                            wire:loading.class="opacity-60"
                             size="xs"
                             color="gray"
                             icon="heroicon-o-arrow-path"
@@ -113,84 +158,105 @@
                 </div>
 
                 {{-- Check types grid --}}
-                <div class="px-5 py-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div class="px-6 py-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     @foreach ($checks as $checkType => $check)
                         @php
                             $checkIcon = match($checkType) {
-                                'http_status'          => '🌐',
-                                'database_connection'  => '🗄️',
-                                'disk_space'           => '💾',
-                                'ssl_certificate'      => '🔒',
-                                'application_errors'   => '⚠️',
-                                'queue_workers'        => '⚙️',
-                                default                => '❓',
+                                'http_status'         => 'heroicon-o-globe-alt',
+                                'database_connection' => 'heroicon-o-circle-stack',
+                                'disk_space'          => 'heroicon-o-server',
+                                'ssl_certificate'     => 'heroicon-o-lock-closed',
+                                'application_errors'  => 'heroicon-o-bug-ant',
+                                'queue_workers'       => 'heroicon-o-queue-list',
+                                default               => 'heroicon-o-question-mark-circle',
                             };
                             $checkLabel = match($checkType) {
-                                'http_status'          => 'HTTP',
-                                'database_connection'  => 'Database',
-                                'disk_space'           => 'Disque',
-                                'ssl_certificate'      => 'SSL',
-                                'application_errors'   => 'App Errors',
-                                'queue_workers'        => 'Queues',
-                                default                => $checkType,
+                                'http_status'         => 'HTTP',
+                                'database_connection' => 'Base de données',
+                                'disk_space'          => 'Disque',
+                                'ssl_certificate'     => 'SSL',
+                                'application_errors'  => 'Erreurs app',
+                                'queue_workers'       => 'Files d\'attente',
+                                default               => $checkType,
                             };
-                            $statusBg = match($check['status'] ?? 'unknown') {
-                                'healthy'   => 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-                                'degraded'  => 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800',
-                                'unhealthy' => 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+                            $statusValue = $check['status'] ?? 'unknown';
+                            $cardBg = match($statusValue) {
+                                'healthy'   => 'bg-emerald-50 dark:bg-emerald-900/15 border-emerald-200 dark:border-emerald-800',
+                                'degraded'  => 'bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-800',
+                                'unhealthy' => 'bg-red-50 dark:bg-red-900/15 border-red-200 dark:border-red-800',
                                 default     => 'bg-gray-50 dark:bg-gray-700/30 border-gray-200 dark:border-gray-700',
                             };
-                            $statusText = match($check['status'] ?? 'unknown') {
-                                'healthy'   => 'text-green-700 dark:text-green-400',
-                                'degraded'  => 'text-yellow-700 dark:text-yellow-400',
-                                'unhealthy' => 'text-red-700 dark:text-red-400',
-                                default     => 'text-gray-500 dark:text-gray-400',
-                            };
-                            $statusDot = match($check['status'] ?? 'unknown') {
-                                'healthy'   => 'bg-green-500',
-                                'degraded'  => 'bg-yellow-500',
+                            $dotColor = match($statusValue) {
+                                'healthy'   => 'bg-emerald-500',
+                                'degraded'  => 'bg-amber-500',
                                 'unhealthy' => 'bg-red-500',
                                 default     => 'bg-gray-400',
                             };
+                            $iconColor = match($statusValue) {
+                                'healthy'   => 'text-emerald-600 dark:text-emerald-400',
+                                'degraded'  => 'text-amber-600 dark:text-amber-400',
+                                'unhealthy' => 'text-red-600 dark:text-red-400',
+                                default     => 'text-gray-400 dark:text-gray-500',
+                            };
+                            $textColor = match($statusValue) {
+                                'healthy'   => 'text-emerald-700 dark:text-emerald-300',
+                                'degraded'  => 'text-amber-700 dark:text-amber-300',
+                                'unhealthy' => 'text-red-700 dark:text-red-300',
+                                default     => 'text-gray-500 dark:text-gray-400',
+                            };
+                            $statusDisplay = match($statusValue) {
+                                'healthy'   => 'Sain',
+                                'degraded'  => 'Dégradé',
+                                'unhealthy' => 'Critique',
+                                'unknown'   => 'Inconnu',
+                                default     => ucfirst($statusValue),
+                            };
                         @endphp
 
-                        <div class="rounded-lg border {{ $statusBg }} p-3 text-center" title="{{ $check['details'] ?? '' }}">
-                            <div class="text-xl mb-1">{{ $checkIcon }}</div>
-                            <div class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{{ $checkLabel }}</div>
-                            <div class="flex items-center justify-center gap-1">
-                                <span class="w-2 h-2 rounded-full {{ $statusDot }}"></span>
-                                <span class="text-xs font-semibold {{ $statusText }}">
-                                    {{ ucfirst($check['status'] ?? '—') }}
-                                </span>
+                        <div
+                            class="rounded-xl border {{ $cardBg }} px-3 py-3 flex flex-col items-center gap-1.5 text-center"
+                            title="{{ $check['details'] ?? '' }}"
+                        >
+                            <x-dynamic-component :component="$checkIcon" class="w-5 h-5 {{ $iconColor }}" />
+
+                            <div class="text-xs font-semibold text-gray-700 dark:text-gray-300">{{ $checkLabel }}</div>
+
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 {{ $dotColor }}"></span>
+                                <span class="text-xs font-medium {{ $textColor }}">{{ $statusDisplay }}</span>
                             </div>
+
                             @if (!empty($check['response_time_ms']))
-                                <div class="text-xs text-gray-400 mt-1">{{ $check['response_time_ms'] }} ms</div>
+                                <div class="text-xs text-gray-400 dark:text-gray-500">{{ $check['response_time_ms'] }} ms</div>
                             @endif
-                            @if (!empty($check['details']) && ($check['status'] ?? '') !== 'healthy')
-                                <div class="text-xs text-red-600 dark:text-red-400 mt-1 truncate" title="{{ $check['details'] }}">
-                                    {{ Str::limit($check['details'], 30) }}
+
+                            @if (!empty($check['details']) && $statusValue !== 'healthy')
+                                <div class="text-xs {{ $textColor }} leading-tight line-clamp-2" title="{{ $check['details'] }}">
+                                    {{ Str::limit($check['details'], 32) }}
                                 </div>
                             @endif
                         </div>
+
                     @endforeach
                 </div>
 
             </div>
         @empty
-            <div class="text-center py-12 text-gray-500">
-                <x-heroicon-o-heart class="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p class="font-medium">Aucun tenant à surveiller</p>
-                <p class="text-sm">Lancez une vérification pour voir l'état des tenants.</p>
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-8 py-16 text-center">
+                <x-heroicon-o-heart class="w-10 h-10 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                <p class="text-base font-semibold text-gray-700 dark:text-gray-300">Aucun tenant à surveiller</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Lancez une vérification pour voir l'état des tenants.</p>
             </div>
         @endforelse
     </div>
 
-    {{-- Link to full issues table --}}
+    {{-- Link to full issues list --}}
     @if ($stats['degraded'] + $stats['unhealthy'] > 0)
-        <div class="mt-4 text-center">
+        <div class="mt-6 text-center">
             <a href="{{ route('filament.admin.resources.tenant-health-checks.index') }}"
-               class="text-sm text-primary-600 hover:text-primary-700 font-medium">
-                Voir tous les problèmes détaillés →
+               class="text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 transition-colors">
+                Voir tous les problèmes en détail
+                <x-heroicon-m-arrow-right class="w-3.5 h-3.5 inline ml-1 -mt-0.5" />
             </a>
         </div>
     @endif

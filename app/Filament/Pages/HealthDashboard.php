@@ -134,7 +134,7 @@ class HealthDashboard extends Page
 
     public function runAllChecks(): void
     {
-        Artisan::call('tenant:health-check');
+        Artisan::call('tenant:health-check', ['--all' => true]);
 
         $this->loadData();
 
