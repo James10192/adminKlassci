@@ -125,60 +125,100 @@ class TenantDeploy extends Command
             'status' => 'in_progress',
             'deployed_by_user_id' => auth()->id(),
             'started_at' => now(),
+            'deployment_log' => [],
         ]);
+
+        $steps = [];
 
         try {
             // Step 1: Backup (optional)
             if (!$skipBackup) {
                 if ($verbose) $this->line('📦 Création d\'un backup...');
-                $this->call('tenant:backup', [
-                    'tenant' => $tenant->code,
-                    '--type' => 'database_only',
-                ]);
+                $t = microtime(true);
+                $this->call('tenant:backup', ['tenant' => $tenant->code, '--type' => 'database_only']);
+                $steps[] = ['step' => 'backup', 'status' => 'ok', 'output' => 'Backup BDD créé avec succès.', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+                $deployment->update(['deployment_log' => $steps]);
             }
 
             // Step 2: Maintenance mode ON
             if ($verbose) $this->line('🔧 Activation du mode maintenance...');
-            $this->runProcess($tenantPath, "{$phpBin} artisan down --retry=60 --secret=klassci-deploy");
+            $t = microtime(true);
+            $out = $this->runProcess($tenantPath, "{$phpBin} artisan down --retry=60 --secret=klassci-deploy", true);
+            $steps[] = ['step' => 'maintenance_on', 'status' => 'ok', 'output' => trim($out) ?: 'Mode maintenance activé.', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $deployment->update(['deployment_log' => $steps]);
 
             // Step 3: Git pull
             if ($verbose) $this->line('📥 Git pull...');
-            $this->runProcess($tenantPath, "git fetch origin {$branch} 2>&1");
-            $this->runProcess($tenantPath, "git reset --hard origin/{$branch} 2>&1");
+            $t = microtime(true);
+            $out = $this->runProcess($tenantPath, "git pull origin {$branch} 2>&1", true);
+            $steps[] = ['step' => 'git_pull', 'status' => 'ok', 'output' => trim($out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $deployment->update(['deployment_log' => $steps]);
 
-            // Get commit hash
+            // Get commit info
             $commitHash = trim($this->runProcess($tenantPath, 'git rev-parse HEAD', true));
+            $commitInfo = trim($this->runProcess($tenantPath, 'git log -1 --format="%H|%an|%ae|%s|%ai"', true));
+            $commitParts = explode('|', $commitInfo);
+            $steps[] = [
+                'step' => 'commit_info',
+                'status' => 'ok',
+                'output' => $commitInfo,
+                'commit' => [
+                    'hash'    => $commitParts[0] ?? $commitHash,
+                    'author'  => $commitParts[1] ?? 'N/A',
+                    'email'   => $commitParts[2] ?? '',
+                    'message' => $commitParts[3] ?? 'N/A',
+                    'date'    => $commitParts[4] ?? '',
+                ],
+                'duration_ms' => 0,
+            ];
+            $deployment->update(['deployment_log' => $steps]);
 
             // Step 4: Composer install
             if ($verbose) $this->line('📦 Composer install...');
-            $this->runProcess($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction 2>&1");
+            $t = microtime(true);
+            $out = $this->runProcess($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction 2>&1", true);
+            $steps[] = ['step' => 'composer_install', 'status' => 'ok', 'output' => trim($out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $deployment->update(['deployment_log' => $steps]);
 
             // Step 5: Migrations
             if (!$skipMigrations) {
                 if ($verbose) $this->line('🗄️  Exécution des migrations...');
-                $this->runProcess($tenantPath, "{$phpBin} artisan migrate --force 2>&1");
+                $t = microtime(true);
+                $out = $this->runProcess($tenantPath, "{$phpBin} artisan migrate --force 2>&1", true);
+                $steps[] = ['step' => 'migrations', 'status' => 'ok', 'output' => trim($out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+                $deployment->update(['deployment_log' => $steps]);
             }
 
             // Step 6: Clear all caches
             if ($verbose) $this->line('🧹 Nettoyage des caches...');
-            $this->runProcess($tenantPath, "{$phpBin} artisan config:clear 2>&1");
-            $this->runProcess($tenantPath, "{$phpBin} artisan cache:clear 2>&1");
-            $this->runProcess($tenantPath, "{$phpBin} artisan view:clear 2>&1");
-            $this->runProcess($tenantPath, "{$phpBin} artisan route:clear 2>&1");
-            $this->runProcess($tenantPath, "{$phpBin} artisan event:clear 2>&1");
+            $t = microtime(true);
+            foreach (['config:clear', 'cache:clear', 'view:clear', 'route:clear', 'event:clear'] as $cmd) {
+                $this->runProcess($tenantPath, "{$phpBin} artisan {$cmd} 2>&1");
+            }
+            $steps[] = ['step' => 'cache_clear', 'status' => 'ok', 'output' => 'config:clear, cache:clear, view:clear, route:clear, event:clear', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $deployment->update(['deployment_log' => $steps]);
 
             // Step 7: Rebuild optimized caches
             if ($verbose) $this->line('🔄 Reconstruction des caches...');
+            $t = microtime(true);
             $this->runProcess($tenantPath, "{$phpBin} artisan config:cache 2>&1");
             $this->runProcess($tenantPath, "{$phpBin} artisan route:cache 2>&1");
+            $steps[] = ['step' => 'cache_rebuild', 'status' => 'ok', 'output' => 'config:cache, route:cache', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $deployment->update(['deployment_log' => $steps]);
 
             // Step 8: Fix permissions
             if ($verbose) $this->line('🔐 Correction des permissions...');
+            $t = microtime(true);
             $this->runProcess($tenantPath, 'chmod -R 775 storage bootstrap/cache 2>&1');
+            $steps[] = ['step' => 'permissions', 'status' => 'ok', 'output' => 'chmod -R 775 storage bootstrap/cache', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $deployment->update(['deployment_log' => $steps]);
 
             // Step 9: Maintenance mode OFF
             if ($verbose) $this->line('✅ Désactivation du mode maintenance...');
-            $this->runProcess($tenantPath, "{$phpBin} artisan up 2>&1");
+            $t = microtime(true);
+            $out = $this->runProcess($tenantPath, "{$phpBin} artisan up 2>&1", true);
+            $steps[] = ['step' => 'maintenance_off', 'status' => 'ok', 'output' => trim($out) ?: 'Site remis en ligne.', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $deployment->update(['deployment_log' => $steps]);
 
             $duration = (int) (microtime(true) - $startTime);
 
@@ -187,6 +227,7 @@ class TenantDeploy extends Command
                 'status' => 'success',
                 'completed_at' => now(),
                 'duration_seconds' => $duration,
+                'deployment_log' => $steps,
             ]);
 
             $tenant->update([
@@ -211,11 +252,14 @@ class TenantDeploy extends Command
 
             $duration = (int) (microtime(true) - $startTime);
 
+            $steps[] = ['step' => 'error', 'status' => 'failed', 'output' => $e->getMessage(), 'duration_ms' => 0];
+
             $deployment->update([
                 'status' => 'failed',
                 'error_message' => $e->getMessage(),
                 'completed_at' => now(),
                 'duration_seconds' => $duration,
+                'deployment_log' => $steps,
             ]);
 
             if ($verbose) {

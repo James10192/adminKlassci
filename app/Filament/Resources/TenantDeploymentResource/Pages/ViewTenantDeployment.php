@@ -6,6 +6,7 @@ use App\Filament\Resources\TenantDeploymentResource;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Filament\Infolists\Components\ViewEntry;
 
 class ViewTenantDeployment extends ViewRecord
 {
@@ -64,8 +65,7 @@ class ViewTenantDeployment extends ViewRecord
 
                         Infolists\Components\TextEntry::make('duration_seconds')
                             ->label('Durée')
-                            ->formatStateUsing(fn ($state) => $state ? "{$state} secondes" : 'N/A')
-                            ->suffix(' s'),
+                            ->formatStateUsing(fn ($state) => $state ? "{$state} secondes" : 'N/A'),
 
                         Infolists\Components\TextEntry::make('deployedBy.name')
                             ->label('Déployé par')
@@ -90,9 +90,9 @@ class ViewTenantDeployment extends ViewRecord
 
                 Infolists\Components\Section::make('Logs de déploiement')
                     ->schema([
-                        Infolists\Components\TextEntry::make('deployment_log')
+                        Infolists\Components\ViewEntry::make('deployment_log')
                             ->label('')
-                            ->markdown()
+                            ->view('filament.infolists.deployment-terminal')
                             ->columnSpanFull(),
                     ])
                     ->collapsible()

@@ -17,13 +17,13 @@ class TenantHealthCheckResource extends Resource
 {
     protected static ?string $model = TenantHealthCheck::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-heart';
+    protected static ?string $navigationIcon = 'heroicon-o-exclamation-triangle';
 
-    protected static ?string $navigationLabel = 'Health Issues';
+    protected static ?string $navigationLabel = 'Issues détectées';
 
-    protected static ?string $modelLabel = 'Health Issue';
+    protected static ?string $modelLabel = 'Issue';
 
-    protected static ?string $pluralModelLabel = 'Health Issues';
+    protected static ?string $pluralModelLabel = 'Issues détectées';
 
     protected static ?string $navigationGroup = 'Monitoring';
 
@@ -49,13 +49,13 @@ class TenantHealthCheckResource extends Resource
         return $criticalCount > 0 ? 'danger' : 'warning';
     }
 
-    // Query par défaut : SEULEMENT les problèmes récents
+    // Query par défaut : problèmes non résolus (dernières 72h)
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
             ->whereIn('status', ['degraded', 'unhealthy'])
-            ->where('created_at', '>=', now()->subHours(24)) // Dernières 24h
-            ->latest('created_at');
+            ->where('checked_at', '>=', now()->subHours(72))
+            ->latest('checked_at');
     }
 
     public static function form(Form $form): Form

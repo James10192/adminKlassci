@@ -1,0 +1,117 @@
+name: Deploy Tenant via SSH
+
+# Déclenchement manuel depuis l'interface GitHub Actions
+# Secrets requis dans le repo adminKlassci :
+#   SSH_HOST      → web44.greathost.fr
+#   SSH_PORT      → 22 (ou le port SSH du serveur LWS)
+#   SSH_USER      → c2569688c
+#   SSH_KEY       → Clé privée SSH (générer avec ssh-keygen, ajouter la clé publique dans authorized_keys du serveur)
+#   ADMIN_PATH    → /home/c2569688c/public_html/admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_code:
+        description: "Code du tenant à déployer (ex: esbtp-abidjan) — laisser vide pour tous les tenants actifs"
+        required: false
+        default: ""
+      branch:
+        description: "Branche Git à déployer (laisser vide = branche configurée du tenant)"
+        required: false
+        default: ""
+      skip_backup:
+        description: "Passer le backup pré-déploiement"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      skip_migrations:
+        description: "Passer les migrations"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  deploy:
+    name: "Deploy ${{ inputs.tenant_code || 'all tenants' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: "📋 Afficher les paramètres"
+        run: |
+          echo "==========================================="
+          echo "  KLASSCI — Déploiement tenant"
+          echo "==========================================="
+          echo "  Tenant     : ${{ inputs.tenant_code || '(tous les tenants actifs)' }}"
+          echo "  Branche    : ${{ inputs.branch || '(branche configurée du tenant)' }}"
+          echo "  Skip backup: ${{ inputs.skip_backup }}"
+          echo "  Skip migr. : ${{ inputs.skip_migrations }}"
+          echo "  Déclenché par: ${{ github.actor }}"
+          echo "  Date       : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "==========================================="
+
+      - name: "🔑 Configurer SSH"
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: "✅ Ajouter le serveur aux known hosts"
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p ${{ secrets.SSH_PORT || 22 }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: "🚀 Lancer le déploiement via artisan"
+        run: |
+          # Construire la commande artisan
+          CMD="php ${{ secrets.ADMIN_PATH }}/artisan tenant:deploy"
+
+          if [ -n "${{ inputs.tenant_code }}" ]; then
+            CMD="$CMD ${{ inputs.tenant_code }}"
+          fi
+
+          if [ -n "${{ inputs.branch }}" ]; then
+            CMD="$CMD --branch=${{ inputs.branch }}"
+          fi
+
+          if [ "${{ inputs.skip_backup }}" = "true" ]; then
+            CMD="$CMD --skip-backup"
+          fi
+
+          if [ "${{ inputs.skip_migrations }}" = "true" ]; then
+            CMD="$CMD --skip-migrations"
+          fi
+
+          echo "Commande : $CMD"
+          echo "---"
+
+          ssh -p ${{ secrets.SSH_PORT || 22 }} \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=15 \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "$CMD"
+
+      - name: "✅ Déploiement terminé"
+        if: success()
+        run: |
+          echo ""
+          echo "==========================================="
+          echo "  ✅ Déploiement réussi !"
+          echo "  Voir les détails dans KLASSCI Master :"
+          echo "  https://admin.klassci.com/admin/tenant-deployments"
+          echo "==========================================="
+
+      - name: "❌ Déploiement échoué"
+        if: failure()
+        run: |
+          echo ""
+          echo "==========================================="
+          echo "  ❌ Le déploiement a échoué."
+          echo "  Consultez les logs ci-dessus pour le détail."
+          echo "  Le tenant a été remis en ligne automatiquement."
+          echo "==========================================="
