@@ -90,3 +90,19 @@ Schedule::command('tenant:send-alerts')
     ->onFailure(function () {
         \Log::error('❌ Échec de l\'envoi des alertes tenants');
     });
+
+// 7. Rotation des logs tenants — chaque dimanche à 01h00 (avant le health-check et les backups)
+//    Conserve 30 jours de logs ; libère la mémoire pour les commandes suivantes.
+Schedule::command('tenant:rotate-logs --days=30')
+    ->weekly()
+    ->sundays()
+    ->at('01:00')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/rotate-logs.log'))
+    ->onSuccess(function () {
+        \Log::info('✅ Rotation des logs tenants terminée avec succès');
+    })
+    ->onFailure(function () {
+        \Log::error('❌ Échec de la rotation des logs tenants');
+    });
