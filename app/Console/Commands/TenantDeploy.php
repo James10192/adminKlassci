@@ -203,11 +203,12 @@ class TenantDeploy extends Command
             $deployment->update(['deployment_log' => $steps]);
 
             // Step 7: Rebuild optimized caches
+            // NOTE: config:cache est volontairement omis — InstallationHelper vérifie
+            // l'état de la BDD dynamiquement et ne doit pas être mis en cache.
             if ($verbose) $this->line('🔄 Reconstruction des caches...');
             $t = microtime(true);
-            $this->runProcess($tenantPath, "{$phpBin} artisan config:cache 2>&1");
             $this->runProcess($tenantPath, "{$phpBin} artisan route:cache 2>&1");
-            $steps[] = ['step' => 'cache_rebuild', 'status' => 'ok', 'output' => 'config:cache, route:cache', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $steps[] = ['step' => 'cache_rebuild', 'status' => 'ok', 'output' => 'route:cache (config:cache omis intentionnellement)', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
             // Step 8: Fix permissions
