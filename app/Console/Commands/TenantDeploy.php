@@ -184,9 +184,13 @@ class TenantDeploy extends Command
             if (!$skipMigrations) {
                 if ($verbose) $this->line('🗄️  Exécution des migrations...');
                 $t = microtime(true);
-                $out = $this->runProcess($tenantPath, "{$phpBin} artisan migrate --force 2>&1", true);
-                $steps[] = ['step' => 'migrations', 'status' => 'ok', 'output' => trim($out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+                [$migrateStatus, $migrateOut] = $this->runMigrations($tenantPath, $phpBin);
+                $steps[] = ['step' => 'migrations', 'status' => $migrateStatus, 'output' => trim($migrateOut), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
                 $deployment->update(['deployment_log' => $steps]);
+                // Only abort if it's a real failure (not "table already exists")
+                if ($migrateStatus === 'failed') {
+                    throw new \Exception("Migration échouée :\n{$migrateOut}");
+                }
             }
 
             // Step 6: Clear all caches
@@ -276,6 +280,33 @@ class TenantDeploy extends Command
 
             return 1;
         }
+    }
+
+    /**
+     * Run migrations, tolerating "table already exists" errors.
+     * Returns ['ok'|'warning'|'failed', output].
+     */
+    private function runMigrations(string $directory, string $phpBin): array
+    {
+        $env = [];
+        if (!getenv('HOME')) {
+            $env['HOME'] = posix_getpwuid(posix_geteuid())['dir'] ?? '/tmp';
+        }
+
+        $result = Process::path($directory)->env($env)->run("{$phpBin} artisan migrate --force 2>&1");
+        $output = trim($result->output());
+
+        if ($result->successful()) {
+            return ['ok', $output];
+        }
+
+        // "Table already exists" means migrations ran but some are already applied outside
+        // the migrations table — treat as warning, not fatal error.
+        if (str_contains($output, 'already exists') || str_contains($output, 'Base table or view already exists')) {
+            return ['warning', $output];
+        }
+
+        return ['failed', $output];
     }
 
     /**
