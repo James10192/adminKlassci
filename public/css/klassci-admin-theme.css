@@ -197,20 +197,32 @@ header.fi-sidebar-header {
     color: var(--s-hover-t) !important;
 }
 
-/* ── ACTIF — écraser toutes les classes Tailwind Filament ── */
+/* ── ACTIF — écraser les classes Tailwind Filament pour l'item actif uniquement ── */
 .fi-sidebar-item-active .fi-sidebar-item-button,
 .fi-sidebar-item-button.fi-active,
 .fi-sidebar-item-button[aria-current="page"],
-.fi-sidebar-item-active > a.fi-sidebar-item-button,
-a.fi-sidebar-item-button.bg-primary-50,
-a.fi-sidebar-item-button.bg-gray-100,
-a.fi-sidebar-item-button.dark\:bg-primary-500\/10,
-a.fi-sidebar-item-button.dark\:bg-white\/5,
-a.fi-sidebar-item-button[class*="bg-primary"],
-a.fi-sidebar-item-button[class*="bg-gray"] {
+.fi-sidebar-item-active > a.fi-sidebar-item-button {
     background: var(--s-active-bg) !important;
     color: var(--s-active-t) !important;
     font-weight: 600 !important;
+}
+
+/* Filament injecte bg-primary-50 sur l'item actif — cibler UNIQUEMENT combiné avec fi-sidebar-item-active */
+.fi-sidebar-item-active a.fi-sidebar-item-button,
+.fi-sidebar-item-active a.fi-sidebar-item-button.bg-primary-50,
+.fi-sidebar-item-active a.fi-sidebar-item-button.bg-gray-100,
+.fi-sidebar-item-active a.fi-sidebar-item-button[class*="bg-primary"] {
+    background: var(--s-active-bg) !important;
+    color: var(--s-active-t) !important;
+    font-weight: 600 !important;
+}
+
+/* S'assurer que les items NON actifs restent transparents */
+a.fi-sidebar-item-button.bg-gray-100,
+a.fi-sidebar-item-button[class*="bg-gray"],
+a.fi-sidebar-item-button.bg-primary-50 {
+    background: transparent !important;
+    color: var(--s-text) !important;
 }
 
 .fi-sidebar-item-active .fi-sidebar-item-button:hover {
