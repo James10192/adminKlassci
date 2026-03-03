@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Models\TenantBackup;
+use App\Models\TenantHealthCheck;
 use App\Models\User;
 use Filament\Notifications\Notification;
 use Filament\Notifications\Actions\Action;
@@ -55,9 +57,35 @@ class SendTenantAlerts extends Command
                 }
             }
 
-            // --- 2. Abonnement expirant dans ≤ 30 jours ---
-            if ($tenant->subscription_end_date) {
-                $daysUntilExpiry = now()->diffInDays($tenant->subscription_end_date, false);
+            // --- 2. Abonnement déjà expiré ---
+            if ($tenant->subscription_end_date && $tenant->subscription_end_date->isPast()) {
+                $expiryDate = $tenant->subscription_end_date->format('d/m/Y');
+                $daysExpired = (int) $tenant->subscription_end_date->diffInDays(now());
+                $message = "L'abonnement a expiré depuis {$daysExpired} jour(s) (le {$expiryDate}).";
+
+                $this->error("🚨 Abonnement expiré: {$tenant->name} — {$message}");
+                $alertCount++;
+
+                if (!$dryRun) {
+                    foreach ($admins as $admin) {
+                        Notification::make()
+                            ->danger()
+                            ->title("Abonnement expiré : {$tenant->name}")
+                            ->body($message)
+                            ->icon('heroicon-o-x-circle')
+                            ->actions([
+                                Action::make('renew')
+                                    ->label('Renouveler')
+                                    ->url(route('filament.admin.resources.tenants.edit', $tenant->id))
+                                    ->button(),
+                            ])
+                            ->sendToDatabase($admin);
+                    }
+                }
+            }
+            // --- 3. Abonnement expirant dans ≤ 30 jours (mais pas encore expiré) ---
+            elseif ($tenant->subscription_end_date) {
+                $daysUntilExpiry = (int) now()->diffInDays($tenant->subscription_end_date, false);
 
                 if ($daysUntilExpiry >= 0 && $daysUntilExpiry <= 30) {
                     $expiryDate = $tenant->subscription_end_date->format('d/m/Y');
@@ -85,14 +113,9 @@ class SendTenantAlerts extends Command
                 }
             }
 
-            // --- 3. Tenant inactif depuis 7 jours (aucune mise à jour des stats) ---
+            // --- 4. Tenant inactif depuis 7 jours ---
             $daysSinceUpdate = $tenant->updated_at
-                ? now()->diffInDays($tenant->updated_at, false)
-                : null;
-
-            // updated_at devient négatif (passé) → diffInDays avec false retourne négatif si dans le passé
-            $daysSinceUpdate = $tenant->updated_at
-                ? now()->diffInDays($tenant->updated_at)
+                ? (int) now()->diffInDays($tenant->updated_at)
                 : null;
 
             if ($daysSinceUpdate !== null && $daysSinceUpdate >= 7) {
@@ -113,6 +136,74 @@ class SendTenantAlerts extends Command
                                 Action::make('view')
                                     ->label('Voir le tenant')
                                     ->url(route('filament.admin.resources.tenants.view', $tenant->id))
+                                    ->button(),
+                            ])
+                            ->sendToDatabase($admin);
+                    }
+                }
+            }
+
+            // --- 5. Health check unhealthy (HTTP ou DB) ---
+            $unhealthyCheck = TenantHealthCheck::where('tenant_id', $tenant->id)
+                ->whereIn('check_type', ['http_status', 'database_connection'])
+                ->where('status', 'unhealthy')
+                ->where('checked_at', '>=', now()->subHours(2))
+                ->orderByDesc('checked_at')
+                ->first();
+
+            if ($unhealthyCheck) {
+                $message = "Le check \"{$unhealthyCheck->check_type}\" est en état unhealthy depuis " . $unhealthyCheck->checked_at->diffForHumans() . ". Détails : " . ($unhealthyCheck->details ?? 'N/A');
+
+                $this->error("🔥 Health check KO: {$tenant->name} — {$message}");
+                $alertCount++;
+
+                if (!$dryRun) {
+                    foreach ($admins as $admin) {
+                        Notification::make()
+                            ->danger()
+                            ->title("Site inaccessible : {$tenant->name}")
+                            ->body($message)
+                            ->icon('heroicon-o-signal-slash')
+                            ->actions([
+                                Action::make('view')
+                                    ->label('Voir les health checks')
+                                    ->url(route('filament.admin.resources.tenants.view', $tenant->id) . '?activeRelationManager=1')
+                                    ->button(),
+                            ])
+                            ->sendToDatabase($admin);
+                    }
+                }
+            }
+
+            // --- 6. Aucun backup depuis plus de 7 jours ---
+            $lastBackup = TenantBackup::where('tenant_id', $tenant->id)
+                ->where('status', 'completed')
+                ->orderByDesc('created_at')
+                ->first();
+
+            $daysSinceBackup = $lastBackup
+                ? (int) $lastBackup->created_at->diffInDays(now())
+                : null;
+
+            if ($daysSinceBackup === null || $daysSinceBackup > 7) {
+                $message = $lastBackup
+                    ? "Dernier backup réussi il y a {$daysSinceBackup} jours ({$lastBackup->created_at->format('d/m/Y')})."
+                    : "Aucun backup réussi trouvé pour ce tenant.";
+
+                $this->warn("💾 Backup absent: {$tenant->name} — {$message}");
+                $alertCount++;
+
+                if (!$dryRun) {
+                    foreach ($admins as $admin) {
+                        Notification::make()
+                            ->warning()
+                            ->title("Backup manquant : {$tenant->name}")
+                            ->body($message)
+                            ->icon('heroicon-o-archive-box-x-mark')
+                            ->actions([
+                                Action::make('backup')
+                                    ->label('Voir les backups')
+                                    ->url(route('filament.admin.resources.tenants.view', $tenant->id) . '?activeRelationManager=2')
                                     ->button(),
                             ])
                             ->sendToDatabase($admin);
