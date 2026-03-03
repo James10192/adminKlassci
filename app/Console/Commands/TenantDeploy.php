@@ -284,7 +284,13 @@ class TenantDeploy extends Command
      */
     private function runProcess(string $directory, string $command, bool $returnOutput = false): string
     {
-        $result = Process::path($directory)->run($command);
+        // HOME doit être défini pour Composer (absent quand lancé via web/Artisan::call)
+        $env = [];
+        if (!getenv('HOME')) {
+            $env['HOME'] = posix_getpwuid(posix_geteuid())['dir'] ?? '/tmp';
+        }
+
+        $result = Process::path($directory)->env($env)->run($command);
 
         if (!$result->successful()) {
             throw new \Exception(
