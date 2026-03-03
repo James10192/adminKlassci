@@ -139,46 +139,46 @@ class TenantDeploy extends Command
 
             // Step 2: Maintenance mode ON
             if ($verbose) $this->line('🔧 Activation du mode maintenance...');
-            $this->run($tenantPath, "{$phpBin} artisan down --retry=60 --secret=klassci-deploy");
+            $this->runProcess($tenantPath, "{$phpBin} artisan down --retry=60 --secret=klassci-deploy");
 
             // Step 3: Git pull
             if ($verbose) $this->line('📥 Git pull...');
-            $this->run($tenantPath, "git fetch origin {$branch} 2>&1");
-            $this->run($tenantPath, "git reset --hard origin/{$branch} 2>&1");
+            $this->runProcess($tenantPath, "git fetch origin {$branch} 2>&1");
+            $this->runProcess($tenantPath, "git reset --hard origin/{$branch} 2>&1");
 
             // Get commit hash
-            $commitHash = trim($this->run($tenantPath, 'git rev-parse HEAD', true));
+            $commitHash = trim($this->runProcess($tenantPath, 'git rev-parse HEAD', true));
 
             // Step 4: Composer install
             if ($verbose) $this->line('📦 Composer install...');
-            $this->run($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction 2>&1");
+            $this->runProcess($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction 2>&1");
 
             // Step 5: Migrations
             if (!$skipMigrations) {
                 if ($verbose) $this->line('🗄️  Exécution des migrations...');
-                $this->run($tenantPath, "{$phpBin} artisan migrate --force 2>&1");
+                $this->runProcess($tenantPath, "{$phpBin} artisan migrate --force 2>&1");
             }
 
             // Step 6: Clear all caches
             if ($verbose) $this->line('🧹 Nettoyage des caches...');
-            $this->run($tenantPath, "{$phpBin} artisan config:clear 2>&1");
-            $this->run($tenantPath, "{$phpBin} artisan cache:clear 2>&1");
-            $this->run($tenantPath, "{$phpBin} artisan view:clear 2>&1");
-            $this->run($tenantPath, "{$phpBin} artisan route:clear 2>&1");
-            $this->run($tenantPath, "{$phpBin} artisan event:clear 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan config:clear 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan cache:clear 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan view:clear 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan route:clear 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan event:clear 2>&1");
 
             // Step 7: Rebuild optimized caches
             if ($verbose) $this->line('🔄 Reconstruction des caches...');
-            $this->run($tenantPath, "{$phpBin} artisan config:cache 2>&1");
-            $this->run($tenantPath, "{$phpBin} artisan route:cache 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan config:cache 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan route:cache 2>&1");
 
             // Step 8: Fix permissions
             if ($verbose) $this->line('🔐 Correction des permissions...');
-            $this->run($tenantPath, 'chmod -R 775 storage bootstrap/cache 2>&1');
+            $this->runProcess($tenantPath, 'chmod -R 775 storage bootstrap/cache 2>&1');
 
             // Step 9: Maintenance mode OFF
             if ($verbose) $this->line('✅ Désactivation du mode maintenance...');
-            $this->run($tenantPath, "{$phpBin} artisan up 2>&1");
+            $this->runProcess($tenantPath, "{$phpBin} artisan up 2>&1");
 
             $duration = (int) (microtime(true) - $startTime);
 
@@ -204,7 +204,7 @@ class TenantDeploy extends Command
         } catch (\Exception $e) {
             // Always try to bring the site back up
             try {
-                $this->run($tenantPath, "{$phpBin} artisan up 2>&1");
+                $this->runProcess($tenantPath, "{$phpBin} artisan up 2>&1");
             } catch (\Exception) {
                 // Ignore — site may already be up or path wrong
             }
@@ -238,7 +238,7 @@ class TenantDeploy extends Command
      * Run a shell command in the given directory.
      * Throws an exception if the command fails.
      */
-    private function run(string $directory, string $command, bool $returnOutput = false): string
+    private function runProcess(string $directory, string $command, bool $returnOutput = false): string
     {
         $result = Process::path($directory)->run($command);
 
