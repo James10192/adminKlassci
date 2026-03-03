@@ -386,40 +386,52 @@ class TenantResource extends Resource
                     })
                     ->formatStateUsing(fn (string $state): string => ucfirst($state)),
 
-                Tables\Columns\TextColumn::make('current_students')
-                    ->label('Étudiants')
-                    ->numeric()
-                    ->sortable()
-                    ->alignCenter()
-                    ->description('(avec compte)')
-                    ->toggleable(),
-
                 Tables\Columns\TextColumn::make('current_inscriptions_per_year')
-                    ->label('Inscriptions')
-                    ->numeric()
-                    ->sortable()
-                    ->alignCenter()
-                    ->description('(année courante)'),
+                    ->label('Inscrits / Max')
+                    ->formatStateUsing(fn (Tenant $record): string =>
+                        number_format($record->current_inscriptions_per_year) . ' / ' . number_format($record->max_inscriptions_per_year)
+                    )
+                    ->badge()
+                    ->color(fn (Tenant $record): string =>
+                        $record->current_inscriptions_per_year > $record->max_inscriptions_per_year ? 'danger' : 'success'
+                    )
+                    ->sortable(),
 
-                Tables\Columns\TextColumn::make('current_staff')
-                    ->label('Personnel')
-                    ->numeric()
-                    ->sortable()
-                    ->alignCenter()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('last_deployed_at')
-                    ->label('Dernier Déploiement')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable()
-                    ->toggleable()
-                    ->since(),
+                Tables\Columns\IconColumn::make('quota_ok')
+                    ->label('Quota')
+                    ->getStateUsing(fn (Tenant $record): bool => !$record->isOverQuota())
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-exclamation-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->tooltip(fn (Tenant $record): string => $record->isOverQuota() ? 'Quota dépassé' : 'Quota OK'),
 
                 Tables\Columns\TextColumn::make('subscription_end_date')
                     ->label('Expiration')
                     ->date('d/m/Y')
                     ->sortable()
-                    ->color(fn ($record) => $record->subscription_end_date && $record->subscription_end_date->isPast() ? 'danger' : null),
+                    ->badge()
+                    ->color(fn ($record) => match(true) {
+                        !$record->subscription_end_date => 'gray',
+                        $record->subscription_end_date->isPast() => 'danger',
+                        now()->diffInDays($record->subscription_end_date, false) <= 30 => 'warning',
+                        default => 'success',
+                    })
+                    ->formatStateUsing(function ($state, $record) {
+                        if (!$state) return '—';
+                        $days = now()->diffInDays($state, false);
+                        if ($days < 0) return 'Expiré';
+                        if ($days <= 30) return "Dans {$days}j";
+                        return $state->format('d/m/Y');
+                    }),
+
+                Tables\Columns\TextColumn::make('last_deployed_at')
+                    ->label('Déployé')
+                    ->since()
+                    ->sortable()
+                    ->toggleable()
+                    ->color('gray'),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Créé le')

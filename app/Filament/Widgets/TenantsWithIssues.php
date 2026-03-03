@@ -16,21 +16,29 @@ class TenantsWithIssues extends BaseWidget
     // Rafraîchissement automatique toutes les 30 secondes
     protected static ?string $pollingInterval = '30s';
 
+    protected static ?string $heading = 'Tenants nécessitant attention';
+
     protected function getTableHeading(): ?string
     {
-        return '🚨 Tenants nécessitant attention';
+        $count = TenantHealthCheck::whereIn('status', ['degraded', 'unhealthy'])
+            ->where('created_at', '>=', now()->subMinutes(15))
+            ->distinct('tenant_id')
+            ->count('tenant_id');
+
+        return $count > 0
+            ? "⚠️ {$count} tenant(s) nécessitent attention"
+            : '✅ Tous les tenants sont opérationnels';
     }
 
     public function table(Table $table): Table
     {
         return $table
             ->query(
-                // Récupérer uniquement les tenants avec des checks warning/critical récents (< 10 min)
                 TenantHealthCheck::query()
                     ->whereIn('status', ['degraded', 'unhealthy'])
-                    ->where('created_at', '>=', now()->subMinutes(10))
+                    ->where('created_at', '>=', now()->subMinutes(15))
                     ->with(['tenant'])
-                    ->orderBy('status', 'desc') // critical en premier
+                    ->orderByRaw("CASE WHEN status = 'unhealthy' THEN 0 ELSE 1 END")
                     ->orderBy('created_at', 'desc')
             )
             ->columns([

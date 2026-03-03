@@ -34,19 +34,29 @@ class AdminPanelProvider extends PanelProvider
             ->favicon(asset('images/LOGO-KLASSCI-PNG.png'))
             ->colors([
                 'primary' => [
-                    50 => '#eff6ff',
+                    50  => '#eff6ff',
                     100 => '#dbeafe',
                     200 => '#bfdbfe',
                     300 => '#93c5fd',
                     400 => '#60a5fa',
-                    500 => '#3b82f6',  // Couleur primaire KLASSCI
-                    600 => '#2563eb',  // Couleur accent KLASSCI
+                    500 => '#3b82f6',
+                    600 => '#2563eb',
                     700 => '#1d4ed8',
                     800 => '#1e40af',
                     900 => '#1e3a8a',
                     950 => '#172554',
                 ],
+                'gray' => Color::Slate,
             ])
+            // Thème CSS premium KLASSCI (chargé comme asset statique)
+            ->renderHook(
+                'panels::styles.after',
+                fn () => '<link rel="stylesheet" href="' . asset('css/klassci-admin-theme.css') . '?v=' . filemtime(public_path('css/klassci-admin-theme.css') ?: 1) . '">'
+            )
+            ->sidebarCollapsibleOnDesktop()
+            ->maxContentWidth('full')
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('30s')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
@@ -54,8 +64,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
-                \App\Filament\Widgets\CustomAccountWidget::class, // Full width account widget
-                // Filament info widget supprimé - nous créerons nos propres widgets SaaS
+                \App\Filament\Widgets\CustomAccountWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,

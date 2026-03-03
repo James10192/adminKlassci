@@ -11,83 +11,105 @@ class TenantHealthOverview extends BaseWidget
 {
     protected static ?int $sort = 1;
 
-    // Rafraîchissement automatique toutes les 30 secondes
     protected static ?string $pollingInterval = '30s';
+
+    protected int | string | array $columnSpan = 'full';
 
     protected function getStats(): array
     {
-        // Récupérer les derniers health checks pour chaque tenant (1 par tenant)
-        $latestChecks = TenantHealthCheck::select('tenant_id')
-            ->selectRaw('MAX(created_at) as latest_check')
+        $totalTenants = Tenant::where('status', 'active')->count();
+
+        // No health checks yet — use tenant count as baseline
+        if (TenantHealthCheck::count() === 0) {
+            return [
+                Stat::make('Tenants Opérationnels', $totalTenants)
+                    ->description("Aucun health check exécuté pour l'instant")
+                    ->descriptionIcon('heroicon-o-information-circle')
+                    ->color('gray')
+                    ->chart(array_fill(0, 7, $totalTenants)),
+
+                Stat::make('Tenants en Alerte', 0)
+                    ->description('Nécessitent attention')
+                    ->descriptionIcon('heroicon-o-exclamation-triangle')
+                    ->color('warning')
+                    ->chart([0, 0, 0, 0, 0, 0, 0]),
+
+                Stat::make('Tenants Critiques', 0)
+                    ->description('Lancez un health-check pour détecter les problèmes')
+                    ->descriptionIcon('heroicon-o-shield-check')
+                    ->color('success')
+                    ->chart([0, 0, 0, 0, 0, 0, 0]),
+            ];
+        }
+
+        // Get latest check per tenant (subquery approach for performance)
+        $latestCheckIds = TenantHealthCheck::selectRaw('MAX(id) as id')
             ->groupBy('tenant_id')
+            ->pluck('id');
+
+        $latestChecks = TenantHealthCheck::whereIn('id', $latestCheckIds)
+            ->with('tenant')
             ->get();
 
         $healthyCount = 0;
         $warningCount = 0;
         $criticalCount = 0;
-        $unknownCount = 0;
-        $tenantsWithIssues = [];
+        $checkedTenantIds = [];
 
-        foreach ($latestChecks as $checkInfo) {
-            // Récupérer le dernier check pour ce tenant
-            $latestCheck = TenantHealthCheck::where('tenant_id', $checkInfo->tenant_id)
-                ->where('created_at', $checkInfo->latest_check)
-                ->with('tenant')
-                ->first();
+        foreach ($latestChecks as $check) {
+            if (!$check->tenant) continue;
 
-            if (!$latestCheck) {
-                $unknownCount++;
-                continue;
+            $tenantId = $check->tenant_id;
+            if (in_array($tenantId, $checkedTenantIds)) continue;
+            $checkedTenantIds[] = $tenantId;
+
+            // Look at recent checks for this tenant (last 15 min)
+            $recentStatuses = TenantHealthCheck::where('tenant_id', $tenantId)
+                ->where('created_at', '>=', now()->subMinutes(15))
+                ->pluck('status')
+                ->toArray();
+
+            if (empty($recentStatuses)) {
+                // Fall back to latest single check
+                $recentStatuses = [$check->status];
             }
 
-            // Déterminer le statut global du tenant
-            $tenantChecks = TenantHealthCheck::where('tenant_id', $checkInfo->tenant_id)
-                ->where('created_at', '>=', now()->subMinutes(10))
-                ->get();
-
-            $hasCritical = $tenantChecks->where('status', 'unhealthy')->count() > 0;
-            $hasWarning = $tenantChecks->where('status', 'degraded')->count() > 0;
-
-            if ($hasCritical) {
+            if (in_array('unhealthy', $recentStatuses)) {
                 $criticalCount++;
-                $tenantsWithIssues[] = [
-                    'name' => $latestCheck->tenant->name,
-                    'status' => 'unhealthy',
-                    'id' => $latestCheck->tenant->id,
-                ];
-            } elseif ($hasWarning) {
+            } elseif (in_array('degraded', $recentStatuses)) {
                 $warningCount++;
-                $tenantsWithIssues[] = [
-                    'name' => $latestCheck->tenant->name,
-                    'status' => 'degraded',
-                    'id' => $latestCheck->tenant->id,
-                ];
             } else {
                 $healthyCount++;
             }
         }
 
-        // Total tenants actifs
-        $totalTenants = Tenant::where('status', 'active')->count();
+        // Tenants with no health check at all
+        $uncheckedCount = $totalTenants - count($checkedTenantIds);
+        $healthyCount = max(0, $healthyCount + $uncheckedCount);
+
+        $lastCheckTime = TenantHealthCheck::latest('created_at')->value('created_at');
+        $lastCheckLabel = $lastCheckTime
+            ? 'Dernière vérif. ' . \Carbon\Carbon::parse($lastCheckTime)->diffForHumans()
+            : 'Aucune vérification';
 
         return [
-            Stat::make('Tenants Healthy', $healthyCount)
-                ->description("Sur {$totalTenants} tenants actifs")
+            Stat::make('Opérationnels', $healthyCount)
+                ->description("Sur {$totalTenants} actifs · {$lastCheckLabel}")
                 ->descriptionIcon('heroicon-o-check-circle')
                 ->color('success')
-                ->chart([7, 6, 8, 5, 6, 7, $healthyCount]),
+                ->chart([max(0, $healthyCount - 2), $healthyCount - 1, $healthyCount, $healthyCount - 1, $healthyCount, $healthyCount, $healthyCount]),
 
-            Stat::make('Tenants Warning', $warningCount)
-                ->description('Nécessitent attention')
+            Stat::make('En Alerte', $warningCount)
+                ->description($warningCount > 0 ? 'Vérification recommandée' : 'Aucune dégradation détectée')
                 ->descriptionIcon('heroicon-o-exclamation-triangle')
-                ->color('warning')
-                ->chart([1, 2, 1, 3, 2, 1, $warningCount]),
+                ->color($warningCount > 0 ? 'warning' : 'gray')
+                ->chart([1, 0, 1, 2, 1, 0, $warningCount]),
 
-            Stat::make('Tenants Critical', $criticalCount)
-                ->description('Action immédiate requise')
-                ->descriptionIcon('heroicon-o-x-circle')
-                ->color('danger')
-                ->chart([0, 1, 0, 0, 1, 2, $criticalCount]),
+            Stat::make('Critiques', $criticalCount)
+                ->description($criticalCount > 0 ? 'Intervention immédiate requise !' : 'Aucun incident critique')
+                ->descriptionIcon($criticalCount > 0 ? 'heroicon-o-x-circle' : 'heroicon-o-shield-check')
+                ->color($criticalCount > 0 ? 'danger' : 'success')
+                ->chart([0, 0, 1, 0, 0, 0, $criticalCount]),
         ];
     }
 }

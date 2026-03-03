@@ -48,6 +48,15 @@ Schedule::command('tenant:update-stats --all')
     ->withoutOverlapping()
     ->runInBackground();
 
+// 5. Alertes tenants - Quotidien à 8h (quota dépassé, expiration, inactivité)
+Schedule::command('tenant:send-alerts')
+    ->dailyAt('08:00')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->onSuccess(function () {
+        \Log::info('✅ Alertes tenants envoyées avec succès');
+    });
+
 // ============================================
 // NOTES:
 // - Pour activer en production: ajouter au crontab

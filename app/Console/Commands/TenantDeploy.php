@@ -18,7 +18,7 @@ class TenantDeploy extends Command
 
     protected $description = 'Déployer les mises à jour d\'un tenant (Git pull + Composer + Migrations + Cache)';
 
-    public function handle()
+    public function handle(): int
     {
         $tenantCode = $this->argument('tenant');
         $branchOverride = $this->option('branch');
@@ -26,8 +26,15 @@ class TenantDeploy extends Command
         $skipMigrations = $this->option('skip-migrations');
         $deployAll = $this->option('all');
 
+        // Validate required env variables
+        $productionPath = config('app.production_path', env('PRODUCTION_PATH'));
+        if (!$productionPath) {
+            $this->error('❌ La variable PRODUCTION_PATH n\'est pas définie dans le .env.');
+            $this->line('   Exemple: PRODUCTION_PATH=/home/c2569688c/public_html/');
+            return 1;
+        }
+
         if ($tenantCode) {
-            // Déployer un seul tenant
             $tenant = Tenant::where('code', $tenantCode)->first();
 
             if (!$tenant) {
@@ -36,46 +43,45 @@ class TenantDeploy extends Command
             }
 
             return $this->deployTenant($tenant, $branchOverride, $skipBackup, $skipMigrations);
-        } else {
-            // Déployer plusieurs tenants
-            $query = Tenant::query();
-
-            if (!$deployAll) {
-                $query->active();
-            }
-
-            $tenants = $query->get();
-
-            if ($tenants->isEmpty()) {
-                $this->warn('⚠️  Aucun tenant à déployer.');
-                return 0;
-            }
-
-            $this->info("🚀 Déploiement de {$tenants->count()} tenant(s)...");
-            $this->newLine();
-
-            $bar = $this->output->createProgressBar($tenants->count());
-            $bar->start();
-
-            $successCount = 0;
-            $failureCount = 0;
-
-            foreach ($tenants as $tenant) {
-                $result = $this->deployTenant($tenant, $branchOverride, $skipBackup, $skipMigrations, false);
-                if ($result === 0) {
-                    $successCount++;
-                } else {
-                    $failureCount++;
-                }
-                $bar->advance();
-            }
-
-            $bar->finish();
-            $this->newLine(2);
-            $this->info("✅ Déploiements terminés : {$successCount} réussis, {$failureCount} échoués");
-
-            return $failureCount > 0 ? 1 : 0;
         }
+
+        // Deploy multiple tenants
+        $query = Tenant::query();
+        if (!$deployAll) {
+            $query->active();
+        }
+
+        $tenants = $query->get();
+
+        if ($tenants->isEmpty()) {
+            $this->warn('⚠️  Aucun tenant à déployer.');
+            return 0;
+        }
+
+        $this->info("🚀 Déploiement de {$tenants->count()} tenant(s)...");
+        $this->newLine();
+
+        $bar = $this->output->createProgressBar($tenants->count());
+        $bar->start();
+
+        $successCount = 0;
+        $failureCount = 0;
+
+        foreach ($tenants as $tenant) {
+            $result = $this->deployTenant($tenant, $branchOverride, $skipBackup, $skipMigrations, false);
+            if ($result === 0) {
+                $successCount++;
+            } else {
+                $failureCount++;
+            }
+            $bar->advance();
+        }
+
+        $bar->finish();
+        $this->newLine(2);
+        $this->info("✅ Déploiements terminés : {$successCount} réussis, {$failureCount} échoués");
+
+        return $failureCount > 0 ? 1 : 0;
     }
 
     private function deployTenant(
@@ -86,90 +92,96 @@ class TenantDeploy extends Command
         bool $verbose = true
     ): int {
         $startTime = microtime(true);
-        $branch = $branchOverride ?? $tenant->git_branch;
+        $branch = $branchOverride ?? $tenant->git_branch ?? 'presentation';
+        $productionPath = rtrim(env('PRODUCTION_PATH', ''), '/');
+        $tenantPath = "{$productionPath}/{$tenant->code}";
 
         if ($verbose) {
-            $this->info("🚀 Déploiement de '{$tenant->code}' (branche: {$branch})...");
+            $this->info("🚀 Déploiement de '{$tenant->code}' sur '{$tenantPath}' (branche: {$branch})...");
             $this->newLine();
         }
 
-        // Créer l'enregistrement de déploiement
+        // Verify directory exists before proceeding
+        if (!is_dir($tenantPath)) {
+            $this->error("❌ Répertoire introuvable : {$tenantPath}");
+            $this->line("   Vérifiez que PRODUCTION_PATH est correct et que le tenant a été provisionné.");
+            return 1;
+        }
+
+        // Detect PHP binary (cPanel uses versioned paths)
+        $phpBin = $this->detectPhpBinary();
+        // Detect Composer binary
+        $composerBin = $this->detectComposerBinary($tenantPath);
+
+        if ($verbose) {
+            $this->line("   PHP : {$phpBin}");
+            $this->line("   Composer : {$composerBin}");
+        }
+
         $deployment = TenantDeployment::create([
             'tenant_id' => $tenant->id,
             'git_branch' => $branch,
-            'git_commit_hash' => null, // Sera mis à jour après git pull
+            'git_commit_hash' => null,
             'status' => 'in_progress',
-            'deployed_by_user_id' => null, // CLI execution
+            'deployed_by_user_id' => auth()->id(),
             'started_at' => now(),
         ]);
 
         try {
-            $tenantPath = env('PRODUCTION_PATH') . $tenant->code;
-
-            // Vérifier l'existence du répertoire seulement si on est sur le serveur de production
-            if ($this->isOnProductionServer()) {
-                if (!file_exists($tenantPath) || !is_dir($tenantPath)) {
-                    throw new \Exception("Répertoire tenant introuvable: {$tenantPath}");
-                }
-            }
-            // Si on est en local, on ne peut pas vérifier (le répertoire est distant via SSH)
-
-            // Étape 1: Backup (si non désactivé)
+            // Step 1: Backup (optional)
             if (!$skipBackup) {
                 if ($verbose) $this->line('📦 Création d\'un backup...');
                 $this->call('tenant:backup', [
                     'tenant' => $tenant->code,
-                    '--type' => 'full',
+                    '--type' => 'database_only',
                 ]);
             }
 
-            // Étape 2: Mise en maintenance
+            // Step 2: Maintenance mode ON
             if ($verbose) $this->line('🔧 Activation du mode maintenance...');
-            $this->executeRemoteCommand($tenantPath, 'php artisan down --retry=60');
+            $this->run($tenantPath, "{$phpBin} artisan down --retry=60 --secret=klassci-deploy");
 
-            // Étape 3: Git pull
+            // Step 3: Git pull
             if ($verbose) $this->line('📥 Git pull...');
-            $this->executeRemoteCommand($tenantPath, "git fetch origin {$branch}");
-            $this->executeRemoteCommand($tenantPath, "git reset --hard origin/{$branch}");
+            $this->run($tenantPath, "git fetch origin {$branch} 2>&1");
+            $this->run($tenantPath, "git reset --hard origin/{$branch} 2>&1");
 
-            // Récupérer le commit hash actuel
-            $commitHash = trim($this->executeRemoteCommand($tenantPath, 'git rev-parse HEAD', true));
+            // Get commit hash
+            $commitHash = trim($this->run($tenantPath, 'git rev-parse HEAD', true));
 
-            // Étape 4: Composer install
+            // Step 4: Composer install
             if ($verbose) $this->line('📦 Composer install...');
-            $this->executeRemoteCommand($tenantPath, 'composer install --no-dev --optimize-autoloader --no-interaction');
+            $this->run($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction 2>&1");
 
-            // Étape 5: Migrations (si non désactivées)
+            // Step 5: Migrations
             if (!$skipMigrations) {
                 if ($verbose) $this->line('🗄️  Exécution des migrations...');
-                $this->executeRemoteCommand($tenantPath, 'php artisan migrate --force');
+                $this->run($tenantPath, "{$phpBin} artisan migrate --force 2>&1");
             }
 
-            // Étape 6: Clear caches
+            // Step 6: Clear all caches
             if ($verbose) $this->line('🧹 Nettoyage des caches...');
-            $this->executeRemoteCommand($tenantPath, 'php artisan config:clear');
-            $this->executeRemoteCommand($tenantPath, 'php artisan cache:clear');
-            $this->executeRemoteCommand($tenantPath, 'php artisan view:clear');
-            $this->executeRemoteCommand($tenantPath, 'php artisan route:clear');
+            $this->run($tenantPath, "{$phpBin} artisan config:clear 2>&1");
+            $this->run($tenantPath, "{$phpBin} artisan cache:clear 2>&1");
+            $this->run($tenantPath, "{$phpBin} artisan view:clear 2>&1");
+            $this->run($tenantPath, "{$phpBin} artisan route:clear 2>&1");
+            $this->run($tenantPath, "{$phpBin} artisan event:clear 2>&1");
 
-            // Étape 7: Rebuild caches
+            // Step 7: Rebuild optimized caches
             if ($verbose) $this->line('🔄 Reconstruction des caches...');
-            $this->executeRemoteCommand($tenantPath, 'php artisan config:cache');
-            $this->executeRemoteCommand($tenantPath, 'php artisan route:cache');
+            $this->run($tenantPath, "{$phpBin} artisan config:cache 2>&1");
+            $this->run($tenantPath, "{$phpBin} artisan route:cache 2>&1");
 
-            // Étape 8: Permissions
+            // Step 8: Fix permissions
             if ($verbose) $this->line('🔐 Correction des permissions...');
-            $this->executeRemoteCommand($tenantPath, 'chmod -R 775 storage');
-            $this->executeRemoteCommand($tenantPath, 'chmod -R 775 bootstrap/cache');
+            $this->run($tenantPath, 'chmod -R 775 storage bootstrap/cache 2>&1');
 
-            // Étape 9: Sortie du mode maintenance
+            // Step 9: Maintenance mode OFF
             if ($verbose) $this->line('✅ Désactivation du mode maintenance...');
-            $this->executeRemoteCommand($tenantPath, 'php artisan up');
+            $this->run($tenantPath, "{$phpBin} artisan up 2>&1");
 
-            // Calculer la durée
-            $duration = (int) ((microtime(true) - $startTime));
+            $duration = (int) (microtime(true) - $startTime);
 
-            // Mettre à jour le déploiement avec succès
             $deployment->update([
                 'git_commit_hash' => $commitHash,
                 'status' => 'success',
@@ -177,7 +189,6 @@ class TenantDeploy extends Command
                 'duration_seconds' => $duration,
             ]);
 
-            // Mettre à jour le tenant
             $tenant->update([
                 'git_commit_hash' => $commitHash,
                 'last_deployed_at' => now(),
@@ -185,20 +196,20 @@ class TenantDeploy extends Command
 
             if ($verbose) {
                 $this->newLine();
-                $this->displayDeploymentInfo($deployment);
+                $this->displayDeploymentInfo($deployment, $tenant);
             }
 
             return 0;
 
         } catch (\Exception $e) {
-            // Tenter de sortir du mode maintenance en cas d'erreur
+            // Always try to bring the site back up
             try {
-                $this->executeRemoteCommand($tenantPath, 'php artisan up');
-            } catch (\Exception $upException) {
-                // Ignorer les erreurs lors de la sortie du mode maintenance
+                $this->run($tenantPath, "{$phpBin} artisan up 2>&1");
+            } catch (\Exception) {
+                // Ignore — site may already be up or path wrong
             }
 
-            $duration = (int) ((microtime(true) - $startTime));
+            $duration = (int) (microtime(true) - $startTime);
 
             $deployment->update([
                 'status' => 'failed',
@@ -209,79 +220,100 @@ class TenantDeploy extends Command
 
             if ($verbose) {
                 $this->newLine();
-                $this->error("❌ Erreur : {$e->getMessage()}");
+                $this->error("❌ Erreur de déploiement : {$e->getMessage()}");
                 $this->newLine();
             }
 
             \Log::error("Erreur déploiement tenant {$tenant->code}", [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'path' => $tenantPath,
+                'branch' => $branch,
             ]);
 
             return 1;
         }
     }
 
-    private function executeRemoteCommand(string $path, string $command, bool $returnOutput = false): string
+    /**
+     * Run a shell command in the given directory.
+     * Throws an exception if the command fails.
+     */
+    private function run(string $directory, string $command, bool $returnOutput = false): string
     {
-        $fullCommand = "cd {$path} && {$command}";
-
-        // Détecter si on est sur le même serveur que les tenants
-        if ($this->isOnProductionServer()) {
-            // On est sur le serveur cPanel, exécution directe
-            $result = Process::run($fullCommand);
-
-            if (!$result->successful()) {
-                throw new \Exception("Commande échouée: {$command}\n{$result->errorOutput()}");
-            }
-
-            return $returnOutput ? $result->output() : '';
-        }
-
-        // On est en local/distant, utiliser SSH
-        $host = env('PRODUCTION_HOST');
-        $user = env('PRODUCTION_USER');
-        $sshCommand = "ssh {$user}@{$host} '{$fullCommand}'";
-
-        $result = Process::run($sshCommand);
+        $result = Process::path($directory)->run($command);
 
         if (!$result->successful()) {
-            throw new \Exception("Commande SSH échouée: {$command}\n{$result->errorOutput()}");
+            throw new \Exception(
+                "Commande échouée dans {$directory}:\n"
+                . "  CMD : {$command}\n"
+                . "  STDOUT : " . trim($result->output()) . "\n"
+                . "  STDERR : " . trim($result->errorOutput())
+            );
         }
 
         return $returnOutput ? $result->output() : '';
     }
 
     /**
-     * Vérifier si klassciMaster est sur le même serveur que les tenants
-     * Méthode : Vérifier si le répertoire PRODUCTION_PATH existe localement
+     * Detect the correct PHP binary for cPanel shared hosting.
+     * cPanel uses ea-php** paths; fallback to system `php`.
      */
-    private function isOnProductionServer(): bool
+    private function detectPhpBinary(): string
     {
-        $productionPath = env('PRODUCTION_PATH');
+        // Common cPanel PHP binary locations (ordered by preference)
+        $candidates = [
+            '/usr/local/bin/php',          // cPanel default symlink
+            '/opt/cpanel/ea-php84/root/usr/bin/php',
+            '/opt/cpanel/ea-php83/root/usr/bin/php',
+            '/opt/cpanel/ea-php82/root/usr/bin/php',
+            '/opt/cpanel/ea-php81/root/usr/bin/php',
+            'php',                          // System PATH fallback
+        ];
 
-        // Si le chemin de production existe et est accessible, on est sur le serveur
-        if ($productionPath && file_exists($productionPath) && is_dir($productionPath)) {
-            // Vérifier également si c'est bien un chemin de production (pas un chemin local de dev)
-            // Le chemin de production contient généralement "public_html" ou "home"
-            if (strpos($productionPath, 'public_html') !== false || strpos($productionPath, '/home/c') === 0) {
-                return true;
+        foreach ($candidates as $candidate) {
+            if ($candidate === 'php') {
+                return 'php'; // Always valid as PATH fallback
+            }
+            if (file_exists($candidate) && is_executable($candidate)) {
+                return $candidate;
             }
         }
 
-        // Par défaut, on suppose qu'on est en local (utiliser SSH)
-        return false;
+        return 'php';
     }
 
-    private function displayDeploymentInfo(TenantDeployment $deployment): void
+    /**
+     * Detect Composer binary: prefer composer.phar in tenant dir, then system.
+     */
+    private function detectComposerBinary(string $tenantPath): string
+    {
+        $phpBin = $this->detectPhpBinary();
+
+        $candidates = [
+            "{$tenantPath}/composer.phar" => "{$phpBin} {$tenantPath}/composer.phar",
+            '/usr/local/bin/composer'     => '/usr/local/bin/composer',
+            '/usr/bin/composer'           => '/usr/bin/composer',
+        ];
+
+        foreach ($candidates as $file => $command) {
+            if (file_exists($file)) {
+                return $command;
+            }
+        }
+
+        return 'composer'; // PATH fallback
+    }
+
+    private function displayDeploymentInfo(TenantDeployment $deployment, Tenant $tenant): void
     {
         $this->table(
             ['Propriété', 'Valeur'],
             [
                 ['ID Déploiement', $deployment->id],
+                ['Tenant', $tenant->name . ' (' . $tenant->code . ')'],
                 ['Branche', $deployment->git_branch],
-                ['Commit', substr($deployment->git_commit_hash, 0, 8)],
-                ['Statut', $deployment->status],
+                ['Commit', $deployment->git_commit_hash ? substr($deployment->git_commit_hash, 0, 8) : 'N/A'],
+                ['Statut', '✅ ' . $deployment->status],
                 ['Durée', $deployment->duration_seconds . ' secondes'],
                 ['Démarré', $deployment->started_at->format('Y-m-d H:i:s')],
                 ['Terminé', $deployment->completed_at->format('Y-m-d H:i:s')],
@@ -289,7 +321,7 @@ class TenantDeploy extends Command
         );
 
         $this->newLine();
-        $this->info('✅ Déploiement terminé avec succès !');
+        $this->info("✅ Déploiement de '{$tenant->code}' terminé avec succès !");
         $this->newLine();
     }
 }

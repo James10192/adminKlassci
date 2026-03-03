@@ -1,0 +1,450 @@
+/* ============================================================
+   KLASSCI Master — Premium Admin Theme
+   Filament v3 custom overrides
+   ============================================================ */
+
+/* ---- Variables ---- */
+:root {
+    --klassci-blue-50:  #eff6ff;
+    --klassci-blue-100: #dbeafe;
+    --klassci-blue-500: #3b82f6;
+    --klassci-blue-600: #2563eb;
+    --klassci-blue-700: #1d4ed8;
+    --klassci-blue-900: #1e3a8a;
+
+    --radius-card: 0.875rem;
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / .06), 0 4px 16px -2px rgb(0 0 0 / .08);
+    --shadow-card-hover: 0 4px 8px 0 rgb(0 0 0 / .08), 0 16px 40px -4px rgb(0 0 0 / .12);
+    --transition-base: all 0.2s ease;
+}
+
+/* ============================================================
+   SIDEBAR — look premium avec séparateurs subtils
+   ============================================================ */
+.fi-sidebar {
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%) !important;
+    border-right: 1px solid rgba(255,255,255,.05) !important;
+}
+
+.fi-sidebar-nav-groups {
+    padding: 0.5rem 0;
+}
+
+/* Logo zone */
+.fi-sidebar-header {
+    border-bottom: 1px solid rgba(255,255,255,.08) !important;
+    padding: 1.25rem 1rem !important;
+}
+
+/* Navigation group headers */
+.fi-sidebar-group-label {
+    color: rgba(148,163,184,.6) !important;
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+    padding: 0.75rem 1rem 0.25rem !important;
+}
+
+/* Nav items */
+.fi-sidebar-item-button {
+    border-radius: 0.625rem !important;
+    margin: 0.125rem 0.5rem !important;
+    padding: 0.625rem 0.75rem !important;
+    color: rgba(148,163,184,.85) !important;
+    transition: var(--transition-base) !important;
+}
+
+.fi-sidebar-item-button:hover {
+    background: rgba(59,130,246,.15) !important;
+    color: #93c5fd !important;
+}
+
+.fi-sidebar-item-button[aria-current="page"],
+.fi-sidebar-item-button.fi-active {
+    background: linear-gradient(135deg, rgba(59,130,246,.25) 0%, rgba(37,99,235,.2) 100%) !important;
+    color: #60a5fa !important;
+    border-left: 3px solid #3b82f6 !important;
+    font-weight: 600 !important;
+}
+
+/* Nav icons */
+.fi-sidebar-item-icon {
+    opacity: .75;
+}
+
+.fi-sidebar-item-button:hover .fi-sidebar-item-icon,
+.fi-sidebar-item-button[aria-current="page"] .fi-sidebar-item-icon {
+    opacity: 1;
+}
+
+/* Badges de navigation (ex: "3" pour établissements) */
+.fi-sidebar-item-badge {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    padding: 0.1rem 0.4rem !important;
+    border-radius: 9999px !important;
+    min-width: 1.25rem !important;
+    text-align: center !important;
+}
+
+/* ============================================================
+   TOP NAV BAR
+   ============================================================ */
+.fi-topbar {
+    background: rgba(255,255,255,.95) !important;
+    backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(0,0,0,.06) !important;
+    box-shadow: 0 1px 0 rgba(0,0,0,.04) !important;
+}
+
+/* ============================================================
+   STATS OVERVIEW CARDS — look premium
+   ============================================================ */
+.fi-wi-stats-overview-stat {
+    border-radius: var(--radius-card) !important;
+    box-shadow: var(--shadow-card) !important;
+    border: 1px solid rgba(0,0,0,.05) !important;
+    transition: var(--transition-base) !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.fi-wi-stats-overview-stat::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: currentColor;
+    opacity: 0.4;
+}
+
+.fi-wi-stats-overview-stat:hover {
+    box-shadow: var(--shadow-card-hover) !important;
+    transform: translateY(-2px);
+}
+
+.fi-wi-stats-overview-stat-value {
+    font-size: 1.875rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.025em !important;
+    line-height: 1.2 !important;
+}
+
+.fi-wi-stats-overview-stat-label {
+    font-size: 0.8125rem !important;
+    font-weight: 600 !important;
+    color: #64748b !important;
+    letter-spacing: 0.01em !important;
+}
+
+.fi-wi-stats-overview-stat-description {
+    font-size: 0.75rem !important;
+    color: #94a3b8 !important;
+}
+
+/* Chart sparkline dans les stats cards */
+.fi-wi-stats-overview-stat-chart {
+    opacity: 0.5;
+}
+
+/* ============================================================
+   DASHBOARD HEADER — Section titre page
+   ============================================================ */
+.fi-header {
+    border-bottom: 1px solid rgba(0,0,0,.05) !important;
+    padding-bottom: 1rem !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.fi-header-heading {
+    font-size: 1.5rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.02em !important;
+    color: #0f172a !important;
+}
+
+/* ============================================================
+   TABLE WIDGET (TenantsWithIssues, TenantsTableWidget)
+   ============================================================ */
+.fi-ta-ctn {
+    border-radius: var(--radius-card) !important;
+    box-shadow: var(--shadow-card) !important;
+    border: 1px solid rgba(0,0,0,.05) !important;
+    overflow: hidden;
+}
+
+.fi-ta-header-cell {
+    background: #f8fafc !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.05em !important;
+    text-transform: uppercase !important;
+    color: #64748b !important;
+    padding: 0.75rem 1rem !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.fi-ta-row {
+    transition: background 0.15s ease !important;
+}
+
+.fi-ta-row:hover td {
+    background: #f8fafc !important;
+}
+
+.fi-ta-cell {
+    padding: 0.875rem 1rem !important;
+    border-bottom: 1px solid rgba(0,0,0,.04) !important;
+}
+
+/* Heading du widget table */
+.fi-wi-table .fi-ta-content-ctn > .px-4.py-3 {
+    font-weight: 700 !important;
+    font-size: 0.9375rem !important;
+    color: #0f172a !important;
+}
+
+/* ============================================================
+   CARDS / SECTIONS (formulaires, view pages)
+   ============================================================ */
+.fi-section {
+    border-radius: var(--radius-card) !important;
+    box-shadow: var(--shadow-card) !important;
+    border: 1px solid rgba(0,0,0,.05) !important;
+}
+
+.fi-section-header {
+    border-bottom: 1px solid rgba(0,0,0,.05) !important;
+    padding: 1rem 1.25rem !important;
+}
+
+.fi-section-header-heading {
+    font-weight: 700 !important;
+    font-size: 0.9375rem !important;
+    color: #0f172a !important;
+}
+
+/* ============================================================
+   BADGES — style pill premium
+   ============================================================ */
+.fi-badge {
+    font-weight: 600 !important;
+    letter-spacing: 0.01em !important;
+    border-radius: 9999px !important;
+    padding: 0.2rem 0.625rem !important;
+    font-size: 0.6875rem !important;
+}
+
+/* ============================================================
+   TABS (onglets dans ViewTenant / EditTenant)
+   ============================================================ */
+.fi-tabs-tab {
+    font-weight: 600 !important;
+    font-size: 0.8125rem !important;
+    border-radius: 0.5rem !important;
+    transition: var(--transition-base) !important;
+    padding: 0.5rem 1rem !important;
+}
+
+.fi-tabs-tab[aria-selected="true"] {
+    background: var(--klassci-blue-500) !important;
+    color: white !important;
+}
+
+.fi-tabs-tab:not([aria-selected="true"]):hover {
+    background: var(--klassci-blue-50) !important;
+    color: var(--klassci-blue-600) !important;
+}
+
+/* ============================================================
+   BUTTONS — header actions
+   ============================================================ */
+.fi-btn {
+    border-radius: 0.625rem !important;
+    font-weight: 600 !important;
+    font-size: 0.8125rem !important;
+    transition: var(--transition-base) !important;
+    letter-spacing: 0.01em !important;
+}
+
+.fi-btn-color-primary {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    box-shadow: 0 2px 8px rgba(59,130,246,.35) !important;
+}
+
+.fi-btn-color-primary:hover {
+    box-shadow: 0 4px 16px rgba(59,130,246,.45) !important;
+    transform: translateY(-1px);
+}
+
+.fi-btn-color-success {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    box-shadow: 0 2px 8px rgba(16,185,129,.35) !important;
+}
+
+.fi-btn-color-warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    box-shadow: 0 2px 8px rgba(245,158,11,.35) !important;
+}
+
+.fi-btn-color-danger {
+    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    box-shadow: 0 2px 8px rgba(239,68,68,.35) !important;
+}
+
+/* ============================================================
+   CHART WIDGET — canvas wrapper
+   ============================================================ */
+.fi-wi-chart {
+    border-radius: var(--radius-card) !important;
+    box-shadow: var(--shadow-card) !important;
+    border: 1px solid rgba(0,0,0,.05) !important;
+}
+
+.fi-wi-chart canvas {
+    border-radius: 0 0 var(--radius-card) var(--radius-card) !important;
+}
+
+/* ============================================================
+   PAGE CONTENT — padding & grid
+   ============================================================ */
+.fi-main {
+    background: #f1f5f9 !important;
+}
+
+.fi-body {
+    background: #f1f5f9 !important;
+}
+
+/* Widget grid gaps plus généreux */
+.fi-wi-container {
+    gap: 1.25rem !important;
+}
+
+/* ============================================================
+   ACCOUNT WIDGET (CustomAccountWidget)
+   ============================================================ */
+.fi-wi-account {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1d4ed8 100%) !important;
+    border-radius: var(--radius-card) !important;
+    box-shadow: var(--shadow-card) !important;
+    color: white !important;
+    border: none !important;
+}
+
+.fi-wi-account .fi-wi-account-name {
+    color: white !important;
+    font-weight: 700 !important;
+    font-size: 1.125rem !important;
+}
+
+.fi-wi-account .fi-wi-account-email {
+    color: rgba(255,255,255,.7) !important;
+}
+
+.fi-wi-account .fi-btn {
+    background: rgba(255,255,255,.15) !important;
+    color: white !important;
+    border: 1px solid rgba(255,255,255,.2) !important;
+    backdrop-filter: blur(4px) !important;
+    box-shadow: none !important;
+}
+
+.fi-wi-account .fi-btn:hover {
+    background: rgba(255,255,255,.25) !important;
+    transform: none !important;
+}
+
+/* Avatar dans le widget compte */
+.fi-wi-account .fi-user-avatar {
+    border: 3px solid rgba(255,255,255,.3) !important;
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+}
+
+/* ============================================================
+   INFOLIST (ViewRecord pages)
+   ============================================================ */
+.fi-in-entry-wrp {
+    background: #f8fafc !important;
+    border-radius: 0.5rem !important;
+    padding: 0.75rem 1rem !important;
+    border: 1px solid #e2e8f0 !important;
+}
+
+.fi-in-entry-wrp-label {
+    font-size: 0.6875rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    color: #94a3b8 !important;
+    margin-bottom: 0.25rem !important;
+}
+
+.fi-in-text-item-label {
+    font-size: 0.9375rem !important;
+    font-weight: 500 !important;
+    color: #0f172a !important;
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.fi-ta-empty-state-icon {
+    color: #cbd5e1 !important;
+}
+
+.fi-ta-empty-state-heading {
+    color: #64748b !important;
+    font-weight: 700 !important;
+}
+
+/* ============================================================
+   PAGINATION
+   ============================================================ */
+.fi-pagination-items-per-page-select {
+    border-radius: 0.5rem !important;
+    border-color: #e2e8f0 !important;
+    font-size: 0.8125rem !important;
+}
+
+/* ============================================================
+   NOTIFICATIONS (toasts)
+   ============================================================ */
+.fi-no-ctn {
+    border-radius: 0.875rem !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,.15) !important;
+    border: 1px solid rgba(0,0,0,.06) !important;
+}
+
+/* ============================================================
+   LOGIN PAGE
+   ============================================================ */
+.fi-simple-layout {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1d4ed8 100%) !important;
+}
+
+.fi-simple-main {
+    border-radius: 1rem !important;
+    box-shadow: 0 24px 64px rgba(0,0,0,.25) !important;
+    border: 1px solid rgba(255,255,255,.08) !important;
+}
+
+/* ============================================================
+   RESOURCE PAGE HEADER
+   ============================================================ */
+.fi-page-header {
+    padding-bottom: 1rem !important;
+}
+
+.fi-breadcrumbs {
+    font-size: 0.75rem !important;
+    color: #94a3b8 !important;
+}
+
+.fi-breadcrumbs-item-separator {
+    color: #cbd5e1 !important;
+}

@@ -50,14 +50,16 @@ class TenantsTableWidget extends BaseWidget
                     ->label('Code')
                     ->searchable(),
 
-                Tables\Columns\BadgeColumn::make('plan')
+                Tables\Columns\TextColumn::make('plan')
                     ->label('Plan')
-                    ->colors([
-                        'secondary' => 'free',
-                        'primary' => 'essentiel',
-                        'success' => 'professional',
-                        'warning' => 'elite',
-                    ])
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'free' => 'gray',
+                        'essentiel' => 'primary',
+                        'professional' => 'success',
+                        'elite' => 'warning',
+                        default => 'gray',
+                    })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'free' => 'Free',
                         'essentiel' => 'Essentiel',
@@ -100,10 +102,13 @@ class TenantsTableWidget extends BaseWidget
             ])
             ->actions([
                 Tables\Actions\Action::make('view')
-                    ->label('Voir')
-                    ->icon('heroicon-m-eye')
-                    ->url(fn (Tenant $record): string => route('filament.admin.resources.tenants.edit', $record)),
+                    ->label('Gérer')
+                    ->icon('heroicon-m-arrow-top-right-on-square')
+                    ->url(fn (Tenant $record): string => route('filament.admin.resources.tenants.view', $record)),
             ])
+            ->emptyStateHeading('Aucune alerte active')
+            ->emptyStateDescription('Tous les quotas et abonnements sont dans les limites autorisées.')
+            ->emptyStateIcon('heroicon-o-check-badge')
             ->paginated([5, 10, 25]);
     }
 }
