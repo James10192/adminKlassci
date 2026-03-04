@@ -437,9 +437,10 @@
         }
         updateTimeAgo();
         setInterval(updateTimeAgo, 30000);
-        document.addEventListener('livewire:navigated', updateTimeAgo);
-        document.addEventListener('livewire:updated',  () => setTimeout(updateTimeAgo, 100));
-        document.addEventListener('livewire:morph',    () => setTimeout(updateTimeAgo, 100));
+        document.addEventListener('livewire:navigated',  updateTimeAgo);
+        document.addEventListener('livewire:updated',    () => setTimeout(updateTimeAgo, 100));
+        document.addEventListener('livewire:morph',      () => setTimeout(updateTimeAgo, 100));
+        document.addEventListener('refresh-timeago',     () => setTimeout(updateTimeAgo, 150));
 
         /* ── Terminal Alpine component ──
          * Reçoit les lignes via l'événement Livewire 'terminal-update'

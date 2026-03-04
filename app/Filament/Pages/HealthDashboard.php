@@ -201,8 +201,14 @@ class HealthDashboard extends Page
                 $this->logOffset = ftell($handle);
                 fclose($handle);
 
-                foreach (explode("\n", rtrim($chunk)) as $raw) {
-                    $line = trim($raw);
+                // Nettoyer les codes ANSI et les \r (progress bars)
+                $chunk = preg_replace('/\x1B\[[0-9;]*[a-zA-Z]/', '', $chunk); // codes ANSI
+                $chunk = preg_replace('/\x1B\][^\x07]*\x07/', '', $chunk);    // OSC sequences
+
+                foreach (explode("\n", $chunk) as $raw) {
+                    // Garder seulement la dernière partie après un \r (dernière état de la progress bar)
+                    $parts = explode("\r", $raw);
+                    $line  = trim(end($parts));
                     if ($line !== '') {
                         $newLines[] = $this->renderLine($this->detectLineType($line), $line);
                     }
@@ -227,6 +233,7 @@ class HealthDashboard extends Page
 
             // Recharger les données de la page
             $this->loadData();
+            $this->dispatch('refresh-timeago');
 
             // Nettoyer les fichiers tmp
             @unlink($logFile);
@@ -249,6 +256,9 @@ class HealthDashboard extends Page
         // Nettoyage fichiers si le terminal est fermé avant la fin
         @unlink($this->logFile());
         @unlink($this->pidFile());
+
+        // Déclencher la mise à jour des timestamps relatifs côté JS
+        $this->dispatch('refresh-timeago');
     }
 
     private function logFile(): string
