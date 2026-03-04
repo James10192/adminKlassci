@@ -21,7 +21,11 @@
         <p class="text-sm text-gray-500 dark:text-gray-400">
             Dernière vérification :
             <span class="font-semibold text-gray-700 dark:text-gray-300">
-                {{ $lastCheckedAt ? $lastCheckedAt->diffForHumans() : 'Jamais effectuée' }}
+                @if ($lastCheckedAt)
+                    <time class="x-timeago" datetime="{{ $lastCheckedAt->toIso8601String() }}">{{ $lastCheckedAt->toIso8601String() }}</time>
+                @else
+                    Jamais effectuée
+                @endif
             </span>
         </p>
         <x-filament::button
@@ -208,7 +212,7 @@
                         </span>
                         <span class="text-xs text-gray-400 dark:text-gray-500">
                             @if ($data['last_check'])
-                                {{ $data['last_check']->diffForHumans() }}
+                                <time class="x-timeago" datetime="{{ $data['last_check']->toIso8601String() }}">{{ $data['last_check']->toIso8601String() }}</time>
                             @else
                                 Jamais vérifié
                             @endif
@@ -332,5 +336,38 @@
             </a>
         </div>
     @endif
+
+    {{-- Affichage "il y a X" côté navigateur (respecte le TZ local) --}}
+    <script>
+        function timeAgo(date) {
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+            if (diff < 60) return 'il y a quelques secondes';
+            if (diff < 3600) {
+                const m = Math.floor(diff / 60);
+                return `il y a ${m} minute${m > 1 ? 's' : ''}`;
+            }
+            if (diff < 86400) {
+                const h = Math.floor(diff / 3600);
+                return `il y a ${h} heure${h > 1 ? 's' : ''}`;
+            }
+            const d = Math.floor(diff / 86400);
+            return `il y a ${d} jour${d > 1 ? 's' : ''}`;
+        }
+
+        function updateTimeAgo() {
+            document.querySelectorAll('time.x-timeago').forEach(el => {
+                const date = new Date(el.getAttribute('datetime'));
+                if (!isNaN(date)) el.textContent = timeAgo(date);
+            });
+        }
+
+        updateTimeAgo();
+        setInterval(updateTimeAgo, 30000);
+
+        // Réappliquer après les mises à jour Livewire
+        document.addEventListener('livewire:navigated', updateTimeAgo);
+        document.addEventListener('livewire:update', () => setTimeout(updateTimeAgo, 100));
+    </script>
 
 </x-filament-panels::page>
