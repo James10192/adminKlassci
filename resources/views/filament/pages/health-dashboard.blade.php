@@ -55,8 +55,12 @@
                     $ php artisan tenant:health-check --all
                 </div>
 
-                {{-- Output injecté dynamiquement par Alpine --}}
-                <div id="health-terminal-output"></div>
+                {{-- Output rendu par Alpine (survit aux re-renders Livewire) --}}
+                <div>
+                    <template x-for="(line, i) in lines" :key="i">
+                        <div x-html="line"></div>
+                    </template>
+                </div>
 
                 {{-- Curseur clignotant --}}
                 <div x-show="!done" style="display:inline-block;width:8px;height:1em;background:#67e8f9;opacity:.8;vertical-align:middle;margin-top:4px;animation:blink 1s step-end infinite;"></div>
@@ -449,29 +453,20 @@
         function healthTerminal() {
             return {
                 done: false,
+                lines: [],
 
                 init() {
                     this.$nextTick(() => this.scrollBottom());
                 },
 
                 onUpdate(detail) {
-                    console.log('[HealthTerminal] onUpdate', {
-                        linesCount: detail.lines ? detail.lines.length : 0,
-                        done: detail.done,
-                        lines: detail.lines,
-                    });
-                    const output = document.getElementById('health-terminal-output');
-                    if (output && detail.lines && detail.lines.length > 0) {
-                        detail.lines.forEach(html => {
-                            const wrapper = document.createElement('div');
-                            wrapper.innerHTML = html;
-                            output.appendChild(wrapper.firstChild || wrapper);
-                        });
-                        this.scrollBottom();
+                    if (detail.lines && detail.lines.length > 0) {
+                        this.lines = this.lines.concat(detail.lines);
+                        this.$nextTick(() => this.scrollBottom());
                     }
                     if (detail.done) {
                         this.done = true;
-                        this.scrollBottom();
+                        this.$nextTick(() => this.scrollBottom());
                     }
                 },
 
