@@ -1,19 +1,89 @@
 <x-filament-panels::page>
 
-    {{-- Poll toutes les 3s quand un check global est en cours --}}
-    @if ($isRunningAll)
-        <div wire:poll.3000ms="pollCheck"></div>
-    @endif
+    {{-- ═══════════════════════════════════════════════════════════════════
+         MODAL TERMINAL — Vérification en temps réel
+    ═══════════════════════════════════════════════════════════════════ --}}
+    @if ($terminalOpen)
+    <div
+        x-data="healthTerminal()"
+        x-init="init()"
+        @terminal-done.window="onDone()"
+        style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);"
+    >
+        <div style="width:min(860px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:16px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08);">
 
-    {{-- Bannière "en cours" --}}
-    @if ($isRunningAll)
-        <div class="flex items-center gap-3 rounded-xl px-5 py-3 mb-6 text-sm font-medium" style="background-color:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;">
-            <svg class="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-            </svg>
-            Vérification de tous les tenants en cours — la page se mettra à jour automatiquement dès la fin...
+            {{-- Barre titre --}}
+            <div style="background:#1e293b;padding:14px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.06);">
+                {{-- Dots macOS --}}
+                <div style="display:flex;gap:6px;">
+                    <span style="width:12px;height:12px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
+                    <span style="width:12px;height:12px;border-radius:50%;background:#f59e0b;display:inline-block;"></span>
+                    <span style="width:12px;height:12px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+                </div>
+                <div style="flex:1;text-align:center;">
+                    <span style="color:#94a3b8;font-size:0.78rem;font-family:monospace;letter-spacing:0.04em;">
+                        tenant:health-check --all
+                    </span>
+                </div>
+                {{-- Spinner / Checkmark --}}
+                <div x-show="!done" style="display:flex;align-items:center;gap:6px;">
+                    <svg style="width:14px;height:14px;color:#67e8f9;animation:spin 1s linear infinite;flex-shrink:0;" fill="none" viewBox="0 0 24 24">
+                        <circle style="opacity:.25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path style="opacity:.75;fill:#67e8f9" d="M4 12a8 8 0 018-8v8z"></path>
+                    </svg>
+                    <span style="color:#67e8f9;font-size:0.72rem;font-family:monospace;">En cours...</span>
+                </div>
+                <div x-show="done" x-cloak style="display:flex;align-items:center;gap:6px;">
+                    <svg style="width:14px;height:14px;color:#4ade80;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span style="color:#4ade80;font-size:0.72rem;font-family:monospace;">Terminé</span>
+                </div>
+            </div>
+
+            {{-- Corps terminal --}}
+            <div
+                id="health-terminal-body"
+                style="background:#0f172a;padding:16px 20px;overflow-y:auto;flex:1;min-height:320px;max-height:60vh;"
+            >
+                {{-- Prompt initial --}}
+                <div style="color:#475569;font-size:0.78rem;font-family:monospace;margin-bottom:8px;">
+                    $ php artisan tenant:health-check --all
+                </div>
+
+                {{-- Output streamé --}}
+                <div wire:stream="terminalOutput"></div>
+
+                {{-- Curseur clignotant --}}
+                <div x-show="!done" style="display:inline-block;width:8px;height:1em;background:#67e8f9;opacity:.8;vertical-align:middle;margin-top:4px;animation:blink 1s step-end infinite;"></div>
+            </div>
+
+            {{-- Pied : bouton Fermer (visible seulement quand terminé) --}}
+            <div
+                x-show="done"
+                x-cloak
+                style="background:#1e293b;padding:14px 20px;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;border-top:1px solid rgba(255,255,255,0.06);"
+            >
+                <button
+                    @click="close()"
+                    style="background:#334155;color:#e2e8f0;border:none;border-radius:8px;padding:8px 20px;font-size:0.82rem;font-family:monospace;cursor:pointer;transition:background .15s;"
+                    onmouseover="this.style.background='#475569'"
+                    onmouseout="this.style.background='#334155'"
+                >
+                    Fermer
+                </button>
+                <button
+                    @click="close()"
+                    style="background:#0891b2;color:white;border:none;border-radius:8px;padding:8px 20px;font-size:0.82rem;font-family:monospace;cursor:pointer;transition:background .15s;font-weight:600;"
+                    onmouseover="this.style.background='#0e7490'"
+                    onmouseout="this.style.background='#0891b2'"
+                >
+                    ✔ OK, fermer
+                </button>
+            </div>
+
         </div>
+    </div>
     @endif
 
     {{-- Page Header --}}
@@ -30,12 +100,12 @@
         </p>
         <x-filament::button
             wire:click="runAllChecks"
-            :disabled="$isRunningAll"
+            :disabled="$terminalOpen"
             color="primary"
             icon="heroicon-o-arrow-path"
             size="md"
         >
-            {{ $isRunningAll ? 'Vérification en cours...' : 'Vérifier tous les tenants' }}
+            Vérifier tous les tenants
         </x-filament::button>
     </div>
 
@@ -106,7 +176,6 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-3 sm:gap-4">
-                {{-- Days selector --}}
                 <div class="flex items-center gap-2">
                     <label class="text-xs font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">Conserver</label>
                     <select
@@ -121,7 +190,6 @@
                     </select>
                 </div>
 
-                {{-- Dry-run toggle --}}
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input
                         type="checkbox"
@@ -131,7 +199,6 @@
                     <span class="text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">Mode simulation</span>
                 </label>
 
-                {{-- Action button --}}
                 <x-filament::button
                     wire:click="rotateLogs"
                     wire:loading.attr="disabled"
@@ -219,13 +286,16 @@
                         </span>
                         <x-filament::button
                             wire:click="runTenantCheck('{{ $tenant->code }}')"
+                            :disabled="$isRunningTenant === $tenant->code"
                             wire:loading.attr="disabled"
                             wire:loading.class="opacity-60"
+                            wire:target="runTenantCheck('{{ $tenant->code }}')"
                             size="xs"
                             color="gray"
                             icon="heroicon-o-arrow-path"
                         >
-                            Re-vérifier
+                            <span wire:loading.remove wire:target="runTenantCheck('{{ $tenant->code }}')">Re-vérifier</span>
+                            <span wire:loading wire:target="runTenantCheck('{{ $tenant->code }}')">En cours...</span>
                         </x-filament::button>
                     </div>
                 </div>
@@ -254,7 +324,6 @@
                             };
                             $statusValue = $check['status'] ?? 'unknown';
 
-                            // Styles inline pour garantir les couleurs (évite les conflits CSS Filament)
                             $cardStyle = match($statusValue) {
                                 'healthy'   => 'background-color:#f0fdf4;border-color:#86efac;',
                                 'degraded'  => 'background-color:#fffbeb;border-color:#fcd34d;',
@@ -337,37 +406,66 @@
         </div>
     @endif
 
-    {{-- Affichage "il y a X" côté navigateur (respecte le TZ local) --}}
+    {{-- ═══════════════════════════════════════════════════════════════════
+         Scripts
+    ═══════════════════════════════════════════════════════════════════ --}}
+    <style>
+        @keyframes spin  { to { transform: rotate(360deg); } }
+        @keyframes blink { 50% { opacity: 0; } }
+        [x-cloak] { display: none !important; }
+    </style>
+
     <script>
+        /* ── timeAgo ── */
         function timeAgo(date) {
-            const now = new Date();
-            const diff = Math.floor((now - date) / 1000);
-            if (diff < 60) return 'il y a quelques secondes';
-            if (diff < 3600) {
-                const m = Math.floor(diff / 60);
-                return `il y a ${m} minute${m > 1 ? 's' : ''}`;
-            }
-            if (diff < 86400) {
-                const h = Math.floor(diff / 3600);
-                return `il y a ${h} heure${h > 1 ? 's' : ''}`;
-            }
+            const diff = Math.floor((new Date() - date) / 1000);
+            if (diff < 60)    return 'il y a quelques secondes';
+            if (diff < 3600)  { const m = Math.floor(diff / 60);   return `il y a ${m} minute${m > 1 ? 's' : ''}`; }
+            if (diff < 86400) { const h = Math.floor(diff / 3600); return `il y a ${h} heure${h > 1 ? 's' : ''}`; }
             const d = Math.floor(diff / 86400);
             return `il y a ${d} jour${d > 1 ? 's' : ''}`;
         }
-
         function updateTimeAgo() {
             document.querySelectorAll('time.x-timeago').forEach(el => {
-                const date = new Date(el.getAttribute('datetime'));
-                if (!isNaN(date)) el.textContent = timeAgo(date);
+                const d = new Date(el.getAttribute('datetime'));
+                if (!isNaN(d)) el.textContent = timeAgo(d);
             });
         }
-
         updateTimeAgo();
         setInterval(updateTimeAgo, 30000);
-
-        // Réappliquer après les mises à jour Livewire
         document.addEventListener('livewire:navigated', updateTimeAgo);
-        document.addEventListener('livewire:update', () => setTimeout(updateTimeAgo, 100));
+        document.addEventListener('livewire:updated',  () => setTimeout(updateTimeAgo, 100));
+        document.addEventListener('livewire:morph',    () => setTimeout(updateTimeAgo, 100));
+
+        /* ── Terminal Alpine component ── */
+        function healthTerminal() {
+            return {
+                done: false,
+
+                init() {
+                    this.$nextTick(() => this.scrollBottom());
+
+                    // Auto-scroll sur chaque nouveau contenu streamé
+                    const observer = new MutationObserver(() => this.scrollBottom());
+                    const body = document.getElementById('health-terminal-body');
+                    if (body) observer.observe(body, { childList: true, subtree: true });
+                },
+
+                onDone() {
+                    this.done = true;
+                    this.scrollBottom();
+                },
+
+                close() {
+                    @this.call('closeTerminal');
+                },
+
+                scrollBottom() {
+                    const body = document.getElementById('health-terminal-body');
+                    if (body) body.scrollTop = body.scrollHeight;
+                },
+            };
+        }
     </script>
 
 </x-filament-panels::page>
