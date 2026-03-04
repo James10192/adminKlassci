@@ -166,17 +166,27 @@ class HealthDashboard extends Page
         $php     = PHP_BINARY;
         $artisan = base_path('artisan');
 
-        // Lance en arrière-plan, écrit stdout+stderr dans le fichier log
-        // Le fichier .pid contiendra le code de sortie quand c'est terminé
+        // Lance en arrière-plan via proc_open avec STDIN/STDOUT/STDERR fermés
+        // proc_open + /dev/null garantit un vrai détachement même sur LWS/Varnish
+        // où shell_exec('... &') bloque quand même jusqu'à la fin du process
         $cmd = sprintf(
-            'nohup %s -d memory_limit=512M %s tenant:health-check --all > %s 2>&1; echo $? > %s &',
+            '%s -d memory_limit=512M %s tenant:health-check --all > %s 2>&1; echo $? > %s',
             escapeshellarg($php),
             escapeshellarg($artisan),
             escapeshellarg($logFile),
             escapeshellarg($pidFile)
         );
 
-        shell_exec($cmd);
+        $descriptors = [
+            0 => ['file', '/dev/null', 'r'],  // stdin  : fermé
+            1 => ['file', '/dev/null', 'w'],  // stdout : fermé (la commande redirige elle-même)
+            2 => ['file', '/dev/null', 'w'],  // stderr : fermé
+        ];
+
+        $proc = proc_open('nohup bash -c ' . escapeshellarg($cmd) . ' &', $descriptors, $pipes);
+        if (is_resource($proc)) {
+            proc_close($proc);
+        }
     }
 
     /**
