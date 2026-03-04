@@ -4,15 +4,19 @@
          MODAL TERMINAL — Vérification en temps réel
          Approche : background job + polling Livewire (compatible Varnish/proxy)
     ═══════════════════════════════════════════════════════════════════ --}}
+    {{-- Poll Livewire toutes les 2s tant que le terminal est ouvert (EN DEHORS du wire:ignore) --}}
+    @if ($terminalOpen)
+    <div wire:poll.2000ms="pollTerminal" style="display:none;" aria-hidden="true"></div>
+    @endif
+
     @if ($terminalOpen)
     <div
+        wire:ignore
         x-data="healthTerminal()"
         x-init="init()"
         @terminal-update.window="onUpdate($event.detail)"
         style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);"
     >
-        {{-- Poll Livewire toutes les 2s tant que le terminal est ouvert et pas terminé --}}
-        <div wire:poll.2000ms="pollTerminal" x-show="false" aria-hidden="true"></div>
 
         <div style="width:min(860px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:16px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08);">
 
@@ -55,12 +59,8 @@
                     $ php artisan tenant:health-check --all
                 </div>
 
-                {{-- Output rendu par Alpine (survit aux re-renders Livewire) --}}
-                <div>
-                    <template x-for="(line, i) in lines" :key="i">
-                        <div x-html="line"></div>
-                    </template>
-                </div>
+                {{-- Output rendu par Alpine (survit aux re-renders Livewire grâce à wire:ignore) --}}
+                <div id="health-terminal-output"></div>
 
                 {{-- Curseur clignotant --}}
                 <div x-show="!done" style="display:inline-block;width:8px;height:1em;background:#67e8f9;opacity:.8;vertical-align:middle;margin-top:4px;animation:blink 1s step-end infinite;"></div>
@@ -453,16 +453,23 @@
         function healthTerminal() {
             return {
                 done: false,
-                lines: [],
 
                 init() {
                     this.$nextTick(() => this.scrollBottom());
                 },
 
                 onUpdate(detail) {
+                    // wire:ignore protège le DOM — injection directe safe
                     if (detail.lines && detail.lines.length > 0) {
-                        this.lines = this.lines.concat(detail.lines);
-                        this.$nextTick(() => this.scrollBottom());
+                        const output = document.getElementById('health-terminal-output');
+                        if (output) {
+                            detail.lines.forEach(line => {
+                                const tmp = document.createElement('div');
+                                tmp.innerHTML = line;
+                                output.appendChild(tmp.firstChild || tmp);
+                            });
+                            this.$nextTick(() => this.scrollBottom());
+                        }
                     }
                     if (detail.done) {
                         this.done = true;
