@@ -41,6 +41,9 @@ class HealthDashboard extends Page
     /** Process terminé */
     public bool $runDone = false;
 
+    /** Indique qu'un reload des données est nécessaire à la fermeture */
+    public bool $pendingReload = false;
+
     /** Check individuel en cours */
     public string $isRunningTenant = '';
 
@@ -151,10 +154,11 @@ class HealthDashboard extends Page
      */
     public function runAllChecks(): void
     {
-        $this->runId      = uniqid('health_', true);
-        $this->logOffset  = 0;
-        $this->runDone    = false;
-        $this->terminalOpen = true;
+        $this->runId         = uniqid('health_', true);
+        $this->logOffset     = 0;
+        $this->runDone       = false;
+        $this->pendingReload = false;
+        $this->terminalOpen  = true;
 
         $logFile = $this->logFile();
         $pidFile = $this->pidFile();
@@ -231,9 +235,10 @@ class HealthDashboard extends Page
                 $newLines[] = $this->renderLine('error', "✘ Terminé avec le code d'erreur {$exitCode}.");
             }
 
-            // Recharger les données de la page
-            $this->loadData();
-            $this->dispatch('refresh-timeago');
+            // Marquer qu'un reload est nécessaire — on NE recharge PAS ici
+            // pour éviter que Livewire re-render le composant et détruise
+            // le terminal Alpine avant que l'event terminal-update soit traité.
+            $this->pendingReload = true;
 
             // Nettoyer les fichiers tmp
             @unlink($logFile);
@@ -248,14 +253,23 @@ class HealthDashboard extends Page
 
     public function closeTerminal(): void
     {
-        $this->terminalOpen = false;
-        $this->runId        = '';
-        $this->logOffset    = 0;
-        $this->runDone      = false;
+        $needsReload = $this->pendingReload;
+
+        $this->terminalOpen  = false;
+        $this->runId         = '';
+        $this->logOffset     = 0;
+        $this->runDone       = false;
+        $this->pendingReload = false;
 
         // Nettoyage fichiers si le terminal est fermé avant la fin
         @unlink($this->logFile());
         @unlink($this->pidFile());
+
+        // Recharger les données maintenant que le terminal est fermé
+        // (le re-render Livewire ne détruit plus rien)
+        if ($needsReload) {
+            $this->loadData();
+        }
 
         // Déclencher la mise à jour des timestamps relatifs côté JS
         $this->dispatch('refresh-timeago');
