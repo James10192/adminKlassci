@@ -163,15 +163,18 @@ class HealthDashboard extends Page
         $logFile = $this->logFile();
         $pidFile = $this->pidFile();
 
-        $php     = PHP_BINARY;
+        // PHP_BINARY sur LWS pointe vers le binaire LSAPI (mode web) qui ne supporte pas -d.
+        // On utilise le PHP CLI : /usr/local/bin/php (LWS standard), sinon PHP_BINARY.
+        $php     = file_exists('/usr/local/bin/php') ? '/usr/local/bin/php' : PHP_BINARY;
         $artisan = base_path('artisan');
 
         \Log::debug('[HealthDashboard] runAllChecks START', [
-            'runId'   => $this->runId,
-            'logFile' => $logFile,
-            'pidFile' => $pidFile,
-            'php'     => $php,
-            'artisan' => $artisan,
+            'runId'      => $this->runId,
+            'logFile'    => $logFile,
+            'pidFile'    => $pidFile,
+            'php'        => $php,
+            'PHP_BINARY' => PHP_BINARY,
+            'artisan'    => $artisan,
         ]);
 
         // Lance en arrière-plan via proc_open avec STDIN/STDOUT/STDERR fermés
