@@ -242,6 +242,22 @@
                     'degraded'  => 'background-color:#fffbeb;',
                     default     => 'background-color:#f0fdf4;',
                 };
+
+                // Badge expiration contrat
+                $daysLeft = null;
+                $expiryBadge = null;
+                if ($tenant->subscription_end_date) {
+                    $daysLeft = (int) now()->diffInDays($tenant->subscription_end_date, false);
+                    if ($tenant->is_expired) {
+                        $expiryBadge = ['label' => 'Expiré', 'style' => 'background:#ef4444;color:#fff;'];
+                    } elseif ($daysLeft <= 7) {
+                        $expiryBadge = ['label' => $daysLeft . 'j restants', 'style' => 'background:#ef4444;color:#fff;animation:expiry-pulse 1.5s ease-in-out infinite;'];
+                    } elseif ($daysLeft <= 14) {
+                        $expiryBadge = ['label' => $daysLeft . 'j restants', 'style' => 'background:#f59e0b;color:#fff;'];
+                    } elseif ($daysLeft <= 30) {
+                        $expiryBadge = ['label' => $daysLeft . 'j restants', 'style' => 'background:#3b82f6;color:#fff;'];
+                    }
+                }
                 $statusLabel = match($globalStatus) {
                     'unhealthy' => 'Critique',
                     'degraded'  => 'Dégradé',
@@ -285,6 +301,12 @@
                         <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style="{{ $statusBadgeStyle }}">
                             {{ $statusLabel }}
                         </span>
+                        @if($expiryBadge)
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold" style="{{ $expiryBadge['style'] }}" title="Expiration : {{ $tenant->subscription_end_date?->format('d/m/Y') }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                {{ $expiryBadge['label'] }}
+                            </span>
+                        @endif
                         <span class="text-xs text-gray-400 dark:text-gray-500">
                             @if ($data['last_check'])
                                 <time class="x-timeago" datetime="{{ $data['last_check']->toIso8601String() }}">{{ $data['last_check']->toIso8601String() }}</time>
@@ -420,6 +442,7 @@
     <style>
         @keyframes spin  { to { transform: rotate(360deg); } }
         @keyframes blink { 50% { opacity: 0; } }
+        @keyframes expiry-pulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
         [x-cloak] { display: none !important; }
     </style>
 

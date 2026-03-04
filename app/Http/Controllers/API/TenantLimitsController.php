@@ -68,6 +68,10 @@ class TenantLimitsController extends Controller
             ]);
         }
 
+        $daysRemaining = $tenant->subscription_end_date
+            ? now()->diffInDays($tenant->subscription_end_date, false)
+            : null;
+
         return response()->json([
             'tenant_code' => $tenant->code,
             'tenant_name' => $tenant->name,
@@ -77,8 +81,12 @@ class TenantLimitsController extends Controller
                 'start_date' => $tenant->subscription_start_date?->format('Y-m-d'),
                 'end_date' => $tenant->subscription_end_date?->format('Y-m-d'),
                 'is_expired' => $isExpired,
-                'days_remaining' => $tenant->subscription_end_date ?
-                    now()->diffInDays($tenant->subscription_end_date, false) : null,
+                'days_remaining' => $daysRemaining,
+                'show_warning' => $isExpired || ($daysRemaining !== null && $daysRemaining <= 30),
+                'urgency' => $isExpired || $daysRemaining <= 0 ? 'expired'
+                    : ($daysRemaining <= 7 ? 'red'
+                    : ($daysRemaining <= 14 ? 'orange'
+                    : ($daysRemaining <= 30 ? 'green' : null))),
             ],
             'limits' => [
                 'max_users' => $tenant->max_users,
