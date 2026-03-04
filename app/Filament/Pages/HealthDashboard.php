@@ -341,19 +341,31 @@ class HealthDashboard extends Page
     {
         $this->isRunningTenant = $tenantCode;
 
-        $php     = PHP_BINARY;
+        $php     = file_exists('/usr/local/bin/php') ? '/usr/local/bin/php' : PHP_BINARY;
         $artisan = base_path('artisan');
+
+        $before = \App\Models\TenantHealthCheck::latest('checked_at')->value('checked_at');
 
         $process = new Process([$php, '-d', 'memory_limit=512M', $artisan, 'tenant:health-check', $tenantCode]);
         $process->setTimeout(60);
         $process->run();
+
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $newChecksCount = \App\Models\TenantHealthCheck::where('checked_at', '>', $before ?? '1970-01-01')->count();
+
+        \Log::info('[HealthDashboard] runTenantCheck', [
+            'tenantCode'    => $tenantCode,
+            'exitCode'      => $process->getExitCode(),
+            'newChecks'     => $newChecksCount,
+            'output'        => substr($output, 0, 500),
+        ]);
 
         $this->loadData();
         $this->isRunningTenant = '';
 
         Notification::make()
             ->title('Check terminé')
-            ->body("Vérification de {$tenantCode} effectuée.")
+            ->body("Vérification de {$tenantCode} effectuée. ({$newChecksCount} checks créés)")
             ->success()
             ->send();
     }
@@ -366,7 +378,7 @@ class HealthDashboard extends Page
             $args[] = '--dry-run';
         }
 
-        $php     = PHP_BINARY;
+        $php     = file_exists('/usr/local/bin/php') ? '/usr/local/bin/php' : PHP_BINARY;
         $artisan = base_path('artisan');
 
         $process = new Process([$php, '-d', 'memory_limit=512M', $artisan, ...$args]);
