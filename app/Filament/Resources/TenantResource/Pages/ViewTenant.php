@@ -187,6 +187,43 @@ class ViewTenant extends ViewRecord
                 })
                 ->visible(fn () => $this->record->status === 'active'),
 
+            // Action: Générer / Régénérer le token API
+            Actions\Action::make('generate_api_token')
+                ->label(fn () => $this->record->api_token ? 'Régénérer le token API' : 'Générer le token API')
+                ->icon('heroicon-o-key')
+                ->color(fn () => $this->record->api_token ? 'warning' : 'success')
+                ->requiresConfirmation()
+                ->modalHeading(fn () => $this->record->api_token ? 'Régénérer le token API' : 'Générer le token API')
+                ->modalDescription(fn () => $this->record->api_token
+                    ? 'Un nouveau token sera généré. L\'ancien token sera immédiatement invalidé et le tenant ne pourra plus appeler l\'API Master tant que son .env n\'est pas mis à jour.'
+                    : 'Un token sécurisé sera créé pour ce tenant. Il devra être copié dans le fichier .env du tenant.')
+                ->modalSubmitActionLabel('Générer')
+                ->action(function () {
+                    $token = bin2hex(random_bytes(32)); // 64 caractères hex
+
+                    $this->record->update([
+                        'api_token'            => $token,
+                        'api_token_created_at' => now(),
+                    ]);
+
+                    $this->record->refresh();
+
+                    $appUrl    = config('app.url');
+                    $envBlock  = implode("\n", [
+                        "# Coller ces lignes dans le fichier .env du tenant ({$this->record->code})",
+                        "MASTER_API_URL={$appUrl}/api",
+                        "MASTER_API_TOKEN={$token}",
+                        "TENANT_CODE={$this->record->code}",
+                    ]);
+
+                    Notification::make()
+                        ->success()
+                        ->title('Token API généré ✅')
+                        ->body("Copiez ce bloc dans le .env du tenant :\n\n{$envBlock}")
+                        ->persistent()
+                        ->send();
+                }),
+
             // Action standard: Edit
             Actions\EditAction::make()
                 ->icon('heroicon-o-pencil')

@@ -131,6 +131,35 @@ class TenantResource extends Resource
                                             ->label('Dernier Déploiement')
                                             ->disabled(),
                                     ])->columns(3),
+
+                                Forms\Components\Section::make('Token API Master')
+                                    ->description('Token permettant au tenant d\'appeler l\'API Master. Générez-le depuis la page de détail (bouton "Générer le token API"), puis copiez le bloc .env fourni.')
+                                    ->schema([
+                                        Forms\Components\TextInput::make('api_token')
+                                            ->label('Token API actuel')
+                                            ->disabled()
+                                            ->placeholder('Aucun token généré — utilisez le bouton sur la page de détail')
+                                            ->helperText(fn ($record) => $record?->api_token_created_at
+                                                ? 'Généré le ' . $record->api_token_created_at->format('d/m/Y à H:i')
+                                                : null)
+                                            ->suffixIcon(fn ($record) => $record?->api_token ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')
+                                            ->suffixIconColor(fn ($record) => $record?->api_token ? 'success' : 'danger'),
+
+                                        Forms\Components\Placeholder::make('env_config')
+                                            ->label('Bloc .env à copier dans le tenant')
+                                            ->content(function ($record) {
+                                                if (!$record?->api_token) {
+                                                    return '(Générez d\'abord un token)';
+                                                }
+                                                $appUrl = config('app.url');
+                                                return implode("\n", [
+                                                    "MASTER_API_URL={$appUrl}/api",
+                                                    "MASTER_API_TOKEN={$record->api_token}",
+                                                    "TENANT_CODE={$record->code}",
+                                                ]);
+                                            })
+                                            ->helperText('Copiez ce bloc dans le fichier .env du tenant puis faites php artisan config:clear'),
+                                    ])->columns(1),
                             ]),
 
                         // Onglet 3: Abonnement & Plan
