@@ -455,6 +455,11 @@
                 },
 
                 onUpdate(detail) {
+                    console.log('[HealthTerminal] onUpdate', {
+                        linesCount: detail.lines ? detail.lines.length : 0,
+                        done: detail.done,
+                        lines: detail.lines,
+                    });
                     const output = document.getElementById('health-terminal-output');
                     if (output && detail.lines && detail.lines.length > 0) {
                         detail.lines.forEach(html => {

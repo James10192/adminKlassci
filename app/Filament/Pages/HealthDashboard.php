@@ -166,6 +166,14 @@ class HealthDashboard extends Page
         $php     = PHP_BINARY;
         $artisan = base_path('artisan');
 
+        \Log::debug('[HealthDashboard] runAllChecks START', [
+            'runId'   => $this->runId,
+            'logFile' => $logFile,
+            'pidFile' => $pidFile,
+            'php'     => $php,
+            'artisan' => $artisan,
+        ]);
+
         // Lance en arrière-plan via proc_open avec STDIN/STDOUT/STDERR fermés
         // proc_open + /dev/null garantit un vrai détachement même sur LWS/Varnish
         // où shell_exec('... &') bloque quand même jusqu'à la fin du process
@@ -177,16 +185,22 @@ class HealthDashboard extends Page
             escapeshellarg($pidFile)
         );
 
+        \Log::debug('[HealthDashboard] CMD', ['cmd' => $cmd]);
+
         $descriptors = [
             0 => ['file', '/dev/null', 'r'],  // stdin  : fermé
             1 => ['file', '/dev/null', 'w'],  // stdout : fermé (la commande redirige elle-même)
             2 => ['file', '/dev/null', 'w'],  // stderr : fermé
         ];
 
-        $proc = proc_open('nohup bash -c ' . escapeshellarg($cmd) . ' &', $descriptors, $pipes);
-        if (is_resource($proc)) {
+        $fullCmd = 'nohup bash -c ' . escapeshellarg($cmd) . ' &';
+        $proc = proc_open($fullCmd, $descriptors, $pipes);
+        $launched = is_resource($proc);
+        if ($launched) {
             proc_close($proc);
         }
+
+        \Log::debug('[HealthDashboard] proc_open result', ['launched' => $launched]);
     }
 
     /**
@@ -201,6 +215,15 @@ class HealthDashboard extends Page
 
         $logFile = $this->logFile();
         $pidFile = $this->pidFile();
+
+        \Log::debug('[HealthDashboard] pollTerminal', [
+            'runId'          => $this->runId,
+            'logOffset'      => $this->logOffset,
+            'runDone'        => $this->runDone,
+            'logFileExists'  => file_exists($logFile),
+            'pidFileExists'  => file_exists($pidFile),
+            'logFileSize'    => file_exists($logFile) ? filesize($logFile) : 'N/A',
+        ]);
 
         // Lire les nouvelles lignes depuis l'offset actuel
         $newLines = [];
