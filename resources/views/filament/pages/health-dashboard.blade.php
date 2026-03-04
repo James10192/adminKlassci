@@ -11,8 +11,8 @@
         @terminal-update.window="onUpdate($event.detail)"
         style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);"
     >
-        {{-- Poll Livewire toutes les 600ms tant que le terminal est ouvert et pas terminé --}}
-        <div wire:poll.600ms="pollTerminal" x-show="false" aria-hidden="true"></div>
+        {{-- Poll Livewire toutes les 2s tant que le terminal est ouvert et pas terminé --}}
+        <div wire:poll.2000ms="pollTerminal" x-show="false" aria-hidden="true"></div>
 
         <div style="width:min(860px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:16px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08);">
 
