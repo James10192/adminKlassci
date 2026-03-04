@@ -2,14 +2,18 @@
 
     {{-- ═══════════════════════════════════════════════════════════════════
          MODAL TERMINAL — Vérification en temps réel
+         Approche : background job + polling Livewire (compatible Varnish/proxy)
     ═══════════════════════════════════════════════════════════════════ --}}
     @if ($terminalOpen)
     <div
         x-data="healthTerminal()"
         x-init="init()"
-        @terminal-done.window="onDone()"
+        @terminal-update.window="onUpdate($event.detail)"
         style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);"
     >
+        {{-- Poll Livewire toutes les 600ms tant que le terminal est ouvert et pas terminé --}}
+        <div wire:poll.600ms="pollTerminal" x-show="false" aria-hidden="true"></div>
+
         <div style="width:min(860px,95vw);max-height:90vh;display:flex;flex-direction:column;border-radius:16px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.08);">
 
             {{-- Barre titre --}}
@@ -51,8 +55,8 @@
                     $ php artisan tenant:health-check --all
                 </div>
 
-                {{-- Output streamé --}}
-                <div wire:stream="terminalOutput"></div>
+                {{-- Output injecté dynamiquement par Alpine --}}
+                <div id="health-terminal-output"></div>
 
                 {{-- Curseur clignotant --}}
                 <div x-show="!done" style="display:inline-block;width:8px;height:1em;background:#67e8f9;opacity:.8;vertical-align:middle;margin-top:4px;animation:blink 1s step-end infinite;"></div>
@@ -437,23 +441,32 @@
         document.addEventListener('livewire:updated',  () => setTimeout(updateTimeAgo, 100));
         document.addEventListener('livewire:morph',    () => setTimeout(updateTimeAgo, 100));
 
-        /* ── Terminal Alpine component ── */
+        /* ── Terminal Alpine component ──
+         * Reçoit les lignes via l'événement Livewire 'terminal-update'
+         * dispatché par pollTerminal() toutes les 600ms.
+         */
         function healthTerminal() {
             return {
                 done: false,
 
                 init() {
                     this.$nextTick(() => this.scrollBottom());
-
-                    // Auto-scroll sur chaque nouveau contenu streamé
-                    const observer = new MutationObserver(() => this.scrollBottom());
-                    const body = document.getElementById('health-terminal-body');
-                    if (body) observer.observe(body, { childList: true, subtree: true });
                 },
 
-                onDone() {
-                    this.done = true;
-                    this.scrollBottom();
+                onUpdate(detail) {
+                    const output = document.getElementById('health-terminal-output');
+                    if (output && detail.lines && detail.lines.length > 0) {
+                        detail.lines.forEach(html => {
+                            const wrapper = document.createElement('div');
+                            wrapper.innerHTML = html;
+                            output.appendChild(wrapper.firstChild || wrapper);
+                        });
+                        this.scrollBottom();
+                    }
+                    if (detail.done) {
+                        this.done = true;
+                        this.scrollBottom();
+                    }
                 },
 
                 close() {

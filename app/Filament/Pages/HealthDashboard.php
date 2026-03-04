@@ -32,8 +32,14 @@ class HealthDashboard extends Page
     /** Modal terminal ouvert */
     public bool $terminalOpen = false;
 
-    /** Lignes accumulées dans le terminal */
-    public array $terminalLines = [];
+    /** Run ID du process en cours (UUID court) */
+    public string $runId = '';
+
+    /** Offset de lecture du fichier log (nb de bytes déjà lus) */
+    public int $logOffset = 0;
+
+    /** Process terminé */
+    public bool $runDone = false;
 
     /** Check individuel en cours */
     public string $isRunningTenant = '';
@@ -140,47 +146,119 @@ class HealthDashboard extends Page
     }
 
     /**
-     * Ouvre le modal terminal et lance la commande en streaming.
-     * Chaque ligne de sortie est streamée en temps réel via wire:stream.
+     * Lance la vérification en arrière-plan et ouvre le terminal.
+     * La sortie est écrite dans un fichier tmp lu par pollTerminal().
      */
     public function runAllChecks(): void
     {
-        $this->terminalLines = [];
-        $this->terminalOpen  = true;
+        $this->runId      = uniqid('health_', true);
+        $this->logOffset  = 0;
+        $this->runDone    = false;
+        $this->terminalOpen = true;
+
+        $logFile = $this->logFile();
+        $pidFile = $this->pidFile();
 
         $php     = PHP_BINARY;
         $artisan = base_path('artisan');
 
-        $process = new Process([$php, '-d', 'memory_limit=512M', $artisan, 'tenant:health-check', '--all']);
-        $process->setTimeout(300);
-        $process->start();
+        // Lance en arrière-plan, écrit stdout+stderr dans le fichier log
+        // Le fichier .pid contiendra le code de sortie quand c'est terminé
+        $cmd = sprintf(
+            'nohup %s -d memory_limit=512M %s tenant:health-check --all > %s 2>&1; echo $? > %s &',
+            escapeshellarg($php),
+            escapeshellarg($artisan),
+            escapeshellarg($logFile),
+            escapeshellarg($pidFile)
+        );
 
-        $this->stream('terminalOutput', $this->renderLine('', 'dim', '▶ Lancement de la vérification...'));
-        $this->stream('terminalOutput', $this->renderLine('', 'dim', ''));
+        shell_exec($cmd);
+    }
 
-        foreach ($process as $type => $data) {
-            foreach (explode("\n", rtrim($data)) as $raw) {
-                $line = trim($raw);
-                if ($line === '') {
-                    continue;
+    /**
+     * Appelé par wire:poll — lit les nouvelles lignes du fichier log
+     * et les dispatch vers le JS via un événement.
+     */
+    public function pollTerminal(): void
+    {
+        if (! $this->terminalOpen || $this->runId === '') {
+            return;
+        }
+
+        $logFile = $this->logFile();
+        $pidFile = $this->pidFile();
+
+        // Lire les nouvelles lignes depuis l'offset actuel
+        $newLines = [];
+        if (file_exists($logFile)) {
+            $handle = fopen($logFile, 'r');
+            if ($handle) {
+                fseek($handle, $this->logOffset);
+                $chunk = '';
+                while (! feof($handle)) {
+                    $chunk .= fread($handle, 8192);
                 }
-                $this->terminalLines[] = $line;
-                $this->stream('terminalOutput', $this->renderLine($type, $this->detectLineType($line), $line));
+                $this->logOffset = ftell($handle);
+                fclose($handle);
+
+                foreach (explode("\n", rtrim($chunk)) as $raw) {
+                    $line = trim($raw);
+                    if ($line !== '') {
+                        $newLines[] = $this->renderLine($this->detectLineType($line), $line);
+                    }
+                }
             }
         }
 
-        $exitCode = $process->getExitCode();
+        // Vérifier si le process est terminé (fichier .pid créé avec exit code)
+        $isDone = false;
+        if (! $this->runDone && file_exists($pidFile)) {
+            $exitCode = (int) trim(file_get_contents($pidFile));
+            $isDone   = true;
+            $this->runDone = true;
 
-        $this->stream('terminalOutput', $this->renderLine('', 'dim', ''));
-        if ($exitCode === 0) {
-            $this->stream('terminalOutput', $this->renderLine('', 'success', '✔ Vérification terminée avec succès.'));
-        } else {
-            $this->stream('terminalOutput', $this->renderLine('', 'error', "✘ Terminé avec le code d'erreur {$exitCode}."));
+            // Ligne de fin
+            $newLines[] = $this->renderLine('dim', '');
+            if ($exitCode === 0) {
+                $newLines[] = $this->renderLine('success', '✔ Vérification terminée avec succès.');
+            } else {
+                $newLines[] = $this->renderLine('error', "✘ Terminé avec le code d'erreur {$exitCode}.");
+            }
+
+            // Recharger les données de la page
+            $this->loadData();
+
+            // Nettoyer les fichiers tmp
+            @unlink($logFile);
+            @unlink($pidFile);
         }
 
-        // Recharger les données et fermer le modal via JS
-        $this->loadData();
-        $this->dispatch('terminal-done');
+        // Dispatcher les nouvelles lignes + état done vers Alpine.js
+        if (! empty($newLines) || $isDone) {
+            $this->dispatch('terminal-update', lines: $newLines, done: $isDone);
+        }
+    }
+
+    public function closeTerminal(): void
+    {
+        $this->terminalOpen = false;
+        $this->runId        = '';
+        $this->logOffset    = 0;
+        $this->runDone      = false;
+
+        // Nettoyage fichiers si le terminal est fermé avant la fin
+        @unlink($this->logFile());
+        @unlink($this->pidFile());
+    }
+
+    private function logFile(): string
+    {
+        return sys_get_temp_dir() . '/health_run_' . $this->runId . '.log';
+    }
+
+    private function pidFile(): string
+    {
+        return sys_get_temp_dir() . '/health_run_' . $this->runId . '.done';
     }
 
     /** Détermine le style d'une ligne selon son contenu */
@@ -203,7 +281,7 @@ class HealthDashboard extends Page
     }
 
     /** Retourne le HTML d'une ligne de terminal */
-    private function renderLine(string $processType, string $lineType, string $text): string
+    private function renderLine(string $lineType, string $text): string
     {
         $color = match ($lineType) {
             'success' => '#4ade80',
@@ -216,13 +294,7 @@ class HealthDashboard extends Page
 
         $escaped = htmlspecialchars($text, ENT_QUOTES);
 
-        return "<div style=\"color:{$color};line-height:1.6;padding:1px 0;font-size:0.8rem;font-family:monospace;white-space:pre-wrap;word-break:break-all\">{$escaped}</div>\n";
-    }
-
-    public function closeTerminal(): void
-    {
-        $this->terminalOpen  = false;
-        $this->terminalLines = [];
+        return "<div style=\"color:{$color};line-height:1.6;padding:1px 0;font-size:0.8rem;font-family:monospace;white-space:pre-wrap;word-break:break-all\">{$escaped}</div>";
     }
 
     /**
