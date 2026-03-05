@@ -839,3 +839,8 @@ a.fi-sidebar-item-button.bg-primary-50 {
         box-shadow: 4px 0 24px rgba(0,0,0,.1) !important;
     }
 }
+
+/* Select dropdown (Choices.js) — doit passer au-dessus des sections suivantes */
+.choices__list--dropdown {
+    z-index: 9999 !important;
+}

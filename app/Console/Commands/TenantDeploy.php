@@ -147,11 +147,14 @@ class TenantDeploy extends Command
             $steps[] = ['step' => 'maintenance_on', 'status' => 'ok', 'output' => trim($out) ?: 'Mode maintenance activé.', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
-            // Step 3: Git pull
-            if ($verbose) $this->line('📥 Git pull...');
+            // Step 3: Git checkout + pull
+            // On s'assure d'abord d'être sur la bonne branche avant de pull,
+            // pour éviter un merge cross-branch (ex: git pull origin presentation dans hetec/).
+            if ($verbose) $this->line('📥 Git checkout + pull...');
             $t = microtime(true);
+            $checkoutOut = $this->runProcess($tenantPath, "git fetch origin 2>&1 && git checkout {$branch} 2>&1", true);
             $out = $this->runProcess($tenantPath, "git pull origin {$branch} 2>&1", true);
-            $steps[] = ['step' => 'git_pull', 'status' => 'ok', 'output' => trim($out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
+            $steps[] = ['step' => 'git_pull', 'status' => 'ok', 'output' => trim($checkoutOut . "\n" . $out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
             // Get commit info
