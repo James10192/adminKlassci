@@ -510,9 +510,7 @@ class TenantResource extends Resource
                     ->query(fn (Builder $query): Builder => $query->where('subscription_end_date', '<', now())),
             ])
             ->actions([
-                // Actions simplifiées : seulement View, Edit, Delete
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([

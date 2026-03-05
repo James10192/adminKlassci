@@ -4,12 +4,17 @@ namespace App\Filament\Resources\TenantResource\Pages;
 
 use App\Filament\Resources\TenantResource;
 use Filament\Actions;
-use Filament\Resources\Pages\ViewRecord;
+use Filament\Resources\Pages\EditRecord;
 use Filament\Notifications\Notification;
 
-class ViewTenant extends ViewRecord
+class ViewTenant extends EditRecord
 {
     protected static string $resource = TenantResource::class;
+
+    /**
+     * Mode édition inline : false = lecture seule, true = édition active
+     */
+    public bool $isEditing = false;
 
     public function getTitle(): string
     {
@@ -43,12 +48,42 @@ class ViewTenant extends ViewRecord
             }
         }
 
+        if ($this->isEditing) {
+            $parts[] = '✏️ Mode édition';
+        }
+
         return implode(' · ', $parts);
+    }
+
+    /**
+     * Après sauvegarde, rester sur la page view (pas de redirection vers index)
+     */
+    protected function getRedirectUrl(): string
+    {
+        return static::getResource()::getUrl('view', ['record' => $this->record]);
+    }
+
+    /**
+     * Après sauvegarde réussie, repasser en mode lecture
+     */
+    protected function afterSave(): void
+    {
+        $this->isEditing = false;
+    }
+
+    /**
+     * Désactiver tous les champs du formulaire quand pas en mode édition
+     */
+    public function isFormDisabled(): bool
+    {
+        return ! $this->isEditing;
     }
 
     protected function getHeaderActions(): array
     {
         return [
+            // ── Actions visibles en MODE LECTURE ──────────────────────────────
+
             // Action: Mettre à jour les stats
             Actions\Action::make('update_stats')
                 ->label('Mettre à jour les stats')
@@ -91,7 +126,7 @@ class ViewTenant extends ViewRecord
                             ->send();
                     }
                 })
-                ->visible(fn () => $this->record->status === 'active'),
+                ->visible(fn () => ! $this->isEditing && $this->record->status === 'active'),
 
             // Action: Health Check
             Actions\Action::make('health_check')
@@ -132,7 +167,7 @@ class ViewTenant extends ViewRecord
                             ->send();
                     }
                 })
-                ->visible(fn () => $this->record->status === 'active'),
+                ->visible(fn () => ! $this->isEditing && $this->record->status === 'active'),
 
             // Action: Déployer
             Actions\Action::make('deploy')
@@ -185,7 +220,7 @@ class ViewTenant extends ViewRecord
                             ->send();
                     }
                 })
-                ->visible(fn () => $this->record->status === 'active'),
+                ->visible(fn () => ! $this->isEditing && $this->record->status === 'active'),
 
             // Action: Générer / Régénérer le token API
             Actions\Action::make('generate_api_token')
@@ -242,7 +277,8 @@ class ViewTenant extends ViewRecord
                             ->persistent()
                             ->send();
                     }
-                }),
+                })
+                ->visible(fn () => ! $this->isEditing),
 
             // Action: Détecter la branche Git
             Actions\Action::make('detect_branch')
@@ -321,12 +357,38 @@ class ViewTenant extends ViewRecord
                             ->persistent()
                             ->send();
                     }
-                }),
+                })
+                ->visible(fn () => ! $this->isEditing),
 
-            // Action standard: Edit
-            Actions\EditAction::make()
+            // ── Bouton Modifier (mode lecture) ────────────────────────────────
+
+            Actions\Action::make('start_editing')
+                ->label('Modifier')
                 ->icon('heroicon-o-pencil')
-                ->color('gray'),
+                ->color('gray')
+                ->action(fn () => $this->isEditing = true)
+                ->visible(fn () => ! $this->isEditing),
+
+            // ── Boutons Sauvegarder + Annuler (mode édition) ──────────────────
+
+            Actions\Action::make('save_record')
+                ->label('Sauvegarder')
+                ->icon('heroicon-o-check')
+                ->color('primary')
+                ->action(function () {
+                    $this->save();
+                })
+                ->visible(fn () => $this->isEditing),
+
+            Actions\Action::make('cancel_editing')
+                ->label('Annuler')
+                ->icon('heroicon-o-x-mark')
+                ->color('gray')
+                ->action(function () {
+                    $this->isEditing = false;
+                    $this->fillForm();
+                })
+                ->visible(fn () => $this->isEditing),
         ];
     }
 }
