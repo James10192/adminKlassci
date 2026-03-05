@@ -179,7 +179,7 @@ class TenantDeploy extends Command
             // Step 4: Composer install
             if ($verbose) $this->line('📦 Composer install...');
             $t = microtime(true);
-            $out = $this->runProcess($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction 2>&1", true);
+            $out = $this->runProcess($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs 2>&1", true);
             $steps[] = ['step' => 'composer_install', 'status' => 'ok', 'output' => trim($out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
