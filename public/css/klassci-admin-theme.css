@@ -840,14 +840,20 @@ a.fi-sidebar-item-button.bg-primary-50 {
     }
 }
 
-/* Select dropdown (Choices.js) — doit passer au-dessus des sections suivantes */
+/* Select dropdown (Choices.js) — toujours au-dessus + ouverture vers le haut */
 .choices__list--dropdown {
     z-index: 9999 !important;
     overflow: visible !important;
 }
 
-/* La liste interne doit scroller, pas le conteneur */
+/* La liste interne scrollable */
 .choices__list--dropdown .choices__list {
     overflow-y: auto !important;
-    max-height: 300px !important;
+    max-height: 220px !important;
+}
+
+/* Forcer l'ouverture vers le haut pour éviter le débordement bas de page */
+.choices.is-open .choices__list--dropdown {
+    bottom: calc(100% + 2px) !important;
+    top: auto !important;
 }
