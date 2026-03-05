@@ -59,13 +59,15 @@ class TenantResource extends Resource
                                             ->unique(ignoreRecord: true)
                                             ->maxLength(50)
                                             ->placeholder('ex: lycee-yop')
-                                            ->helperText('Code unique pour identifier le tenant (utilisé dans les URLs)'),
+                                            ->helperText('Code unique pour identifier le tenant (utilisé dans les URLs)')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('name')
                                             ->label('Nom de l\'établissement')
                                             ->required()
                                             ->maxLength(255)
-                                            ->placeholder('ex: Lycée de Yopougon'),
+                                            ->placeholder('ex: Lycée de Yopougon')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('subdomain')
                                             ->label('Sous-domaine')
@@ -74,7 +76,8 @@ class TenantResource extends Resource
                                             ->maxLength(100)
                                             ->prefix('https://')
                                             ->suffix('.klassci.com')
-                                            ->placeholder('lycee-yop'),
+                                            ->placeholder('lycee-yop')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
                                     ])->columns(2),
                             ]),
 
@@ -88,7 +91,8 @@ class TenantResource extends Resource
                                             ->label('Nom de la base de données')
                                             ->required()
                                             ->maxLength(100)
-                                            ->placeholder('c2569688c_lycee_yop'),
+                                            ->placeholder('c2569688c_lycee_yop')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\Textarea::make('database_credentials')
                                             ->label('Credentials (JSON)')
@@ -96,6 +100,7 @@ class TenantResource extends Resource
                                             ->rows(4)
                                             ->placeholder('{"host":"localhost","port":3306,"username":"...","password":"..."}')
                                             ->helperText('Format JSON avec host, port, username, password')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing)
                                             ->dehydrateStateUsing(function ($state) {
                                                 // Convertir le JSON string en array pour éviter double encoding
                                                 if (is_string($state)) {
@@ -161,7 +166,8 @@ class TenantResource extends Resource
                                             ->options(fn () => collect(self::fetchGithubBranches())
                                                 ->mapWithKeys(fn ($b) => [$b => $b])
                                                 ->toArray())
-                                            ->helperText('Branches chargées depuis GitHub · KLASSCIv2'),
+                                            ->helperText('Branches chargées depuis GitHub · KLASSCIv2')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('git_commit_hash')
                                             ->label('Dernier Commit Hash')
@@ -189,7 +195,8 @@ class TenantResource extends Resource
                                                 'suspended' => 'Suspendu',
                                                 'inactive' => 'Inactif',
                                             ])
-                                            ->default('active'),
+                                            ->default('active')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\Select::make('subscription_plan_id')
                                             ->label('Plan Tarifaire')
@@ -217,7 +224,8 @@ class TenantResource extends Resource
                                                 $set('max_inscriptions_per_year', $plan->max_inscriptions_per_year);
                                                 $set('max_storage_mb', $plan->max_storage_mb);
                                             })
-                                            ->helperText('Sélectionnez un plan pour remplir automatiquement les limites.'),
+                                            ->helperText('Sélectionnez un plan pour remplir automatiquement les limites.')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\Hidden::make('plan')
                                             ->default('free'),
@@ -227,18 +235,21 @@ class TenantResource extends Resource
                                             ->required()
                                             ->numeric()
                                             ->prefix('FCFA')
-                                            ->default(0),
+                                            ->default(0)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
                                     ])->columns(3),
 
                                 Forms\Components\Section::make('Période d\'Abonnement')
                                     ->schema([
                                         Forms\Components\DatePicker::make('subscription_start_date')
                                             ->label('Début de l\'abonnement')
-                                            ->default(now()),
+                                            ->default(now())
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\DatePicker::make('subscription_end_date')
                                             ->label('Fin de l\'abonnement')
-                                            ->after('subscription_start_date'),
+                                            ->after('subscription_start_date')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
                                     ])->columns(2),
                             ]),
 
@@ -255,28 +266,32 @@ class TenantResource extends Resource
                                             ->required()
                                             ->numeric()
                                             ->default(5)
-                                            ->minValue(1),
+                                            ->minValue(1)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('max_staff')
                                             ->label('Max Personnel')
                                             ->required()
                                             ->numeric()
                                             ->default(5)
-                                            ->minValue(1),
+                                            ->minValue(1)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('max_students')
                                             ->label('Max Étudiants')
                                             ->required()
                                             ->numeric()
                                             ->default(50)
-                                            ->minValue(1),
+                                            ->minValue(1)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('max_inscriptions_per_year')
                                             ->label('Max Inscriptions/An')
                                             ->required()
                                             ->numeric()
                                             ->default(50)
-                                            ->minValue(1),
+                                            ->minValue(1)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('max_storage_mb')
                                             ->label('Stockage Max (MB)')
@@ -284,7 +299,8 @@ class TenantResource extends Resource
                                             ->numeric()
                                             ->suffix('MB')
                                             ->default(512)
-                                            ->minValue(1),
+                                            ->minValue(1)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
                                     ])->columns(3),
 
                                 Forms\Components\Section::make('Utilisation Actuelle (Auto-calculé)')
@@ -332,33 +348,39 @@ class TenantResource extends Resource
                                     ->schema([
                                         Forms\Components\TextInput::make('admin_name')
                                             ->label('Nom de l\'administrateur')
-                                            ->maxLength(255),
+                                            ->maxLength(255)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('admin_email')
                                             ->label('Email Administrateur')
                                             ->email()
-                                            ->maxLength(255),
+                                            ->maxLength(255)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('support_email')
                                             ->label('Email Support')
                                             ->email()
-                                            ->maxLength(255),
+                                            ->maxLength(255)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('phone')
                                             ->label('Téléphone')
                                             ->tel()
-                                            ->maxLength(255),
+                                            ->maxLength(255)
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\Textarea::make('address')
                                             ->label('Adresse Complète')
                                             ->rows(3)
-                                            ->columnSpanFull(),
+                                            ->columnSpanFull()
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\Textarea::make('metadata')
                                             ->label('Métadonnées (JSON)')
                                             ->rows(3)
                                             ->columnSpanFull()
                                             ->helperText('Données supplémentaires au format JSON')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing)
                                             ->dehydrateStateUsing(function ($state) {
                                                 // Convertir le JSON string en array pour éviter double encoding
                                                 if (is_string($state) && !empty($state)) {

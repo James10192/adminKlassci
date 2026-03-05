@@ -56,27 +56,11 @@ class ViewTenant extends EditRecord
     }
 
     /**
-     * Après sauvegarde, rester sur la page view (pas de redirection vers index)
-     */
-    protected function getRedirectUrl(): string
-    {
-        return static::getResource()::getUrl('view', ['record' => $this->record]);
-    }
-
-    /**
      * Après sauvegarde réussie, repasser en mode lecture
      */
     protected function afterSave(): void
     {
         $this->isEditing = false;
-    }
-
-    /**
-     * Désactiver tous les champs du formulaire quand pas en mode édition
-     */
-    public function isFormDisabled(): bool
-    {
-        return ! $this->isEditing;
     }
 
     protected function getHeaderActions(): array
@@ -376,7 +360,8 @@ class ViewTenant extends EditRecord
                 ->icon('heroicon-o-check')
                 ->color('primary')
                 ->action(function () {
-                    $this->save();
+                    $this->save(shouldRedirect: false);
+                    $this->isEditing = false;
                 })
                 ->visible(fn () => $this->isEditing),
 
