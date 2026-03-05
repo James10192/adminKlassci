@@ -208,20 +208,40 @@ class ViewTenant extends ViewRecord
 
                     $this->record->refresh();
 
-                    $appUrl    = config('app.url');
-                    $envBlock  = implode("\n", [
+                    $appUrl   = config('app.url');
+                    $envBlock = implode("\n", [
                         "# Coller ces lignes dans le fichier .env du tenant ({$this->record->code})",
                         "MASTER_API_URL={$appUrl}/api",
                         "MASTER_API_TOKEN={$token}",
                         "TENANT_CODE={$this->record->code}",
                     ]);
 
-                    Notification::make()
-                        ->success()
-                        ->title('Token API généré ✅')
-                        ->body("Copiez ce bloc dans le .env du tenant :\n\n{$envBlock}")
-                        ->persistent()
-                        ->send();
+                    // Tenter la mise à jour automatique du .env du tenant sur le serveur
+                    $autoApplied = false;
+                    try {
+                        $exitCode = \Artisan::call('tenant:configure-env', [
+                            'tenant' => $this->record->code,
+                        ]);
+                        $autoApplied = ($exitCode === 0);
+                    } catch (\Exception $e) {
+                        // Non bloquant — le bloc .env reste affiché pour copie manuelle
+                    }
+
+                    if ($autoApplied) {
+                        Notification::make()
+                            ->success()
+                            ->title('Token API généré et appliqué ✅')
+                            ->body("Le .env du tenant a été mis à jour automatiquement. Cache config vidé.")
+                            ->persistent()
+                            ->send();
+                    } else {
+                        Notification::make()
+                            ->success()
+                            ->title('Token API généré ✅')
+                            ->body("Copiez ce bloc dans le .env du tenant :\n\n{$envBlock}")
+                            ->persistent()
+                            ->send();
+                    }
                 }),
 
             // Action standard: Edit
