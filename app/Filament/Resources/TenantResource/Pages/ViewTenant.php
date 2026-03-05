@@ -56,11 +56,21 @@ class ViewTenant extends EditRecord
     }
 
     /**
-     * Après sauvegarde réussie, repasser en mode lecture
+     * Après sauvegarde réussie, repasser en mode lecture et invalider le cache limits du tenant
      */
     protected function afterSave(): void
     {
         $this->isEditing = false;
+
+        // Invalider le cache "paywall_limits_{code}" du tenant pour que le compte à rebours
+        // se mette à jour immédiatement (sans attendre l'expiration naturelle des 5 min)
+        try {
+            \Artisan::call('tenant:clear-limits-cache', [
+                'tenant' => $this->record->code,
+            ]);
+        } catch (\Exception $e) {
+            // Non bloquant — le cache expirera naturellement après 5 min
+        }
     }
 
     protected function getHeaderActions(): array
