@@ -244,6 +244,85 @@ class ViewTenant extends ViewRecord
                     }
                 }),
 
+            // Action: Détecter la branche Git
+            Actions\Action::make('detect_branch')
+                ->label('Détecter la branche')
+                ->icon('heroicon-o-code-bracket')
+                ->color('gray')
+                ->requiresConfirmation()
+                ->modalHeading('Détecter la branche Git')
+                ->modalDescription(function () {
+                    $path = rtrim(env('PRODUCTION_PATH', ''), '/') . '/' . $this->record->code;
+                    return "Cette action va exécuter « git branch --show-current » dans {$path} et mettre à jour la branche enregistrée en base.";
+                })
+                ->modalSubmitActionLabel('Détecter')
+                ->action(function () {
+                    $productionPath = rtrim(env('PRODUCTION_PATH', ''), '/');
+                    if (!$productionPath) {
+                        Notification::make()
+                            ->danger()
+                            ->title('PRODUCTION_PATH non défini')
+                            ->body('La variable PRODUCTION_PATH n\'est pas configurée dans le .env admin.')
+                            ->persistent()
+                            ->send();
+                        return;
+                    }
+
+                    $tenantPath = "{$productionPath}/{$this->record->code}";
+
+                    if (!is_dir($tenantPath)) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Répertoire introuvable')
+                            ->body("Le répertoire {$tenantPath} n'existe pas sur le serveur.")
+                            ->persistent()
+                            ->send();
+                        return;
+                    }
+
+                    try {
+                        $result = \Illuminate\Support\Facades\Process::path($tenantPath)
+                            ->run('git branch --show-current');
+
+                        $branch = trim($result->output());
+
+                        if (!$result->successful() || empty($branch)) {
+                            // Fallback : detached HEAD
+                            $result2 = \Illuminate\Support\Facades\Process::path($tenantPath)
+                                ->run('git rev-parse --abbrev-ref HEAD');
+                            $branch = trim($result2->output());
+                        }
+
+                        if (empty($branch) || $branch === 'HEAD') {
+                            Notification::make()
+                                ->warning()
+                                ->title('Branche non détectée')
+                                ->body('Le dépôt est en detached HEAD. Vérifiez manuellement avec : git status')
+                                ->persistent()
+                                ->send();
+                            return;
+                        }
+
+                        $oldBranch = $this->record->git_branch;
+                        $this->record->update(['git_branch' => $branch]);
+                        $this->record->refresh();
+
+                        Notification::make()
+                            ->success()
+                            ->title('Branche détectée ✅')
+                            ->body("Branche mise à jour : « {$oldBranch} » → « {$branch} »")
+                            ->send();
+
+                    } catch (\Exception $e) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Erreur')
+                            ->body("Impossible de détecter la branche : {$e->getMessage()}")
+                            ->persistent()
+                            ->send();
+                    }
+                }),
+
             // Action standard: Edit
             Actions\EditAction::make()
                 ->icon('heroicon-o-pencil')

@@ -115,11 +115,23 @@ class TenantResource extends Resource
 
                                 Forms\Components\Section::make('Git & Déploiement')
                                     ->schema([
-                                        Forms\Components\TextInput::make('git_branch')
+                                        Forms\Components\Select::make('git_branch')
                                             ->label('Branche Git')
                                             ->required()
-                                            ->maxLength(100)
-                                            ->default('main'),
+                                            ->default('presentation')
+                                            ->searchable()
+                                            ->getSearchResultsUsing(function (string $search) {
+                                                $branches = self::fetchGithubBranches();
+                                                return collect($branches)
+                                                    ->filter(fn ($b) => str_contains(strtolower($b), strtolower($search)))
+                                                    ->mapWithKeys(fn ($b) => [$b => $b])
+                                                    ->toArray();
+                                            })
+                                            ->getOptionLabelUsing(fn ($value) => $value)
+                                            ->options(fn () => collect(self::fetchGithubBranches())
+                                                ->mapWithKeys(fn ($b) => [$b => $b])
+                                                ->toArray())
+                                            ->helperText('Branches chargées depuis GitHub · KLASSCIv2'),
 
                                         Forms\Components\TextInput::make('git_commit_hash')
                                             ->label('Dernier Commit Hash')
@@ -527,5 +539,55 @@ class TenantResource extends Resource
             'view' => Pages\ViewTenant::route('/{record}'),
             'edit' => Pages\EditTenant::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * Charge les branches distantes depuis l'API GitHub publique.
+     * Cache 5 minutes pour éviter les appels répétés.
+     * Branches de production en tête, puis les autres triées alphabétiquement.
+     */
+    public static function fetchGithubBranches(): array
+    {
+        return \Cache::remember('github_klassci_branches', 300, function () {
+            try {
+                $response = \Http::timeout(5)
+                    ->withHeaders(['Accept' => 'application/vnd.github+json'])
+                    ->get('https://api.github.com/repos/James10192/KLASSCIv2/branches', [
+                        'per_page' => 100,
+                    ]);
+
+                if (!$response->successful()) {
+                    return self::fallbackBranches();
+                }
+
+                $allBranches = collect($response->json())
+                    ->pluck('name')
+                    ->filter()
+                    ->values();
+
+                // Branches de production en tête (dans cet ordre)
+                $productionBranches = ['presentation', 'hetec', 'esbtp-abidjan', 'esbtp-yakro', 'rostan', 'imertel', 'IFRAN'];
+
+                $sorted = collect($productionBranches)
+                    ->filter(fn ($b) => $allBranches->contains($b))
+                    ->merge(
+                        $allBranches
+                            ->reject(fn ($b) => in_array($b, $productionBranches))
+                            ->sort()
+                            ->values()
+                    )
+                    ->toArray();
+
+                return $sorted;
+
+            } catch (\Exception $e) {
+                return self::fallbackBranches();
+            }
+        });
+    }
+
+    private static function fallbackBranches(): array
+    {
+        return ['presentation', 'hetec', 'esbtp-abidjan', 'esbtp-yakro', 'rostan', 'imertel', 'IFRAN', 'main'];
     }
 }
