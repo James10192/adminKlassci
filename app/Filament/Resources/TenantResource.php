@@ -114,6 +114,7 @@ class TenantResource extends Resource
                                     ])->columns(1),
 
                                 Forms\Components\Section::make('Git & Déploiement')
+                                    ->extraAttributes(['style' => 'overflow: visible;'])
                                     ->schema([
                                         Forms\Components\Select::make('git_branch')
                                             ->label('Branche Git')
