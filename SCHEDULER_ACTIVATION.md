@@ -24,10 +24,10 @@ Le fichier `routes/console.php` contient déjà 7 tâches planifiées :
 ### Étape 2 — Ajouter la tâche cron
 
 ```
-* * * * * /usr/local/bin/php /home/c2569688c/public_html/admin/artisan schedule:run >> /dev/null 2>&1
+* * * * * /opt/alt/php83/usr/bin/php /home/c2569688c/public_html/admin/artisan schedule:run >> /dev/null 2>&1
 ```
 
-> **Important** : Utiliser `/usr/local/bin/php` (CLI), pas `php` (qui pointe vers LSAPI sur LWS).
+> **Important** : Utiliser `/opt/alt/php83/usr/bin/php` (CLI), pas `php` (qui pointe vers LSAPI sur LWS).
 
 ### Étape 3 — Vérifier
 
@@ -47,12 +47,12 @@ tail -f ~/public_html/admin/storage/logs/alerts.log
 cd ~/public_html/admin
 
 # Tester le scheduler
-/usr/local/bin/php artisan schedule:list
+/opt/alt/php83/usr/bin/php artisan schedule:list
 
 # Tester une commande individuellement
-/usr/local/bin/php artisan tenant:health-check --all
-/usr/local/bin/php artisan tenant:send-alerts --dry-run
-/usr/local/bin/php artisan tenant:backup --all --type=database_only
+/opt/alt/php83/usr/bin/php artisan tenant:health-check --all
+/opt/alt/php83/usr/bin/php artisan tenant:send-alerts --dry-run
+/opt/alt/php83/usr/bin/php artisan tenant:backup --all --type=database_only
 ```
 
 ## En développement local

@@ -164,8 +164,8 @@ class HealthDashboard extends Page
         $pidFile = $this->pidFile();
 
         // PHP_BINARY sur LWS pointe vers le binaire LSAPI (mode web) qui ne supporte pas -d.
-        // On utilise le PHP CLI : /usr/local/bin/php (LWS standard), sinon PHP_BINARY.
-        $php     = file_exists('/usr/local/bin/php') ? '/usr/local/bin/php' : PHP_BINARY;
+        // On utilise le PHP 8.3 CLI CloudLinux, sinon fallback.
+        $php     = self::findPhpCli();
         $artisan = base_path('artisan');
 
         // Lance en arrière-plan via proc_open avec STDIN/STDOUT/STDERR fermés
@@ -383,5 +383,26 @@ class HealthDashboard extends Page
             ->body($body)
             ->success()
             ->send();
+    }
+
+    /**
+     * Trouve le binaire PHP CLI sur LWS/CloudLinux.
+     * Priorité : php83 CLI > /usr/local/bin/php > PHP_BINARY
+     */
+    public static function findPhpCli(): string
+    {
+        $candidates = [
+            '/opt/alt/php83/usr/bin/php',
+            '/opt/alt/php82/usr/bin/php',
+            '/usr/local/bin/php',
+        ];
+
+        foreach ($candidates as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+
+        return PHP_BINARY;
     }
 }

@@ -55,11 +55,12 @@ class TenantClearLimitsCache extends Command
     private function detectPhpBinary(): string
     {
         $candidates = [
+            '/opt/alt/php83/usr/bin/php',
+            '/opt/alt/php82/usr/bin/php',
             '/usr/local/bin/php',
             '/opt/cpanel/ea-php84/root/usr/bin/php',
             '/opt/cpanel/ea-php83/root/usr/bin/php',
             '/opt/cpanel/ea-php82/root/usr/bin/php',
-            '/opt/cpanel/ea-php81/root/usr/bin/php',
             'php',
         ];
 

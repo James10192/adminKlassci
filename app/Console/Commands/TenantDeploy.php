@@ -345,13 +345,14 @@ class TenantDeploy extends Command
      */
     private function detectPhpBinary(): string
     {
-        // Common cPanel PHP binary locations (ordered by preference)
+        // CloudLinux alt-php + cPanel PHP binary locations (ordered by preference)
         $candidates = [
-            '/usr/local/bin/php',          // cPanel default symlink
+            '/opt/alt/php83/usr/bin/php',   // CloudLinux PHP 8.3 CLI
+            '/opt/alt/php82/usr/bin/php',   // CloudLinux PHP 8.2 CLI
+            '/usr/local/bin/php',           // cPanel default symlink (LSAPI on LWS — may not work)
             '/opt/cpanel/ea-php84/root/usr/bin/php',
             '/opt/cpanel/ea-php83/root/usr/bin/php',
             '/opt/cpanel/ea-php82/root/usr/bin/php',
-            '/opt/cpanel/ea-php81/root/usr/bin/php',
             'php',                          // System PATH fallback
         ];
 
