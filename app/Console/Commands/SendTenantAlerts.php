@@ -9,13 +9,16 @@ use App\Models\User;
 use Filament\Notifications\Notification;
 use Filament\Notifications\Actions\Action;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class SendTenantAlerts extends Command
 {
     protected $signature = 'tenant:send-alerts
-                            {--dry-run : Affiche les alertes sans les envoyer}';
+                            {--dry-run : Affiche les alertes sans les envoyer}
+                            {--no-email : Désactiver l\'envoi d\'email (notifications Filament uniquement)}';
 
-    protected $description = 'Envoie des notifications aux admins SaaS pour les quotas dépassés, abonnements expirants et tenants inactifs.';
+    protected $description = 'Envoie des notifications aux admins SaaS (Filament + email) pour les quotas dépassés, abonnements expirants et tenants inactifs.';
 
     public function handle(): int
     {
@@ -28,6 +31,7 @@ class SendTenantAlerts extends Command
 
         $dryRun = $this->option('dry-run');
         $alertCount = 0;
+        $emailAlerts = []; // Collecte pour l'email récapitulatif
 
         $activeTenants = Tenant::where('status', 'active')->get();
 
@@ -38,6 +42,7 @@ class SendTenantAlerts extends Command
 
                 $this->info("🔴 Quota dépassé: {$tenant->name} — {$quotaDetails}");
                 $alertCount++;
+                $emailAlerts[] = ['level' => 'danger', 'tenant' => $tenant->name, 'title' => 'Quota dépassé', 'message' => $quotaDetails];
 
                 if (!$dryRun) {
                     foreach ($admins as $admin) {
@@ -65,6 +70,7 @@ class SendTenantAlerts extends Command
 
                 $this->error("🚨 Abonnement expiré: {$tenant->name} — {$message}");
                 $alertCount++;
+                $emailAlerts[] = ['level' => 'danger', 'tenant' => $tenant->name, 'title' => 'Abonnement expiré', 'message' => $message];
 
                 if (!$dryRun) {
                     foreach ($admins as $admin) {
@@ -93,6 +99,7 @@ class SendTenantAlerts extends Command
 
                     $this->warn("⚠️  Expiration proche: {$tenant->name} — {$message}");
                     $alertCount++;
+                    $emailAlerts[] = ['level' => 'warning', 'tenant' => $tenant->name, 'title' => 'Abonnement expirant', 'message' => $message];
 
                     if (!$dryRun) {
                         foreach ($admins as $admin) {
@@ -124,6 +131,7 @@ class SendTenantAlerts extends Command
 
                 $this->line("💤 Inactif: {$tenant->name} — {$message}");
                 $alertCount++;
+                $emailAlerts[] = ['level' => 'info', 'tenant' => $tenant->name, 'title' => 'Tenant inactif', 'message' => $message];
 
                 if (!$dryRun) {
                     foreach ($admins as $admin) {
@@ -156,6 +164,7 @@ class SendTenantAlerts extends Command
 
                 $this->error("🔥 Health check KO: {$tenant->name} — {$message}");
                 $alertCount++;
+                $emailAlerts[] = ['level' => 'danger', 'tenant' => $tenant->name, 'title' => 'Site inaccessible', 'message' => $message];
 
                 if (!$dryRun) {
                     foreach ($admins as $admin) {
@@ -192,6 +201,7 @@ class SendTenantAlerts extends Command
 
                 $this->warn("💾 Backup absent: {$tenant->name} — {$message}");
                 $alertCount++;
+                $emailAlerts[] = ['level' => 'warning', 'tenant' => $tenant->name, 'title' => 'Backup manquant', 'message' => $message];
 
                 if (!$dryRun) {
                     foreach ($admins as $admin) {
@@ -212,11 +222,17 @@ class SendTenantAlerts extends Command
             }
         }
 
+        // Envoi email récapitulatif si des alertes existent
+        if ($alertCount > 0 && !$dryRun && !$this->option('no-email')) {
+            $this->sendEmailSummary($emailAlerts, $admins);
+        }
+
         if ($alertCount === 0) {
             $this->info('✅ Aucune alerte à envoyer.');
         } else {
             $mode = $dryRun ? '(dry-run — non envoyées)' : 'envoyées';
-            $this->info("📬 {$alertCount} alerte(s) {$mode} à {$admins->count()} admin(s).");
+            $emailStatus = (!$dryRun && !$this->option('no-email')) ? ' + email récapitulatif' : '';
+            $this->info("📬 {$alertCount} alerte(s) {$mode} à {$admins->count()} admin(s){$emailStatus}.");
         }
 
         return 0;
@@ -243,5 +259,60 @@ class SendTenantAlerts extends Command
         }
 
         return 'Limites dépassées : ' . implode(', ', $exceeded) . '.';
+    }
+
+    /**
+     * Envoie un email récapitulatif de toutes les alertes aux admins.
+     */
+    private function sendEmailSummary(array $alerts, $admins): void
+    {
+        if (empty($alerts)) {
+            return;
+        }
+
+        $recipientEmails = config('klassci.alert_emails', []);
+
+        // Fallback : emails des admins actifs
+        if (empty($recipientEmails)) {
+            $recipientEmails = $admins->pluck('email')->filter()->toArray();
+        }
+
+        if (empty($recipientEmails)) {
+            $this->warn('Aucune adresse email configurée pour les alertes.');
+            return;
+        }
+
+        $date = now()->format('d/m/Y H:i');
+        $count = count($alerts);
+
+        $body = "Rapport d'alertes KLASSCI — {$date}\n";
+        $body .= str_repeat('─', 50) . "\n\n";
+        $body .= "{$count} alerte(s) détectée(s) :\n\n";
+
+        foreach ($alerts as $alert) {
+            $icon = match ($alert['level']) {
+                'danger' => '🔴',
+                'warning' => '⚠️',
+                'info' => 'ℹ️',
+                default => '•',
+            };
+            $body .= "{$icon} [{$alert['tenant']}] {$alert['title']}\n";
+            $body .= "   {$alert['message']}\n\n";
+        }
+
+        $body .= str_repeat('─', 50) . "\n";
+        $body .= "Panel admin : " . config('app.url', 'https://admin.klassci.com') . "/admin\n";
+
+        try {
+            Mail::raw($body, function ($message) use ($recipientEmails, $count, $date) {
+                $message->to($recipientEmails)
+                    ->subject("[KLASSCI Admin] {$count} alerte(s) — {$date}");
+            });
+
+            $this->info("📧 Email récapitulatif envoyé à : " . implode(', ', $recipientEmails));
+        } catch (\Exception $e) {
+            Log::error('Échec envoi email alertes KLASSCI', ['error' => $e->getMessage()]);
+            $this->error("❌ Échec envoi email : {$e->getMessage()}");
+        }
     }
 }
