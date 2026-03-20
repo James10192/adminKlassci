@@ -18,7 +18,6 @@ class RolePermissionPage extends Page
     protected static string $view = 'filament.pages.tenant-config.role-permission';
     protected static ?string $title = 'Gestion des Rôles & Permissions';
 
-    public array $tenants = [];
     public array $roles = [];
     public array $permissions = [];
     public array $groupedPermissions = [];
@@ -26,13 +25,9 @@ class RolePermissionPage extends Page
     public string $selectedRoleName = '';
     public array $rolePermissionIds = [];
 
-    public function mount(): void
-    {
-        $this->tenants = $this->getActiveTenants();
-    }
-
     public function updatedSelectedTenantId(): void
     {
+        $this->resetTenantState();
         $this->roles = [];
         $this->permissions = [];
         $this->groupedPermissions = [];
@@ -50,14 +45,12 @@ class RolePermissionPage extends Page
         }
 
         try {
-            // Charger les rôles
             $this->roles = $db->table('roles')
                 ->orderBy('name')
                 ->get(['id', 'name', 'guard_name'])
                 ->map(fn ($r) => (array) $r)
                 ->toArray();
 
-            // Charger les permissions
             $perms = $db->table('permissions')
                 ->orderBy('name')
                 ->get(['id', 'name', 'guard_name'])
@@ -66,16 +59,11 @@ class RolePermissionPage extends Page
 
             $this->permissions = $perms;
 
-            // Grouper par catégorie (premier segment avant le point ou underscore)
             $grouped = [];
             foreach ($perms as $perm) {
                 $name = $perm['name'];
-                // Catégoriser par premier segment
                 if (str_contains($name, '.')) {
                     $group = explode('.', $name)[0];
-                } elseif (str_contains($name, '_')) {
-                    $parts = explode('_', $name);
-                    $group = $parts[count($parts) - 1]; // last word for "view_own_grades" → "grades"
                 } else {
                     $group = 'Autres';
                 }
@@ -91,9 +79,9 @@ class RolePermissionPage extends Page
                 ->body('Tables Spatie non trouvées: ' . $e->getMessage())
                 ->danger()
                 ->send();
+        } finally {
+            $this->closeTenantConnection();
         }
-
-        $this->closeTenantConnection();
     }
 
     public function selectRole(int $roleId): void
@@ -107,14 +95,15 @@ class RolePermissionPage extends Page
             return;
         }
 
-        // Charger les permissions du rôle
-        $this->rolePermissionIds = $db->table('role_has_permissions')
-            ->where('role_id', $roleId)
-            ->pluck('permission_id')
-            ->map(fn ($id) => (int) $id)
-            ->toArray();
-
-        $this->closeTenantConnection();
+        try {
+            $this->rolePermissionIds = $db->table('role_has_permissions')
+                ->where('role_id', $roleId)
+                ->pluck('permission_id')
+                ->map(fn ($id) => (int) $id)
+                ->toArray();
+        } finally {
+            $this->closeTenantConnection();
+        }
     }
 
     public function togglePermission(int $permissionId): void
@@ -128,7 +117,9 @@ class RolePermissionPage extends Page
 
     public function savePermissions(): void
     {
-        if (! $this->selectedRoleId || ! $this->selectedTenantId) {
+        if (! $this->requireTenant()) return;
+
+        if (! $this->selectedRoleId) {
             Notification::make()->title('Sélectionnez un rôle')->warning()->send();
             return;
         }
@@ -143,12 +134,10 @@ class RolePermissionPage extends Page
         try {
             $db->beginTransaction();
 
-            // Supprimer les anciennes permissions du rôle
             $db->table('role_has_permissions')
                 ->where('role_id', $this->selectedRoleId)
                 ->delete();
 
-            // Insérer les nouvelles
             $inserts = [];
             foreach ($this->rolePermissionIds as $permId) {
                 $inserts[] = [
@@ -164,36 +153,34 @@ class RolePermissionPage extends Page
             $db->commit();
 
             // Clear Spatie permission cache
-            // On ne peut pas appeler artisan sur le tenant distant, mais on peut vider le cache table
             try {
                 $db->table('cache')->where('key', 'like', '%spatie%permission%')->delete();
             } catch (\Exception $e) {
-                // Cache table might not exist, ignore
+                // Cache table might not exist
             }
-
-            $this->closeTenantConnection();
-
-            $this->logConfigChange(
-                'role_permissions_updated',
-                "Permissions du rôle '{$this->selectedRoleName}' mises à jour sur {$tenant->name} (" . count($this->rolePermissionIds) . " permissions)",
-                ['role' => $this->selectedRoleName, 'permission_count' => count($this->rolePermissionIds)]
-            );
-
-            Notification::make()
-                ->title('Permissions sauvegardées')
-                ->body(count($this->rolePermissionIds) . " permissions assignées au rôle '{$this->selectedRoleName}' sur {$tenant->name}.")
-                ->success()
-                ->send();
-
         } catch (\Exception $e) {
             $db->rollBack();
-            $this->closeTenantConnection();
 
             Notification::make()
                 ->title('Erreur')
                 ->body('Erreur lors de la sauvegarde: ' . $e->getMessage())
                 ->danger()
                 ->send();
+            return;
+        } finally {
+            $this->closeTenantConnection();
         }
+
+        $this->logConfigChange(
+            'role_permissions_updated',
+            "Permissions du rôle '{$this->selectedRoleName}' mises à jour sur {$tenant->name} (" . count($this->rolePermissionIds) . " permissions)",
+            ['role' => $this->selectedRoleName, 'permission_count' => count($this->rolePermissionIds)]
+        );
+
+        Notification::make()
+            ->title('Permissions sauvegardées')
+            ->body(count($this->rolePermissionIds) . " permissions assignées au rôle '{$this->selectedRoleName}' sur {$tenant->name}.")
+            ->success()
+            ->send();
     }
 }

@@ -17,7 +17,6 @@ class SettingsPage extends Page
     protected static string $view = 'filament.pages.tenant-config.settings';
     protected static ?string $title = 'Paramètres PDF & Bulletin';
 
-    public array $tenants = [];
     public array $settings = [];
     public array $formValues = [];
 
@@ -75,13 +74,9 @@ class SettingsPage extends Page
         ],
     ];
 
-    public function mount(): void
-    {
-        $this->tenants = $this->getActiveTenants();
-    }
-
     public function updatedSelectedTenantId(): void
     {
+        $this->resetTenantState();
         $this->formValues = [];
         $this->loadSettings();
     }
@@ -109,7 +104,6 @@ class SettingsPage extends Page
                 ->pluck('value', 'key')
                 ->toArray();
 
-            // Merge DB values with defaults
             $this->formValues = [];
             foreach ($this->settingGroups as $group) {
                 foreach ($group['keys'] as $key => $meta) {
@@ -122,17 +116,14 @@ class SettingsPage extends Page
                 ->body('Impossible de charger les settings: ' . $e->getMessage())
                 ->danger()
                 ->send();
+        } finally {
+            $this->closeTenantConnection();
         }
-
-        $this->closeTenantConnection();
     }
 
     public function saveSettings(): void
     {
-        if (! $this->selectedTenantId) {
-            Notification::make()->title('Sélectionnez un tenant')->warning()->send();
-            return;
-        }
+        if (! $this->requireTenant()) return;
 
         $db = $this->tenantDb();
         if (! $db) {
@@ -140,37 +131,36 @@ class SettingsPage extends Page
         }
 
         $tenant = $this->getSelectedTenant();
-        $updated = 0;
 
-        foreach ($this->settingGroups as $groupKey => $group) {
-            foreach ($group['keys'] as $key => $meta) {
-                $value = $this->formValues[$key] ?? $meta['default'];
-
-                $db->table('settings')->updateOrInsert(
-                    ['key' => $key],
-                    [
-                        'value' => $value,
+        try {
+            $upsertData = [];
+            foreach ($this->settingGroups as $groupKey => $group) {
+                foreach ($group['keys'] as $key => $meta) {
+                    $upsertData[] = [
+                        'key' => $key,
+                        'value' => $this->formValues[$key] ?? $meta['default'],
                         'type' => $meta['type'] === 'color' ? 'string' : $meta['type'],
                         'group' => $groupKey,
                         'category' => $groupKey,
                         'updated_at' => now(),
-                    ]
-                );
-                $updated++;
+                    ];
+                }
             }
-        }
 
-        $this->closeTenantConnection();
+            $db->table('settings')->upsert($upsertData, ['key'], ['value', 'type', 'group', 'category', 'updated_at']);
+        } finally {
+            $this->closeTenantConnection();
+        }
 
         $this->logConfigChange(
             'settings_bulk_update',
-            "{$updated} settings mis à jour pour {$tenant->name}",
-            ['count' => $updated, 'groups' => array_keys($this->settingGroups)]
+            count($upsertData) . " settings mis à jour pour {$tenant->name}",
+            ['count' => count($upsertData), 'groups' => array_keys($this->settingGroups)]
         );
 
         Notification::make()
             ->title('Paramètres sauvegardés')
-            ->body("{$updated} paramètres mis à jour pour {$tenant->name}.")
+            ->body(count($upsertData) . " paramètres mis à jour pour {$tenant->name}.")
             ->success()
             ->send();
     }

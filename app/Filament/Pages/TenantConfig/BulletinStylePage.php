@@ -18,15 +18,10 @@ class BulletinStylePage extends Page
     protected static ?string $title = 'Style du Bulletin PDF';
 
     public string $bulletinStyle = '';
-    public array $tenants = [];
-
-    public function mount(): void
-    {
-        $this->tenants = $this->getActiveTenants();
-    }
 
     public function updatedSelectedTenantId(): void
     {
+        $this->resetTenantState();
         $this->bulletinStyle = '';
         $this->loadConfig();
     }
@@ -38,20 +33,20 @@ class BulletinStylePage extends Page
             return;
         }
 
-        $setting = $db->table('settings')
-            ->where('key', 'bulletin_style')
-            ->first();
+        try {
+            $setting = $db->table('settings')
+                ->where('key', 'bulletin_style')
+                ->first();
 
-        $this->bulletinStyle = $setting->value ?? 'yakro';
-        $this->closeTenantConnection();
+            $this->bulletinStyle = $setting->value ?? 'yakro';
+        } finally {
+            $this->closeTenantConnection();
+        }
     }
 
     public function saveConfig(): void
     {
-        if (! $this->selectedTenantId) {
-            Notification::make()->title('Sélectionnez un tenant')->warning()->send();
-            return;
-        }
+        if (! $this->requireTenant()) return;
 
         if (! in_array($this->bulletinStyle, ['yakro', 'abidjan'])) {
             Notification::make()->title('Style invalide')->danger()->send();
@@ -65,19 +60,21 @@ class BulletinStylePage extends Page
 
         $tenant = $this->getSelectedTenant();
 
-        $db->table('settings')
-            ->updateOrInsert(
-                ['key' => 'bulletin_style'],
-                [
-                    'value' => $this->bulletinStyle,
-                    'type' => 'string',
-                    'group' => 'bulletin',
-                    'category' => 'bulletin',
-                    'updated_at' => now(),
-                ]
-            );
-
-        $this->closeTenantConnection();
+        try {
+            $db->table('settings')
+                ->updateOrInsert(
+                    ['key' => 'bulletin_style'],
+                    [
+                        'value' => $this->bulletinStyle,
+                        'type' => 'string',
+                        'group' => 'bulletin',
+                        'category' => 'bulletin',
+                        'updated_at' => now(),
+                    ]
+                );
+        } finally {
+            $this->closeTenantConnection();
+        }
 
         $this->logConfigChange(
             'config_update',

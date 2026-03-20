@@ -13,7 +13,16 @@ trait TenantConfigTrait
 {
     public ?int $selectedTenantId = null;
 
+    public array $tenants = [];
+
     protected ?string $tenantConnectionName = null;
+
+    protected ?Tenant $resolvedTenant = null;
+
+    public function mountTenantConfigTrait(): void
+    {
+        $this->tenants = $this->getActiveTenants();
+    }
 
     public function getActiveTenants(): array
     {
@@ -30,7 +39,16 @@ trait TenantConfigTrait
             return null;
         }
 
-        return Tenant::find($this->selectedTenantId);
+        return $this->resolvedTenant ??= Tenant::find($this->selectedTenantId);
+    }
+
+    protected function requireTenant(): bool
+    {
+        if (! $this->selectedTenantId) {
+            Notification::make()->title('Sélectionnez un tenant')->warning()->send();
+            return false;
+        }
+        return true;
     }
 
     protected function connectToTenant(): ?string
@@ -84,10 +102,16 @@ trait TenantConfigTrait
         );
     }
 
+    protected function resetTenantState(): void
+    {
+        $this->closeTenantConnection();
+        $this->resolvedTenant = null;
+    }
+
     protected function closeTenantConnection(): void
     {
         if ($this->tenantConnectionName) {
-            DB::purge($this->tenantConnectionName);
+            app(TenantConnectionManager::class)->closeConnection($this->tenantConnectionName);
             $this->tenantConnectionName = null;
         }
     }

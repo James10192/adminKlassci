@@ -17,7 +17,6 @@ class MatriculeConfigPage extends Page
     protected static string $view = 'filament.pages.tenant-config.matricule-config';
     protected static ?string $title = 'Configuration des Matricules';
 
-    public array $tenants = [];
     public array $configs = [];
 
     // Form fields
@@ -30,13 +29,9 @@ class MatriculeConfigPage extends Page
     public ?int $editingId = null;
     public bool $showForm = false;
 
-    public function mount(): void
-    {
-        $this->tenants = $this->getActiveTenants();
-    }
-
     public function updatedSelectedTenantId(): void
     {
+        $this->resetTenantState();
         $this->configs = [];
         $this->resetForm();
         $this->loadConfigs();
@@ -62,9 +57,9 @@ class MatriculeConfigPage extends Page
                 ->body('La table esbtp_matricule_configs n\'existe pas pour ce tenant.')
                 ->warning()
                 ->send();
+        } finally {
+            $this->closeTenantConnection();
         }
-
-        $this->closeTenantConnection();
     }
 
     public function openForm(?int $id = null): void
@@ -101,6 +96,8 @@ class MatriculeConfigPage extends Page
 
     public function saveConfig(): void
     {
+        if (! $this->requireTenant()) return;
+
         $this->validate([
             'formNiveauCode' => 'required|max:50',
             'formNiveauName' => 'required|max:100',
@@ -126,18 +123,20 @@ class MatriculeConfigPage extends Page
             'updated_at' => now(),
         ];
 
-        if ($this->editingId) {
-            $db->table('esbtp_matricule_configs')
-                ->where('id', $this->editingId)
-                ->update($data);
-            $action = 'updated';
-        } else {
-            $data['created_at'] = now();
-            $db->table('esbtp_matricule_configs')->insert($data);
-            $action = 'created';
+        try {
+            if ($this->editingId) {
+                $db->table('esbtp_matricule_configs')
+                    ->where('id', $this->editingId)
+                    ->update($data);
+                $action = 'updated';
+            } else {
+                $data['created_at'] = now();
+                $db->table('esbtp_matricule_configs')->insert($data);
+                $action = 'created';
+            }
+        } finally {
+            $this->closeTenantConnection();
         }
-
-        $this->closeTenantConnection();
 
         $this->logConfigChange(
             'matricule_config_' . $action,
@@ -157,21 +156,26 @@ class MatriculeConfigPage extends Page
 
     public function deleteConfig(int $id): void
     {
+        if (! $this->requireTenant()) return;
+
+        $config = collect($this->configs)->firstWhere('id', $id);
+        $tenant = $this->getSelectedTenant();
+
         $db = $this->tenantDb();
         if (! $db) {
             return;
         }
 
-        $tenant = $this->getSelectedTenant();
-        $config = $db->table('esbtp_matricule_configs')->where('id', $id)->first();
-
-        $db->table('esbtp_matricule_configs')->where('id', $id)->delete();
-        $this->closeTenantConnection();
+        try {
+            $db->table('esbtp_matricule_configs')->where('id', $id)->delete();
+        } finally {
+            $this->closeTenantConnection();
+        }
 
         $this->logConfigChange(
             'matricule_config_deleted',
-            "Config matricule supprimée (niveau {$config->niveau_etude_code}) sur {$tenant->name}",
-            ['deleted_id' => $id, 'niveau' => $config->niveau_etude_code ?? 'unknown']
+            "Config matricule supprimée (niveau " . ($config['niveau_etude_code'] ?? 'unknown') . ") sur {$tenant->name}",
+            ['deleted_id' => $id, 'niveau' => $config['niveau_etude_code'] ?? 'unknown']
         );
 
         Notification::make()
