@@ -116,27 +116,55 @@ class CleanupOldBackups extends Command
     }
 
     /**
-     * Supprime les fichiers physiques d'un backup
+     * Supprime les fichiers ou dossiers physiques d'un backup
      */
     private function deleteBackupFiles(TenantBackup $backup): bool
     {
         $deleted = true;
 
-        // Supprimer le fichier de backup principal
-        if ($backup->backup_path && file_exists($backup->backup_path)) {
-            $deleted = $deleted && unlink($backup->backup_path);
-        }
+        $paths = array_filter([
+            $backup->backup_path,
+            $backup->database_backup_path,
+            $backup->storage_backup_path,
+        ]);
 
-        // Supprimer le backup de base de données
-        if ($backup->database_backup_path && file_exists($backup->database_backup_path)) {
-            $deleted = $deleted && unlink($backup->database_backup_path);
-        }
+        foreach ($paths as $path) {
+            if (!file_exists($path) && !is_dir($path)) {
+                continue;
+            }
 
-        // Supprimer le backup de fichiers storage
-        if ($backup->storage_backup_path && file_exists($backup->storage_backup_path)) {
-            $deleted = $deleted && unlink($backup->storage_backup_path);
+            if (is_dir($path)) {
+                $deleted = $deleted && $this->deleteDirectory($path);
+            } else {
+                $deleted = $deleted && unlink($path);
+            }
         }
 
         return $deleted;
+    }
+
+    /**
+     * Supprime un dossier récursivement
+     */
+    private function deleteDirectory(string $dir): bool
+    {
+        if (!is_dir($dir)) {
+            return false;
+        }
+
+        $items = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($items as $item) {
+            if ($item->isDir()) {
+                rmdir($item->getRealPath());
+            } else {
+                unlink($item->getRealPath());
+            }
+        }
+
+        return rmdir($dir);
     }
 }
