@@ -16,7 +16,7 @@
                             </div>
                             <div>
                                 <div class="gp-card-name">{{ $data['tenant_name'] }}</div>
-                                <div class="gp-card-code">{{ $code }}</div>
+                                <div class="gp-card-code">{{ $code }} &middot; {{ $data['academic_year'] ?? 'N/A' }}</div>
                             </div>
                         </div>
                         @if($data['error'] ?? false)

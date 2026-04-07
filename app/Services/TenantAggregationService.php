@@ -154,24 +154,17 @@ class TenantAggregationService
                 ->distinct()
                 ->count('etudiant_id');
 
-            // Revenue: expected (sum of frais_subscriptions.amount for active inscriptions)
-            // frais_subscriptions is the source of truth — montant_scolarite on inscription is only partial
-            $revenueExpected = (float) DB::connection($conn)
-                ->table('esbtp_frais_subscriptions as fs')
-                ->join('esbtp_inscriptions as i', 'fs.inscription_id', '=', 'i.id')
-                ->where('i.annee_universitaire_id', $currentYear->id)
-                ->where('i.status', 'active')
-                ->where('fs.is_active', 1)
-                ->sum('fs.amount');
+            // Revenue expected: same logic as ESBTPComptabiliteController::calculerTotalDu()
+            // Iterates inscriptions × mandatory categories with subscription/config/default fallback
+            $revenueExpected = $this->computeRevenueExpected($conn, $currentYear->id);
 
-            // Revenue: collected (sum of validated payments on active inscriptions only)
+            // Revenue: collected (all validated payments for this academic year)
+            // Matches suivi-categories which counts ALL validated payments
             $revenueCollected = (float) DB::connection($conn)
-                ->table('esbtp_paiements as p')
-                ->join('esbtp_inscriptions as i', 'p.inscription_id', '=', 'i.id')
-                ->where('i.annee_universitaire_id', $currentYear->id)
-                ->where('i.status', 'active')
-                ->where('p.status', 'validé')
-                ->sum('p.montant');
+                ->table('esbtp_paiements')
+                ->where('annee_universitaire_id', $currentYear->id)
+                ->where('status', 'validé')
+                ->sum('montant');
 
             // Staff count
             $staff = DB::connection($conn)
@@ -190,6 +183,7 @@ class TenantAggregationService
                 'tenant_id' => $tenant->id,
                 'tenant_code' => $tenant->code,
                 'tenant_name' => $tenant->name,
+                'academic_year' => $currentYear->libelle ?? 'N/A',
                 'students' => $students,
                 'inscriptions' => $inscriptions,
                 'revenue_expected' => $revenueExpected,
@@ -243,22 +237,14 @@ class TenantAggregationService
                     ->pluck('total', 'month')
                     ->toArray();
 
-                // Total expected from frais_subscriptions (source of truth)
-                $totalExpected = (float) DB::connection($conn)
-                    ->table('esbtp_frais_subscriptions as fs')
-                    ->join('esbtp_inscriptions as i', 'fs.inscription_id', '=', 'i.id')
-                    ->where('i.annee_universitaire_id', $currentYear->id)
-                    ->where('i.status', 'active')
-                    ->where('fs.is_active', 1)
-                    ->sum('fs.amount');
+                // Total expected: same logic as suivi-categories
+                $totalExpected = $this->computeRevenueExpected($conn, $currentYear->id);
 
                 $totalCollected = (float) DB::connection($conn)
-                    ->table('esbtp_paiements as p')
-                    ->join('esbtp_inscriptions as i', 'p.inscription_id', '=', 'i.id')
-                    ->where('i.annee_universitaire_id', $currentYear->id)
-                    ->where('i.status', 'active')
-                    ->where('p.status', 'validé')
-                    ->sum('p.montant');
+                    ->table('esbtp_paiements')
+                    ->where('annee_universitaire_id', $currentYear->id)
+                    ->where('status', 'validé')
+                    ->sum('montant');
 
                 // Payment type breakdown
                 $byType = DB::connection($conn)
@@ -378,6 +364,81 @@ class TenantAggregationService
 
             return round(($stats->present / $stats->total) * 100, 1);
         } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Replicate ESBTPComptabiliteController::calculerTotalDu() logic in raw SQL.
+     * Iterates inscriptions × mandatory categories with subscription/config/default fallback.
+     */
+    private function computeRevenueExpected(string $conn, int $anneeId): float
+    {
+        try {
+            $inscriptions = DB::connection($conn)
+                ->table('esbtp_inscriptions')
+                ->whereIn('status', ['active', 'en_attente', 'validée'])
+                ->where('annee_universitaire_id', $anneeId)
+                ->get(['id', 'filiere_id', 'niveau_id', 'affectation_status']);
+
+            if ($inscriptions->isEmpty()) {
+                return 0;
+            }
+
+            $categories = DB::connection($conn)
+                ->table('esbtp_frais_categories')
+                ->where('is_active', true)
+                ->get();
+
+            $subscriptions = DB::connection($conn)
+                ->table('esbtp_frais_subscriptions')
+                ->where('is_active', true)
+                ->whereIn('inscription_id', $inscriptions->pluck('id'))
+                ->get()
+                ->groupBy('inscription_id');
+
+            $configurations = DB::connection($conn)
+                ->table('esbtp_frais_configurations')
+                ->where('is_active', true)
+                ->whereIn('frais_category_id', $categories->pluck('id'))
+                ->get()
+                ->groupBy(fn ($c) => $c->frais_category_id . '_' . $c->filiere_id . '_' . $c->niveau_id);
+
+            $totalDue = 0;
+
+            foreach ($inscriptions as $inscription) {
+                $inscSubs = $subscriptions->get($inscription->id, collect());
+
+                foreach ($categories as $category) {
+                    $sub = $inscSubs->where('frais_category_id', $category->id)->first();
+
+                    if ($category->is_mandatory) {
+                        if ($sub) {
+                            $montant = $sub->amount;
+                        } else {
+                            $key = $category->id . '_' . $inscription->filiere_id . '_' . $inscription->niveau_id;
+                            $config = $configurations->get($key, collect())->first();
+
+                            if ($config) {
+                                $status = $inscription->affectation_status ?? 'affecté';
+                                $field = 'amount_' . str_replace('é', 'e', $status);
+                                $montant = $config->{$field} ?? $config->amount ?? $category->default_amount;
+                            } else {
+                                $montant = $category->default_amount;
+                            }
+                        }
+                    } else {
+                        $montant = $sub ? $sub->amount : 0;
+                    }
+
+                    $totalDue += $montant;
+                }
+            }
+
+            return $totalDue;
+
+        } catch (\Exception $e) {
+            Log::warning("computeRevenueExpected failed: {$e->getMessage()}");
             return 0;
         }
     }
