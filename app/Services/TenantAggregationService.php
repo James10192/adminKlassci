@@ -164,12 +164,14 @@ class TenantAggregationService
                 ->where('fs.is_active', 1)
                 ->sum('fs.amount');
 
-            // Revenue: collected (sum of validated payments)
+            // Revenue: collected (sum of validated payments on active inscriptions only)
             $revenueCollected = (float) DB::connection($conn)
-                ->table('esbtp_paiements')
-                ->where('annee_universitaire_id', $currentYear->id)
-                ->where('status', 'validé')
-                ->sum('montant');
+                ->table('esbtp_paiements as p')
+                ->join('esbtp_inscriptions as i', 'p.inscription_id', '=', 'i.id')
+                ->where('i.annee_universitaire_id', $currentYear->id)
+                ->where('i.status', 'active')
+                ->where('p.status', 'validé')
+                ->sum('p.montant');
 
             // Staff count
             $staff = DB::connection($conn)
@@ -251,10 +253,12 @@ class TenantAggregationService
                     ->sum('fs.amount');
 
                 $totalCollected = (float) DB::connection($conn)
-                    ->table('esbtp_paiements')
-                    ->where('annee_universitaire_id', $currentYear->id)
-                    ->where('status', 'validé')
-                    ->sum('montant');
+                    ->table('esbtp_paiements as p')
+                    ->join('esbtp_inscriptions as i', 'p.inscription_id', '=', 'i.id')
+                    ->where('i.annee_universitaire_id', $currentYear->id)
+                    ->where('i.status', 'active')
+                    ->where('p.status', 'validé')
+                    ->sum('p.montant');
 
                 // Payment type breakdown
                 $byType = DB::connection($conn)
