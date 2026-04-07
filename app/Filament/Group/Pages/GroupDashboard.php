@@ -2,6 +2,9 @@
 
 namespace App\Filament\Group\Pages;
 
+use App\Services\TenantAggregationService;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard;
 
 class GroupDashboard extends Dashboard
@@ -11,6 +14,27 @@ class GroupDashboard extends Dashboard
     protected static ?string $title = 'Tableau de bord';
 
     protected static string $routePath = '/';
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('refresh')
+                ->label('Actualiser')
+                ->icon('heroicon-o-arrow-path')
+                ->color('gray')
+                ->action(function () {
+                    $group = auth('group')->user()->group;
+                    $service = app(TenantAggregationService::class);
+                    $service->refreshGroupCache($group);
+                    $service->getGroupKpis($group);
+
+                    Notification::make()
+                        ->title('Données actualisées')
+                        ->success()
+                        ->send();
+                }),
+        ];
+    }
 
     public function getWidgets(): array
     {

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Widgets;
 
+use App\Services\TenantAggregationService;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Cache;
 
@@ -39,6 +40,22 @@ class GroupWelcomeWidget extends Widget
     public function getEstablishmentCount(): int
     {
         return auth('group')->user()->group->tenants()->active()->count();
+    }
+
+    public function getAcademicYears(): array
+    {
+        $group = auth('group')->user()->group;
+        $kpis = app(TenantAggregationService::class)->getGroupKpis($group);
+
+        $years = [];
+        foreach ($kpis['establishments'] ?? [] as $establishment) {
+            $year = $establishment['academic_year'] ?? null;
+            if ($year && $year !== 'N/A' && ! in_array($year, $years)) {
+                $years[] = $year;
+            }
+        }
+
+        return $years;
     }
 
     public function getLastSync(): string
