@@ -154,12 +154,15 @@ class TenantAggregationService
                 ->distinct()
                 ->count('etudiant_id');
 
-            // Revenue: expected (sum of montant_scolarite from inscriptions)
+            // Revenue: expected (sum of frais_subscriptions.amount for active inscriptions)
+            // frais_subscriptions is the source of truth — montant_scolarite on inscription is only partial
             $revenueExpected = (float) DB::connection($conn)
-                ->table('esbtp_inscriptions')
-                ->where('annee_universitaire_id', $currentYear->id)
-                ->where('status', 'active')
-                ->sum('montant_scolarite');
+                ->table('esbtp_frais_subscriptions as fs')
+                ->join('esbtp_inscriptions as i', 'fs.inscription_id', '=', 'i.id')
+                ->where('i.annee_universitaire_id', $currentYear->id)
+                ->where('i.status', 'active')
+                ->where('fs.is_active', 1)
+                ->sum('fs.amount');
 
             // Revenue: collected (sum of validated payments)
             $revenueCollected = (float) DB::connection($conn)
@@ -238,12 +241,14 @@ class TenantAggregationService
                     ->pluck('total', 'month')
                     ->toArray();
 
-                // Outstanding debt
+                // Total expected from frais_subscriptions (source of truth)
                 $totalExpected = (float) DB::connection($conn)
-                    ->table('esbtp_inscriptions')
-                    ->where('annee_universitaire_id', $currentYear->id)
-                    ->where('status', 'active')
-                    ->sum('montant_scolarite');
+                    ->table('esbtp_frais_subscriptions as fs')
+                    ->join('esbtp_inscriptions as i', 'fs.inscription_id', '=', 'i.id')
+                    ->where('i.annee_universitaire_id', $currentYear->id)
+                    ->where('i.status', 'active')
+                    ->where('fs.is_active', 1)
+                    ->sum('fs.amount');
 
                 $totalCollected = (float) DB::connection($conn)
                     ->table('esbtp_paiements')
