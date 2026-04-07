@@ -41,6 +41,7 @@ class Tenant extends Model
         'phone',
         'address',
         'metadata',
+        'group_id',
         'api_token',
         'api_token_created_at',
     ];
@@ -101,6 +102,11 @@ class Tenant extends Model
     public function subscriptionPlan()
     {
         return $this->belongsTo(SubscriptionPlan::class);
+    }
+
+    public function group()
+    {
+        return $this->belongsTo(Group::class);
     }
 
     /**

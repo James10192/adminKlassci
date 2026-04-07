@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\TenantResource\Pages;
 use App\Filament\Resources\TenantResource\RelationManagers;
+use App\Models\Group;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use Filament\Forms;
@@ -78,6 +79,14 @@ class TenantResource extends Resource
                                             ->suffix('.klassci.com')
                                             ->placeholder('lycee-yop')
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
+                                        Forms\Components\Select::make('group_id')
+                                            ->label('Groupe (optionnel)')
+                                            ->relationship('group', 'name')
+                                            ->searchable()
+                                            ->preload()
+                                            ->placeholder('Aucun groupe — établissement indépendant')
+                                            ->helperText('Associer cet établissement à un groupe permet au fondateur de le voir dans son portail groupe.')
+                                            ->nullable(),
                                     ])->columns(2),
                             ]),
 
@@ -456,6 +465,14 @@ class TenantResource extends Resource
                     })
                     ->formatStateUsing(fn (string $state): string => ucfirst($state)),
 
+                Tables\Columns\TextColumn::make('group.name')
+                    ->label('Groupe')
+                    ->badge()
+                    ->color('primary')
+                    ->placeholder('—')
+                    ->sortable()
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('current_inscriptions_per_year')
                     ->label('Inscrits / Max')
                     ->formatStateUsing(fn (Tenant $record): string =>
@@ -526,6 +543,13 @@ class TenantResource extends Resource
                         'professional' => 'Professional',
                         'elite' => 'Elite',
                     ]),
+
+                Tables\Filters\SelectFilter::make('group_id')
+                    ->label('Groupe')
+                    ->relationship('group', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->placeholder('Tous'),
 
                 Tables\Filters\Filter::make('subscription_expired')
                     ->label('Abonnement expiré')
