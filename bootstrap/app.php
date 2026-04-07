@@ -24,6 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
             ->withoutOverlapping()
             ->runInBackground()
             ->appendOutputTo(storage_path('logs/tenant-stats-updates.log'));
+
+        // Vérification quotidienne des alertes KPI pour les groupes
+        $schedule->command('group:alert-check')
+            ->dailyAt('08:00')
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/group-alert-check.log'));
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

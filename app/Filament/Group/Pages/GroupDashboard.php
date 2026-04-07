@@ -6,6 +6,7 @@ use App\Services\TenantAggregationService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Dashboard;
+use Illuminate\Support\Facades\Artisan;
 
 class GroupDashboard extends Dashboard
 {
@@ -30,6 +31,19 @@ class GroupDashboard extends Dashboard
 
                     Notification::make()
                         ->title('Données actualisées')
+                        ->success()
+                        ->send();
+                }),
+            Action::make('check_alerts')
+                ->label('Vérifier alertes')
+                ->icon('heroicon-o-bell-alert')
+                ->color('warning')
+                ->action(function () {
+                    $group = auth('group')->user()->group;
+                    Artisan::call('group:alert-check', ['--group' => $group->code]);
+
+                    Notification::make()
+                        ->title('Alertes vérifiées')
                         ->success()
                         ->send();
                 }),
