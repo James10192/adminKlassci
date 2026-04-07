@@ -4,6 +4,7 @@ namespace App\Filament\Group\Resources;
 
 use App\Filament\Group\Resources\EstablishmentResource\Pages;
 use App\Models\Tenant;
+use App\Services\TenantAggregationService;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -72,13 +73,29 @@ class EstablishmentResource extends Resource
                     ->getStateUsing(fn (Tenant $record) => $record->current_inscriptions_per_year . ' / ' . $record->max_inscriptions_per_year)
                     ->color(fn (Tenant $record) => $record->isOverLimit('inscriptions') ? 'danger' : 'success'),
 
-                Tables\Columns\TextColumn::make('current_students')
+                Tables\Columns\TextColumn::make('live_students')
                     ->label('Étudiants')
-                    ->getStateUsing(fn (Tenant $record) => (string) ($record->current_students ?? 0)),
+                    ->getStateUsing(function (Tenant $record) {
+                        $service = app(TenantAggregationService::class);
+                        $kpis = $service->getTenantKpis($record);
+                        return (string) ($kpis['inscriptions'] ?? 0);
+                    }),
 
-                Tables\Columns\TextColumn::make('current_staff')
+                Tables\Columns\TextColumn::make('live_staff')
                     ->label('Personnel')
-                    ->getStateUsing(fn (Tenant $record) => (string) ($record->current_staff ?? 0)),
+                    ->getStateUsing(function (Tenant $record) {
+                        $service = app(TenantAggregationService::class);
+                        $kpis = $service->getTenantKpis($record);
+                        return (string) ($kpis['staff'] ?? 0);
+                    }),
+
+                Tables\Columns\TextColumn::make('academic_year')
+                    ->label('Année')
+                    ->getStateUsing(function (Tenant $record) {
+                        $service = app(TenantAggregationService::class);
+                        $kpis = $service->getTenantKpis($record);
+                        return $kpis['academic_year'] ?? 'N/A';
+                    }),
 
                 Tables\Columns\TextColumn::make('subdomain')
                     ->label('URL')
@@ -137,6 +154,53 @@ class EstablishmentResource extends Resource
                         Infolists\Components\TextEntry::make('current_staff')
                             ->label('Personnel')
                             ->suffix(fn (Tenant $record) => " / {$record->max_staff}"),
+                    ]),
+
+                Infolists\Components\Section::make('Données en temps réel')
+                    ->columns(3)
+                    ->schema([
+                        Infolists\Components\TextEntry::make('live_inscriptions')
+                            ->label('Étudiants inscrits')
+                            ->getStateUsing(function (Tenant $record) {
+                                $service = app(TenantAggregationService::class);
+                                $kpis = $service->getTenantKpis($record);
+                                return (string) ($kpis['inscriptions'] ?? 0);
+                            }),
+                        Infolists\Components\TextEntry::make('live_staff')
+                            ->label('Personnel')
+                            ->getStateUsing(function (Tenant $record) {
+                                $service = app(TenantAggregationService::class);
+                                $kpis = $service->getTenantKpis($record);
+                                return (string) ($kpis['staff'] ?? 0);
+                            }),
+                        Infolists\Components\TextEntry::make('live_collection_rate')
+                            ->label('Taux de recouvrement')
+                            ->getStateUsing(function (Tenant $record) {
+                                $service = app(TenantAggregationService::class);
+                                $kpis = $service->getTenantKpis($record);
+                                return ($kpis['collection_rate'] ?? 0) . ' %';
+                            }),
+                        Infolists\Components\TextEntry::make('live_revenue_expected')
+                            ->label('Revenus attendus')
+                            ->getStateUsing(function (Tenant $record) {
+                                $service = app(TenantAggregationService::class);
+                                $kpis = $service->getTenantKpis($record);
+                                return number_format((float) ($kpis['revenue_expected'] ?? 0), 0, ',', ' ') . ' FCFA';
+                            }),
+                        Infolists\Components\TextEntry::make('live_revenue_collected')
+                            ->label('Revenus encaissés')
+                            ->getStateUsing(function (Tenant $record) {
+                                $service = app(TenantAggregationService::class);
+                                $kpis = $service->getTenantKpis($record);
+                                return number_format((float) ($kpis['revenue_collected'] ?? 0), 0, ',', ' ') . ' FCFA';
+                            }),
+                        Infolists\Components\TextEntry::make('live_academic_year')
+                            ->label('Année universitaire')
+                            ->getStateUsing(function (Tenant $record) {
+                                $service = app(TenantAggregationService::class);
+                                $kpis = $service->getTenantKpis($record);
+                                return $kpis['academic_year'] ?? 'N/A';
+                            }),
                     ]),
 
                 Infolists\Components\Section::make('Abonnement')
