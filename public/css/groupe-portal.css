@@ -630,6 +630,285 @@
 .gp-filiere-count { font-size: 0.875rem; font-weight: 700; color: var(--gp-text); }
 .gp-filiere-empty { text-align: center; padding: 1.5rem; color: #94a3b8; font-size: 0.875rem; }
 
+/* ═══════════════════════════════════════════════
+   DARK MODE
+   ═══════════════════════════════════════════════ */
+
+/* Dark mode CSS variables */
+.dark {
+    --gp-primary: #60a5fa;
+    --gp-primary-light: #93c5fd;
+    --gp-primary-bg: rgba(96, 165, 250, 0.1);
+    --gp-success: #34d399;
+    --gp-warning: #fbbf24;
+    --gp-danger: #f87171;
+    --gp-text: #f1f5f9;
+    --gp-text-secondary: #94a3b8;
+    --gp-border: #334155;
+    --gp-bg-subtle: #0f172a;
+}
+
+/* ─── Dark: Hero Banner ─── */
+.dark .gp-hero {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2d4a7a 100%);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Dark: Establishment Cards ─── */
+.dark .gp-card {
+    background: #1e293b;
+    border-color: #334155;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.dark .gp-card:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+.dark .gp-card-accent {
+    background: linear-gradient(90deg, #60a5fa, #93c5fd);
+}
+.dark .gp-card-body {
+    background: #1e293b;
+}
+.dark .gp-card-name {
+    color: #f1f5f9;
+}
+.dark .gp-card-code {
+    color: #64748b;
+}
+.dark .gp-card-icon {
+    background: rgba(96, 165, 250, 0.1);
+}
+
+/* Dark: Status badges */
+.dark .gp-status-active {
+    background: rgba(52, 211, 153, 0.1);
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+}
+.dark .gp-status-error {
+    background: rgba(248, 113, 113, 0.1);
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.3);
+}
+
+/* ─── Dark: KPI Boxes ─── */
+.dark .gp-kpi-box {
+    background: #0f172a;
+    border-color: #334155;
+}
+.dark .gp-kpi-value {
+    color: #f1f5f9;
+}
+.dark .gp-kpi-label {
+    color: #94a3b8;
+}
+.dark .gp-kpi-label svg {
+    color: #64748b;
+}
+
+/* ─── Dark: Progress Bar ─── */
+.dark .gp-progress-label {
+    color: #94a3b8;
+}
+.dark .gp-progress-track {
+    background: #334155;
+}
+
+/* ─── Dark: Revenue ─── */
+.dark .gp-revenue {
+    background: rgba(52, 211, 153, 0.08);
+    border-color: rgba(52, 211, 153, 0.2);
+}
+.dark .gp-revenue-label {
+    color: #34d399;
+}
+.dark .gp-revenue-value {
+    color: #6ee7b7;
+}
+
+/* ─── Dark: Card Action ─── */
+.dark .gp-card-action {
+    color: #60a5fa;
+    background: rgba(96, 165, 250, 0.08);
+    border-color: rgba(96, 165, 250, 0.15);
+}
+.dark .gp-card-action:hover {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+}
+
+/* ─── Dark: Empty State ─── */
+.dark .gp-empty {
+    background: #1e293b;
+    border-color: #334155;
+}
+.dark .gp-empty svg {
+    color: #475569;
+}
+.dark .gp-empty-title {
+    color: #94a3b8;
+}
+.dark .gp-empty-text {
+    color: #64748b;
+}
+
+/* ─── Dark: Summary Cards ─── */
+.dark .gp-summary-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+.dark .gp-summary-card.green {
+    border-color: rgba(52, 211, 153, 0.3);
+}
+.dark .gp-summary-label {
+    color: #94a3b8;
+}
+.dark .gp-summary-amount {
+    color: #f1f5f9;
+}
+.dark .gp-summary-unit {
+    color: #64748b;
+}
+
+/* ─── Dark: Financial Table ─── */
+.dark .gp-fin-table-wrap {
+    background: #1e293b;
+    border-color: #334155;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.dark .gp-fin-table-header {
+    border-bottom-color: #334155;
+}
+.dark .gp-fin-table-title {
+    color: #f1f5f9;
+}
+.dark .gp-fin-table-subtitle {
+    color: #94a3b8;
+}
+.dark .gp-fin-table-badge {
+    background: #0f172a;
+    color: #94a3b8;
+}
+.dark .gp-fin-table thead {
+    background: #0f172a;
+}
+.dark .gp-fin-table th {
+    color: #94a3b8;
+}
+.dark .gp-fin-table td {
+    border-top-color: #334155;
+    color: #94a3b8;
+}
+.dark .gp-fin-table tbody tr:hover {
+    background: rgba(15, 23, 42, 0.5);
+}
+.dark .gp-fin-table tfoot {
+    background: #0f172a;
+}
+.dark .gp-fin-table tfoot td {
+    color: #f1f5f9;
+    border-top-color: #475569;
+}
+.dark .gp-fin-table .cell-name {
+    color: #f1f5f9;
+}
+.dark .gp-fin-table .cell-icon.blue {
+    background: rgba(96, 165, 250, 0.1);
+}
+.dark .gp-fin-table .cell-icon.gray {
+    background: #334155;
+}
+.dark .gp-fin-table .cell-icon.gray svg {
+    color: #94a3b8;
+}
+
+/* Dark: Rate badges */
+.dark .gp-rate-badge.success {
+    background: rgba(52, 211, 153, 0.1);
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+}
+.dark .gp-rate-badge.warning {
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.3);
+}
+.dark .gp-rate-badge.danger {
+    background: rgba(248, 113, 113, 0.1);
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.3);
+}
+.dark .gp-rate-badge.primary {
+    background: rgba(96, 165, 250, 0.1);
+    color: #60a5fa;
+    border-color: rgba(96, 165, 250, 0.2);
+}
+
+/* ─── Dark: Scorecard ─── */
+.dark .gp-scorecard-wrap {
+    background: #1e293b;
+    border-color: #334155;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.dark .gp-scorecard-header {
+    border-bottom-color: #334155;
+}
+.dark .gp-scorecard-title {
+    color: #f1f5f9;
+}
+.dark .gp-scorecard-desc {
+    color: #94a3b8;
+}
+.dark .gp-scorecard-table thead {
+    background: #0f172a;
+}
+.dark .gp-scorecard-table th {
+    color: #94a3b8;
+}
+.dark .gp-scorecard-table td {
+    border-top-color: #334155;
+    color: #94a3b8;
+}
+.dark .gp-scorecard-table tbody tr:hover {
+    background: rgba(15, 23, 42, 0.5);
+}
+.dark .gp-scorecard-indicator {
+    color: #f1f5f9;
+}
+.dark .gp-scorecard-indicator svg {
+    color: #64748b;
+}
+.dark .gp-scorecard-table .cell-bold {
+    color: #f1f5f9;
+}
+
+/* ─── Dark: Filiere Cards ─── */
+.dark .gp-filiere-card {
+    background: #1e293b;
+    border-color: #334155;
+}
+.dark .gp-filiere-card-header {
+    border-bottom-color: #334155;
+}
+.dark .gp-filiere-card-title {
+    color: #f1f5f9;
+}
+.dark .gp-filiere-card-subtitle {
+    color: #94a3b8;
+}
+.dark .gp-filiere-row {
+    border-bottom-color: #1e293b;
+}
+.dark .gp-filiere-name {
+    color: #94a3b8;
+}
+.dark .gp-filiere-count {
+    color: #f1f5f9;
+}
+.dark .gp-filiere-empty {
+    color: #64748b;
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
     .gp-hero-right { display: none; }
