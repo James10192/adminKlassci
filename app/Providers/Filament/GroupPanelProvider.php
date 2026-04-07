@@ -2,6 +2,8 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Group\Pages\Auth\GroupLogin;
+use App\Filament\Group\Pages\EditProfile;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -24,7 +26,9 @@ class GroupPanelProvider extends PanelProvider
         return $panel
             ->id('group')
             ->path('groupe')
-            ->login()
+            ->login(GroupLogin::class)
+            ->passwordReset()
+            ->profile(EditProfile::class)
             ->authGuard('group')
             ->brandName('KLASSCI Groupe')
             ->brandLogo(asset('images/LOGO-KLASSCI-PNG.png'))

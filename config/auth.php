@@ -101,6 +101,12 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+        'group_members' => [
+            'provider' => 'group_members',
+            'table' => 'password_reset_tokens',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
     ],
 
     /*
