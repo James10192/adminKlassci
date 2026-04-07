@@ -183,7 +183,7 @@ class TenantAggregationService
                 'tenant_id' => $tenant->id,
                 'tenant_code' => $tenant->code,
                 'tenant_name' => $tenant->name,
-                'academic_year' => $currentYear->libelle ?? 'N/A',
+                'academic_year' => $currentYear->name ?: ($currentYear->libelle ?: 'N/A'),
                 'students' => $students,
                 'inscriptions' => $inscriptions,
                 'revenue_expected' => $revenueExpected,
