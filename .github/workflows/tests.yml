@@ -40,6 +40,9 @@ jobs:
       - name: Copy environment file
         run: cp .env.example .env
 
+      - name: Create storage directories
+        run: mkdir -p storage/framework/{cache,sessions,views,testing} bootstrap/cache
+
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress --ignore-platform-req=php
 
