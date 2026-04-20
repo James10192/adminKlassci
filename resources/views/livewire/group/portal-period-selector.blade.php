@@ -3,6 +3,8 @@
     $panelId = 'gp-period-custom-panel-' . $this->getId();
     $currentValue = $this->currentType->value;
     $debounceMs = (int) config('group_portal.period_selector_debounce_ms', 300);
+    $eventName = \App\Support\Period\PeriodEventContract::EVENT_NAME;
+    $presetPayloads = $this->presetPayloads;
 @endphp
 
 <div
@@ -15,6 +17,28 @@
         localEnd: @js($customEnd),
         debounceId: null,
         debounceMs: {{ $debounceMs }},
+        eventName: @js($eventName),
+        presetPayloads: @js($presetPayloads),
+        buildPayload() {
+            if (this.localType === 'custom-range') {
+                if (!this.localStart || !this.localEnd) return null;
+                const start = new Date(this.localStart);
+                const end = new Date(this.localEnd);
+                if (isNaN(start) || isNaN(end) || start > end) return null;
+                return {
+                    type: 'custom-range',
+                    start: new Date(start.setHours(0, 0, 0, 0)).toISOString(),
+                    end: new Date(end.setHours(23, 59, 59, 0)).toISOString(),
+                    label: `${this.localStart} → ${this.localEnd}`,
+                };
+            }
+            return this.presetPayloads[this.localType] ?? null;
+        },
+        broadcast() {
+            const payload = this.buildPayload();
+            if (!payload) return;
+            window.dispatchEvent(new CustomEvent(this.eventName, { detail: payload }));
+        },
         select(value) {
             this.localType = value;
             this.open = false;
@@ -30,6 +54,7 @@
             clearTimeout(this.debounceId);
             this.debounceId = setTimeout(() => {
                 $wire.set('periodType', this.localType);
+                this.broadcast();
             }, this.debounceMs);
         },
         commitRange() {
@@ -37,6 +62,7 @@
             this.debounceId = setTimeout(() => {
                 $wire.set('customStart', this.localStart);
                 $wire.set('customEnd', this.localEnd);
+                this.broadcast();
             }, this.debounceMs);
         },
         toggleListbox() {
