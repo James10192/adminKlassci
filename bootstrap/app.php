@@ -37,5 +37,6 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withProviders([
         \App\Providers\Filament\AdminPanelProvider::class,
         \App\Providers\Filament\GroupPanelProvider::class,
+        \App\Providers\GroupServiceProvider::class,
     ])
     ->create();

@@ -40,12 +40,19 @@
         "preferred-install": "dist",
         "sort-packages": true,
         "allow-plugins": {
-            "php-http/discovery": true
+            "php-http/discovery": true,
+            "pestphp/pest-plugin": true,
+            "pestphp/pest-plugin-laravel": true,
+            "pestphp/pest-plugin-arch": true
+        },
+        "platform": {
         }
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
     "require-dev": {
-        "laravel/tinker": "^2.10"
+        "laravel/tinker": "^2.10",
+        "pestphp/pest": "^3.0",
+        "pestphp/pest-plugin-laravel": "^3.0"
     }
 }
