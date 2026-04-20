@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Resources;
 
+use App\Enums\AlertSeverity;
 use App\Filament\Group\Resources\EstablishmentResource\Pages;
 use App\Models\Tenant;
 use App\Services\TenantAggregationService;
@@ -26,48 +27,51 @@ class EstablishmentResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
-    public static function getNavigationBadge(): ?string
-    {
-        $user = auth('group')->user();
-        $group = $user?->group;
+    /** @var array<int, list<array<string,mixed>>>  memoized per-request alerts keyed by group id */
+    private static array $alertsCache = [];
 
+    /** @return list<array<string,mixed>> */
+    private static function currentGroupAlerts(): array
+    {
+        $group = auth('group')->user()?->group;
         if (! $group) {
-            return null;
+            return [];
+        }
+
+        if (isset(self::$alertsCache[$group->id])) {
+            return self::$alertsCache[$group->id];
         }
 
         try {
-            $alerts = app(TenantAggregationService::class)->getGroupHealthMetrics($group)['alerts'] ?? [];
-            $count = count($alerts);
-
-            return $count > 0 ? (string) $count : null;
+            return self::$alertsCache[$group->id] =
+                app(TenantAggregationService::class)->getGroupHealthMetrics($group)['alerts'] ?? [];
         } catch (\Throwable) {
             // Silent degradation — badge is non-critical.
-            return null;
+            return self::$alertsCache[$group->id] = [];
         }
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = count(self::currentGroupAlerts());
+
+        return $count > 0 ? (string) $count : null;
     }
 
     public static function getNavigationBadgeColor(): ?string
     {
-        $user = auth('group')->user();
-        $group = $user?->group;
-
-        if (! $group) {
+        $alerts = self::currentGroupAlerts();
+        if (empty($alerts)) {
             return null;
         }
 
-        try {
-            $alerts = app(TenantAggregationService::class)->getGroupHealthMetrics($group)['alerts'] ?? [];
-
-            foreach ($alerts as $alert) {
-                if (($alert['severity'] ?? null) === 'critical') {
-                    return 'danger';
-                }
+        foreach ($alerts as $alert) {
+            if (($alert['severity'] ?? null) === AlertSeverity::Critical->value) {
+                return 'danger';
             }
-
-            return count($alerts) > 0 ? 'warning' : null;
-        } catch (\Throwable) {
-            return null;
         }
+
+        return 'warning';
     }
 
     public static function getEloquentQuery(): Builder

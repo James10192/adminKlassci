@@ -60,26 +60,32 @@ class PortalPeriodSelector extends Component
     /**
      * Dispatches the frozen period-change event (see PeriodEventContract).
      * Silently skipped when the current selection doesn't resolve to a Period
-     * (e.g. custom-range with missing/malformed dates) — the UI remains open
-     * without committing an ambiguous range to consumers.
+     * (e.g. custom-range with missing/malformed dates).
      */
     private function dispatchPeriodChange(): void
     {
-        $period = $this->resolvedPeriod;
+        $payload = $this->resolvedPayload;
 
-        if ($period === null) {
+        if ($payload === null) {
             return;
         }
 
-        // Livewire 3 sends named args as event.detail keys — consumers read
-        // $event.detail.type, .start, .end, .label on the browser side.
-        $this->dispatch(
-            PeriodEventContract::EVENT_NAME,
-            type: $this->currentType->value,
-            start: $period->startDate()->toIso8601String(),
-            end: $period->endDate()->toIso8601String(),
-            label: $period->label(),
-        );
+        // Livewire 3 sends named args as event.detail keys.
+        $this->dispatch(PeriodEventContract::EVENT_NAME, ...$payload);
+    }
+
+    /**
+     * Canonical payload for the current selection — single builder used by
+     * both the PHP dispatch and the Alpine broadcast (via blade @js injection).
+     */
+    private function buildPayload(PeriodInterface $period, PeriodType $type): array
+    {
+        return [
+            'type' => $type->value,
+            'start' => $period->startDate()->toIso8601String(),
+            'end' => $period->endDate()->toIso8601String(),
+            'label' => $period->label(),
+        ];
     }
 
     public function getCurrentTypeProperty(): PeriodType
@@ -123,16 +129,7 @@ class PortalPeriodSelector extends Component
     {
         $period = $this->resolvedPeriod;
 
-        if ($period === null) {
-            return null;
-        }
-
-        return [
-            'type' => $this->currentType->value,
-            'start' => $period->startDate()->toIso8601String(),
-            'end' => $period->endDate()->toIso8601String(),
-            'label' => $period->label(),
-        ];
+        return $period === null ? null : $this->buildPayload($period, $this->currentType);
     }
 
     /**
@@ -148,13 +145,10 @@ class PortalPeriodSelector extends Component
         $presets = [];
 
         foreach ([PeriodType::CurrentMonth, PeriodType::CurrentYear] as $type) {
-            $period = PeriodFactory::make($type->value);
-            $presets[$type->value] = [
-                'type' => $type->value,
-                'start' => $period->startDate()->toIso8601String(),
-                'end' => $period->endDate()->toIso8601String(),
-                'label' => $period->label(),
-            ];
+            $presets[$type->value] = $this->buildPayload(
+                PeriodFactory::make($type->value),
+                $type,
+            );
         }
 
         return $presets;
