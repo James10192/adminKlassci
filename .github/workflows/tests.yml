@@ -37,14 +37,14 @@ jobs:
           key: ${{ runner.os }}-php-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
           restore-keys: ${{ runner.os }}-php-${{ matrix.php }}-
 
+      - name: Copy environment file
+        run: cp .env.example .env
+
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress --ignore-platform-req=php
 
-      - name: Copy environment file
-        run: cp .env.example .env || echo "APP_ENV=testing" > .env
-
       - name: Generate app key
-        run: php artisan key:generate --ansi || true
+        run: php artisan key:generate --ansi
 
       - name: Run Pest unit tests
         run: ./vendor/bin/pest --testsuite=Unit --colors=always
