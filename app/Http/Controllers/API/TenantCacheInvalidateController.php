@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Filament\Group\Resources\EstablishmentResource;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use App\Services\TenantAggregationService;
@@ -32,6 +33,7 @@ class TenantCacheInvalidateController extends Controller
 
         $group = $tenant->group;
         app(TenantAggregationService::class)->refreshGroupCache($group);
+        EstablishmentResource::forgetAlertsCache($group->id);
 
         Log::info("Group cache invalidated for {$code} (group {$group->code})", [
             'triggered_by' => $request->input('trigger', 'unknown'),

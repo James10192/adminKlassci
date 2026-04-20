@@ -11,6 +11,8 @@ class FinancialOverview extends Page
 
     protected static ?string $navigationLabel = 'Vue Financière';
 
+    protected static ?string $navigationGroup = 'Analytiques';
+
     protected static ?string $title = 'Vue Financière';
 
     protected static ?int $navigationSort = 3;

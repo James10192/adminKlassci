@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Pages;
 
+use App\Filament\Group\Resources\EstablishmentResource;
 use App\Services\TenantAggregationService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -27,6 +28,7 @@ class GroupDashboard extends Dashboard
                     $group = auth('group')->user()->group;
                     $service = app(TenantAggregationService::class);
                     $service->refreshGroupCache($group);
+                    EstablishmentResource::forgetAlertsCache($group->id);
                     $service->getGroupKpis($group);
 
                     Notification::make()
@@ -41,6 +43,7 @@ class GroupDashboard extends Dashboard
                 ->action(function () {
                     $group = auth('group')->user()->group;
                     Artisan::call('group:alert-check', ['--group' => $group->code]);
+                    EstablishmentResource::forgetAlertsCache($group->id);
 
                     Notification::make()
                         ->title('Alertes vérifiées')
