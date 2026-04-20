@@ -96,3 +96,57 @@ Si `MASTER_API_URL` / `MASTER_API_TOKEN` absents côté tenant, l'appel est skip
 - Alerter sur `group_portal_sso_logs.success=0` rate > 10/min (potentielle brute-force)
 - Alerter sur `[SSO] GROUP_SSO_SHARED_SECRET is too short` dans logs
 - Dashboard : taux d'ouverture SSO par fondateur / tenant
+
+---
+
+## PR4b — Period selector topbar (activation progressive)
+
+Livré dans #10. Le sélecteur de période apparaît dans la topbar du portail groupe (button + listbox ARIA + custom range). **Désactivé par défaut** pour ne pas impacter la production au merge. Wiring aux widgets = PR4c.
+
+### Activer en prod
+
+Ajouter dans `.env` :
+
+```env
+GROUP_PORTAL_PERIOD_SELECTOR=true
+# Optionnel — défaut 300ms
+GROUP_PORTAL_PERIOD_DEBOUNCE_MS=300
+```
+
+Puis `php artisan config:clear` côté serveur (Filament + Laravel lisent le flag depuis `config('group_portal.period_selector_enabled')` qui peut être cached via `config:cache`).
+
+### Désactiver en urgence
+
+```env
+GROUP_PORTAL_PERIOD_SELECTOR=false
+```
+
++ `php artisan config:clear`. Le partial Blade retourne une string vide — zéro render, zéro JS, zéro CSS supplémentaire chargé.
+
+### a11y — Keyboard map du sélecteur
+
+| Touche | Action |
+|---|---|
+| `Tab` | Focus sur le bouton |
+| `Enter` / `Espace` / `↓` | Ouvrir la listbox |
+| `↑` / `↓` | Naviguer entre les options |
+| `Enter` / `Espace` | Sélectionner l'option focalisée |
+| `Escape` | Fermer la listbox / le panneau custom |
+| `Tab` (dans panneau custom) | Focus piégé entre les 2 date pickers + bouton Fermer |
+
+### Sanitization XSS
+
+Toutes les valeurs lues depuis la query string (`?period=`, `?start=`, `?end=`) passent par `PeriodType::tryFromSafe()` (whitelist d'enum) ou `CarbonImmutable::parse()` en try/catch. Les payloads malicieux retombent silencieusement sur le défaut `current-year` sans logger ni throw.
+
+### Non-wiring aux widgets
+
+En PR4b, la période sélectionnée est **persistée en URL seulement** — les 7 widgets du dashboard (`KpiOverviewWidget`, `GroupAlertsWidget`, `GroupAgingWidget`, `EstablishmentCardsWidget`, etc.) n'en tiennent pas encore compte. Ils continuent d'afficher "année universitaire en cours" comme avant. Le wiring (avec contrat d'event figé) est livré dans PR4c.
+
+### Badge alertes sidebar
+
+Le navigation item "Établissements" affiche un badge dynamique :
+- Pas de badge : aucune alerte
+- Badge `warning` (orange) : ≥ 1 alerte non-critique
+- Badge `danger` (rouge) : ≥ 1 alerte `critical`
+
+Compte calculé via `TenantAggregationService::getGroupHealthMetrics()['alerts']` — cache TTL 5 min, donc l'impact perf est négligeable.

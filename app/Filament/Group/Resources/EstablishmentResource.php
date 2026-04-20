@@ -26,6 +26,50 @@ class EstablishmentResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
+    public static function getNavigationBadge(): ?string
+    {
+        $user = auth('group')->user();
+        $group = $user?->group;
+
+        if (! $group) {
+            return null;
+        }
+
+        try {
+            $alerts = app(TenantAggregationService::class)->getGroupHealthMetrics($group)['alerts'] ?? [];
+            $count = count($alerts);
+
+            return $count > 0 ? (string) $count : null;
+        } catch (\Throwable) {
+            // Silent degradation — badge is non-critical.
+            return null;
+        }
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        $user = auth('group')->user();
+        $group = $user?->group;
+
+        if (! $group) {
+            return null;
+        }
+
+        try {
+            $alerts = app(TenantAggregationService::class)->getGroupHealthMetrics($group)['alerts'] ?? [];
+
+            foreach ($alerts as $alert) {
+                if (($alert['severity'] ?? null) === 'critical') {
+                    return 'danger';
+                }
+            }
+
+            return count($alerts) > 0 ? 'warning' : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public static function getEloquentQuery(): Builder
     {
         $groupId = auth('group')->user()?->group_id;
