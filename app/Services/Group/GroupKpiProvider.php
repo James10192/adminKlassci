@@ -6,6 +6,8 @@ use App\Contracts\Group\GroupKpiProviderInterface;
 use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\TenantConnectionManager;
+use App\Support\Period\PeriodFactory;
+use App\Support\Period\PeriodInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -18,8 +20,10 @@ class GroupKpiProvider implements GroupKpiProviderInterface
     ) {
     }
 
-    public function computeGroupKpis(Group $group): array
+    public function computeGroupKpis(Group $group, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
+
         $totals = [
             'total_students' => 0,
             'total_inscriptions' => 0,
@@ -29,7 +33,7 @@ class GroupKpiProvider implements GroupKpiProviderInterface
             'establishments' => [],
         ];
 
-        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantKpis', 'TenantKpis');
+        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantKpis', 'TenantKpis', $period);
 
         foreach ($group->activeTenants as $tenant) {
             $kpis = $perTenant[$tenant->code] ?? $this->emptyKpis($tenant);
@@ -65,8 +69,9 @@ class GroupKpiProvider implements GroupKpiProviderInterface
         return $totals;
     }
 
-    public function computeTenantKpis(Tenant $tenant): array
+    public function computeTenantKpis(Tenant $tenant, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
         $conn = $this->connectionManager->createConnection($tenant);
 
         try {
@@ -79,6 +84,8 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                 return $this->emptyKpis($tenant);
             }
 
+            // Snapshot metrics (students, inscriptions, staff) — Period deliberately ignored.
+            // These reflect the current academic year regardless of the date window.
             $inscriptions = DB::connection($conn)
                 ->table('esbtp_inscriptions')
                 ->where('annee_universitaire_id', $currentYear->id)
@@ -96,10 +103,14 @@ class GroupKpiProvider implements GroupKpiProviderInterface
 
             $revenueExpected = $this->billingContext->computeRevenueExpected($conn, $tenant->id, $currentYear->id);
 
+            // Windowed metric: revenue_collected filtered by Period [start, end].
+            // When Period === default (CurrentYear), the window spans Jan 1 → Dec 31
+            // which is effectively equivalent to the pre-PR4d annee_universitaire_id filter.
             $revenueCollected = (float) DB::connection($conn)
                 ->table('esbtp_paiements')
                 ->where('annee_universitaire_id', $currentYear->id)
                 ->where('status', 'validé')
+                ->whereBetween('date_paiement', [$period->startDate(), $period->endDate()])
                 ->sum('montant');
 
             $staff = DB::connection($conn)
@@ -111,7 +122,8 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                 ->distinct()
                 ->count('users.id');
 
-            $attendanceRate = $this->computeAttendanceRate($conn);
+            // Attendance windowed by Period when explicit, else pre-PR4d 30-day behaviour.
+            $attendanceRate = $this->computeAttendanceRate($conn, $period);
 
             return [
                 'tenant_id' => $tenant->id,
@@ -140,12 +152,12 @@ class GroupKpiProvider implements GroupKpiProviderInterface
         }
     }
 
-    private function computeAttendanceRate(string $conn): float
+    private function computeAttendanceRate(string $conn, PeriodInterface $period): float
     {
         try {
             $stats = DB::connection($conn)
                 ->table('esbtp_attendances')
-                ->where('date', '>=', now()->subDays(30))
+                ->whereBetween('date', [$period->startDate(), $period->endDate()])
                 ->selectRaw("
                     COUNT(*) as total,
                     SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present
