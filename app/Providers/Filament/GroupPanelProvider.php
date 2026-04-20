@@ -12,6 +12,7 @@ use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -61,6 +62,10 @@ class GroupPanelProvider extends PanelProvider
                     . '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
                     . '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">'
                     . '<link rel="stylesheet" href="' . asset('css/groupe-portal.css') . '?v=' . (@filemtime(public_path('css/groupe-portal.css')) ?: time()) . '">'
+            )
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_END,
+                fn () => view('filament.group.partials.topbar-period'),
             )
             ->sidebarCollapsibleOnDesktop()
             ->maxContentWidth('full')
