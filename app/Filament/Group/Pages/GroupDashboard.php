@@ -55,6 +55,8 @@ class GroupDashboard extends Dashboard
         return [
             \App\Filament\Group\Widgets\GroupWelcomeWidget::class,
             \App\Filament\Group\Widgets\KpiOverviewWidget::class,
+            \App\Filament\Group\Widgets\GroupAlertsWidget::class,
+            \App\Filament\Group\Widgets\GroupAgingWidget::class,
             \App\Filament\Group\Widgets\EstablishmentCardsWidget::class,
             \App\Filament\Group\Widgets\RevenueComparisonWidget::class,
             \App\Filament\Group\Widgets\EnrollmentWidget::class,

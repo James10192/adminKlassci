@@ -1,0 +1,91 @@
+<?php
+
+namespace App\Services;
+
+use App\Support\SsoClaim;
+use RuntimeException;
+
+/**
+ * Signs short-lived HMAC-SHA256 tokens for cross-app SSO (master → tenant).
+ *
+ * Why custom HMAC instead of JWT: Laravel signed URLs depend on the local APP_KEY,
+ * which differs between master and tenant apps. JWT libraries (firebase/php-jwt,
+ * tymon/jwt-auth) add ~500+ LOC of dependency for needs we don't have.
+ * HMAC-SHA256 with a shared secret gives the same security guarantee, zero deps.
+ *
+ * MUST stay in sync with KLASSCIv2/app/Services/SsoTokenVerifier (shared secret,
+ * claim names — see SsoClaim, algorithm).
+ *
+ * Not single-use: an attacker intercepting a token can replay it within the 2min
+ * window. Short expiry + HTTPS + Referrer-Policy: no-referrer on tenant response
+ * are the mitigations; upgrading to a nonce table (DB-backed single-use) is tracked.
+ */
+class SsoTokenSigner
+{
+    private const ALGO = 'sha256';
+    private const DEFAULT_TTL_SECONDS = 120; // 2 minutes — matches critic review recommendation
+
+    public function sign(array $payload, ?int $ttlSeconds = null): string
+    {
+        $secret = $this->getSecret();
+
+        $payload = array_merge($payload, [
+            SsoClaim::EXP => time() + ($ttlSeconds ?? self::DEFAULT_TTL_SECONDS),
+            SsoClaim::NONCE => bin2hex(random_bytes(8)),
+        ]);
+
+        $payloadB64 = $this->base64UrlEncode(json_encode($payload, JSON_THROW_ON_ERROR));
+        $signature = hash_hmac(self::ALGO, $payloadB64, $secret);
+
+        return $payloadB64 . '.' . $signature;
+    }
+
+    public function verify(string $token): ?array
+    {
+        $parts = explode('.', $token);
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        [$payloadB64, $signature] = $parts;
+
+        $expected = hash_hmac(self::ALGO, $payloadB64, $this->getSecret());
+        if (! hash_equals($expected, $signature)) {
+            return null;
+        }
+
+        try {
+            $payload = json_decode($this->base64UrlDecode($payloadB64), true, flags: JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        if (! is_array($payload) || ! isset($payload[SsoClaim::EXP]) || $payload[SsoClaim::EXP] < time()) {
+            return null;
+        }
+
+        return $payload;
+    }
+
+    private function getSecret(): string
+    {
+        $secret = config('services.group_sso.secret') ?: env('GROUP_SSO_SHARED_SECRET');
+
+        if (! $secret || strlen($secret) < 32) {
+            throw new RuntimeException('GROUP_SSO_SHARED_SECRET must be set and at least 32 chars');
+        }
+
+        return $secret;
+    }
+
+    private function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    private function base64UrlDecode(string $data): string
+    {
+        $padded = str_pad($data, strlen($data) + (4 - strlen($data) % 4) % 4, '=');
+        return base64_decode(strtr($padded, '-_', '+/'), true) ?: '';
+    }
+}

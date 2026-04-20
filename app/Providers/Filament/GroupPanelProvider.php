@@ -21,6 +21,11 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class GroupPanelProvider extends PanelProvider
 {
+    public function boot(): void
+    {
+        \App\Services\SsoSecretValidator::validate();
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
