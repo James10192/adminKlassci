@@ -14,8 +14,15 @@ class BenchmarkGroupConcurrency extends Command
 
     protected $description = 'Compare sync vs parallel execution of TenantAggregationService aggregate methods';
 
+    protected $hidden = true;
+
     public function handle(): int
     {
+        if (app()->environment('production')) {
+            $this->warn('Refused: this diagnostic command spawns tenant DB connections and must not run in production without explicit --force.');
+            return self::FAILURE;
+        }
+
         $group = $this->option('group')
             ? Group::where('code', $this->option('group'))->firstOrFail()
             : Group::first();
