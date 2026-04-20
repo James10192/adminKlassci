@@ -150,3 +150,30 @@ Le navigation item "Établissements" affiche un badge dynamique :
 - Badge `danger` (rouge) : ≥ 1 alerte `critical`
 
 Compte calculé via `TenantAggregationService::getGroupHealthMetrics()['alerts']` — cache TTL 5 min, donc l'impact perf est négligeable.
+
+---
+
+## PR4c — Event contract (pour subscribers futurs)
+
+Livré dans #12. Le sélecteur de période émet un event frozen lors de chaque changement validé (flag ON + résolution valide). **Aucun widget ne consomme en PR4c** — l'infra est prête pour la migration groupée des widgets time-windowed en PR4d.
+
+### Event
+
+    klassci:group-portal:period-change
+
+Payload : `{type, start (ISO8601), end (ISO8601), label}`. Pas de `cacheKey` (fuite impl backend).
+
+Doc complète + exemples subscribers : [GROUP_PORTAL_EVENT_CONTRACT.md](GROUP_PORTAL_EVENT_CONTRACT.md).
+
+### Quand dispatch
+
+- `period_selector_enabled=true` ET
+- Period résolue non-null (custom-range avec dates manquantes/malformées → skip)
+
+### Non-wiring
+
+Les 7 widgets (`KpiOverviewWidget`, `GroupAlertsWidget`, `GroupAgingWidget`, `EstablishmentCardsWidget`, `GroupWelcomeWidget`, `RevenueComparisonWidget`, `EnrollmentWidget`) ne réagissent pas encore à l'event en PR4c. Si un observateur externe souscrit avant PR4d, il fonctionnera immédiatement (contract stable).
+
+### Migration widgets (PR4d prévu)
+
+Groupe cohérent à migrer ensemble : `KpiOverviewWidget` + `RevenueComparisonWidget` + `GroupAgingWidget` (tous time-windowed MoM/YoY/aging). Les 4 autres widgets (Alerts, EstablishmentCards, Welcome, Enrollment) ne sont PAS période-aware par nature — ne pas migrer.
