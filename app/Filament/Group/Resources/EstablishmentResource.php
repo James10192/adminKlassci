@@ -12,6 +12,7 @@ use Filament\Tables\Table;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 
 class EstablishmentResource extends Resource
 {
@@ -27,10 +28,17 @@ class EstablishmentResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
-    /** @var array<int, list<array<string,mixed>>>  memoized per-request alerts keyed by group id */
-    private static array $alertsCache = [];
+    private const ALERTS_CACHE_TTL = 300;
 
-    /** @return list<array<string,mixed>> */
+    private const ALERTS_CACHE_PREFIX = 'group:alerts_v1:';
+
+    /**
+     * Badge alerts read from Cache::remember (5min TTL). Filament calls this on
+     * every render + Livewire poll + 60s notification poll — direct service
+     * hit was an N+1 perf bomb (see PR5 issue #20).
+     *
+     * @return list<array<string,mixed>>
+     */
     private static function currentGroupAlerts(): array
     {
         $group = auth('group')->user()?->group;
@@ -38,17 +46,23 @@ class EstablishmentResource extends Resource
             return [];
         }
 
-        if (isset(self::$alertsCache[$group->id])) {
-            return self::$alertsCache[$group->id];
-        }
+        return Cache::remember(
+            self::ALERTS_CACHE_PREFIX . $group->id,
+            self::ALERTS_CACHE_TTL,
+            static function () use ($group): array {
+                try {
+                    return app(TenantAggregationService::class)
+                        ->getGroupHealthMetrics($group)['alerts'] ?? [];
+                } catch (\Throwable) {
+                    return [];
+                }
+            }
+        );
+    }
 
-        try {
-            return self::$alertsCache[$group->id] =
-                app(TenantAggregationService::class)->getGroupHealthMetrics($group)['alerts'] ?? [];
-        } catch (\Throwable) {
-            // Silent degradation — badge is non-critical.
-            return self::$alertsCache[$group->id] = [];
-        }
+    public static function forgetAlertsCache(int $groupId): void
+    {
+        Cache::forget(self::ALERTS_CACHE_PREFIX . $groupId);
     }
 
     public static function getNavigationBadge(): ?string

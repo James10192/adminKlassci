@@ -11,6 +11,8 @@ class Benchmarking extends Page
 
     protected static ?string $navigationLabel = 'Benchmarking';
 
+    protected static ?string $navigationGroup = 'Analytiques';
+
     protected static ?string $title = 'Comparaison des établissements';
 
     protected static ?int $navigationSort = 4;
