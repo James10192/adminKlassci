@@ -38,6 +38,37 @@ final class PeriodFactory
     }
 
     /**
+     * Rebuild a Period from an event-contract payload. Always falls back to
+     * $fallback on any malformed input — never throws.
+     *
+     * @param  array<string,mixed>|null  $payload  keys matching PeriodEventContract::PAYLOAD_KEYS
+     * @param  PeriodInterface|null  $fallback  returned on failure (null, unknown type, unparseable dates). Defaults to self::default().
+     */
+    public static function fromPayload(?array $payload, ?PeriodInterface $fallback = null): PeriodInterface
+    {
+        $fallback ??= self::default();
+
+        if (! is_array($payload)) {
+            return $fallback;
+        }
+
+        try {
+            $type = \App\Support\Period\PeriodType::tryFromSafe($payload['type'] ?? null);
+
+            if ($type === \App\Support\Period\PeriodType::CustomRange) {
+                return self::make(self::TYPE_CUSTOM_RANGE, [
+                    'start' => CarbonImmutable::parse($payload['start'] ?? ''),
+                    'end' => CarbonImmutable::parse($payload['end'] ?? ''),
+                ]);
+            }
+
+            return self::make($type->value);
+        } catch (\Throwable) {
+            return $fallback;
+        }
+    }
+
+    /**
      * @param  array<string,mixed>  $params
      */
     private static function makeCustomRange(array $params): CustomRangePeriod
