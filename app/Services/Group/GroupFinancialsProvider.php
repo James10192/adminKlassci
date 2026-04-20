@@ -6,6 +6,8 @@ use App\Contracts\Group\GroupFinancialsProviderInterface;
 use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\TenantConnectionManager;
+use App\Support\Period\PeriodFactory;
+use App\Support\Period\PeriodInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -18,9 +20,10 @@ class GroupFinancialsProvider implements GroupFinancialsProviderInterface
     ) {
     }
 
-    public function computeGroupFinancials(Group $group): array
+    public function computeGroupFinancials(Group $group, ?PeriodInterface $period = null): array
     {
-        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantFinancials', 'Financials');
+        $period ??= PeriodFactory::default();
+        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantFinancials', 'Financials', $period);
 
         $financials = [];
         foreach ($group->activeTenants as $tenant) {
@@ -30,8 +33,9 @@ class GroupFinancialsProvider implements GroupFinancialsProviderInterface
         return $financials;
     }
 
-    public function computeTenantFinancials(Tenant $tenant): array
+    public function computeTenantFinancials(Tenant $tenant, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
         $conn = $this->connectionManager->createConnection($tenant);
 
         try {
@@ -40,27 +44,34 @@ class GroupFinancialsProvider implements GroupFinancialsProviderInterface
                 return $this->emptyFinancials($tenant);
             }
 
+            // Windowed: monthlyRevenue filtered by Period, still grouped by month.
             $monthlyRevenue = DB::connection($conn)
                 ->table('esbtp_paiements')
                 ->where('annee_universitaire_id', $currentYear->id)
                 ->where('status', 'validé')
+                ->whereBetween('date_paiement', [$period->startDate(), $period->endDate()])
                 ->selectRaw('MONTH(date_paiement) as month, SUM(montant) as total')
                 ->groupByRaw('MONTH(date_paiement)')
                 ->pluck('total', 'month')
                 ->toArray();
 
+            // YTD-locked: revenue_expected stays annual (see interface docblock).
             $totalExpected = $this->billingContext->computeRevenueExpected($conn, $tenant->id, $currentYear->id);
 
+            // Windowed: totalCollected filtered by Period.
             $totalCollected = (float) DB::connection($conn)
                 ->table('esbtp_paiements')
                 ->where('annee_universitaire_id', $currentYear->id)
                 ->where('status', 'validé')
+                ->whereBetween('date_paiement', [$period->startDate(), $period->endDate()])
                 ->sum('montant');
 
+            // Windowed: byType breakdown over the same Period.
             $byType = DB::connection($conn)
                 ->table('esbtp_paiements')
                 ->where('annee_universitaire_id', $currentYear->id)
                 ->where('status', 'validé')
+                ->whereBetween('date_paiement', [$period->startDate(), $period->endDate()])
                 ->selectRaw('type_paiement, SUM(montant) as total, COUNT(*) as count')
                 ->groupBy('type_paiement')
                 ->get()

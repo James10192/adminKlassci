@@ -28,9 +28,16 @@ it('exposes the 4 public aggregation methods that PR4a split will preserve', fun
         expect($method->isStatic())->toBeFalse("{$methodName}() must be instance method");
 
         $params = $method->getParameters();
-        expect($params)->toHaveCount(1, "{$methodName}() must accept exactly 1 parameter (Group)");
+        expect(count($params))->toBeGreaterThanOrEqual(1, "{$methodName}() must accept Group as first param");
+        expect(count($params))->toBeLessThanOrEqual(2, "{$methodName}() public surface: Group + optional ?PeriodInterface");
         expect($params[0]->getType()?->getName())
             ->toBe('App\\Models\\Group', "{$methodName}() must accept Group as first param");
+
+        // PR4d: if a second param is present, it must be optional (LSP-safe default null).
+        if (count($params) === 2) {
+            expect($params[1]->isOptional())
+                ->toBeTrue("{$methodName}() second param must be optional to preserve LSP");
+        }
     }
 });
 
@@ -54,8 +61,14 @@ it('exposes the tenant-level methods reused by widgets', function () {
     expect($method->isPublic())->toBeTrue();
 
     $params = $method->getParameters();
-    expect($params)->toHaveCount(1);
+    expect(count($params))->toBeGreaterThanOrEqual(1);
+    expect(count($params))->toBeLessThanOrEqual(2);
     expect($params[0]->getType()?->getName())->toBe('App\\Models\\Tenant');
+
+    // PR4d: if a second param is present, it must be optional (LSP-safe).
+    if (count($params) === 2) {
+        expect($params[1]->isOptional())->toBeTrue();
+    }
 });
 
 it('has a refreshGroupCache method to invalidate cached aggregations', function () {

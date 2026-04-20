@@ -10,6 +10,8 @@ use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\Group\TenantAggregator;
 use App\Services\Group\TenantBillingContext;
+use App\Support\Period\PeriodFactory;
+use App\Support\Period\PeriodInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -50,77 +52,117 @@ class TenantAggregationService
     ) {
     }
 
-    public function getGroupKpis(Group $group): array
+    /**
+     * Cache key builder with mandatory period suffix (PR4d).
+     * For methods that don't take a Period (enrollment, health), pass the default
+     * to keep the suffix format uniform.
+     */
+    private function cacheKey(int $groupId, string $suffix, PeriodInterface $period): string
     {
+        return self::CACHE_KEY_PREFIX . "_{$groupId}_{$suffix}_{$period->cacheKey()}";
+    }
+
+    public function getGroupKpis(Group $group, ?PeriodInterface $period = null): array
+    {
+        $period ??= PeriodFactory::default();
+
         return Cache::remember(
-            self::CACHE_KEY_PREFIX . "_{$group->id}_kpis",
+            $this->cacheKey($group->id, 'kpis', $period),
             self::CACHE_TTL_KPIS,
-            fn () => $this->kpiProvider->computeGroupKpis($group)
+            fn () => $this->kpiProvider->computeGroupKpis($group, $period)
         );
     }
 
-    public function getTenantKpis(Tenant $tenant): array
+    public function getTenantKpis(Tenant $tenant, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
+
         return Cache::remember(
-            self::CACHE_KEY_PREFIX . "_tenant_{$tenant->id}_kpis",
+            self::CACHE_KEY_PREFIX . "_tenant_{$tenant->id}_kpis_{$period->cacheKey()}",
             self::CACHE_TTL_KPIS,
-            fn () => $this->kpiProvider->computeTenantKpis($tenant)
+            fn () => $this->kpiProvider->computeTenantKpis($tenant, $period)
         );
     }
 
-    public function getGroupFinancials(Group $group): array
+    public function getGroupFinancials(Group $group, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
+
         return Cache::remember(
-            self::CACHE_KEY_PREFIX . "_{$group->id}_financials",
+            $this->cacheKey($group->id, 'financials', $period),
             self::CACHE_TTL_FINANCIALS,
-            fn () => $this->financialsProvider->computeGroupFinancials($group)
+            fn () => $this->financialsProvider->computeGroupFinancials($group, $period)
         );
     }
 
+    /**
+     * Enrollment is NOT period-aware — inscriptions are academic-year-scoped,
+     * not calendar-window-scoped. Period suffix in the cache key still applied
+     * for uniformity (using the default period), so widgets that toggle Period
+     * don't race against stale enrollment cache under the old key shape.
+     */
     public function getGroupEnrollment(Group $group): array
     {
+        $period = PeriodFactory::default();
+
         return Cache::remember(
-            self::CACHE_KEY_PREFIX . "_{$group->id}_enrollment",
+            $this->cacheKey($group->id, 'enrollment', $period),
             self::CACHE_TTL_ENROLLMENT,
             fn () => $this->computeGroupEnrollment($group)
         );
     }
 
-    public function getGroupOutstandingAging(Group $group): array
+    public function getGroupOutstandingAging(Group $group, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
+
         return Cache::remember(
-            self::CACHE_KEY_PREFIX . "_{$group->id}_aging",
+            $this->cacheKey($group->id, 'aging', $period),
             self::CACHE_TTL_AGING,
-            fn () => $this->computeGroupOutstandingAging($group)
+            fn () => $this->computeGroupOutstandingAging($group, $period)
         );
     }
 
+    /**
+     * Health metrics (quota/subscription/reliquats/attrition) are snapshot-style —
+     * Period deliberately not accepted. Uniform key suffix via default period.
+     */
     public function getGroupHealthMetrics(Group $group): array
     {
+        $period = PeriodFactory::default();
+
         return Cache::remember(
-            self::CACHE_KEY_PREFIX . "_{$group->id}_health",
+            $this->cacheKey($group->id, 'health', $period),
             self::CACHE_TTL_HEALTH,
             fn () => $this->computeGroupHealthMetrics($group)
         );
     }
 
-    public function getGroupTrends(Group $group): array
+    public function getGroupTrends(Group $group, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
+
         return Cache::remember(
-            self::CACHE_KEY_PREFIX . "_{$group->id}_trends",
+            $this->cacheKey($group->id, 'trends', $period),
             self::CACHE_TTL_FINANCIALS,
-            fn () => $this->computeGroupTrends($group)
+            fn () => $this->computeGroupTrends($group, $period)
         );
     }
 
+    /**
+     * Forgets the default-period keys. Non-default period caches expire naturally
+     * via TTL (acceptable for user-triggered refresh — the default dashboard is
+     * what the "Actualiser" button is about).
+     */
     public function refreshGroupCache(Group $group): void
     {
+        $period = PeriodFactory::default();
         foreach (['kpis', 'financials', 'enrollment', 'aging', 'health', 'trends'] as $suffix) {
-            Cache::forget(self::CACHE_KEY_PREFIX . "_{$group->id}_{$suffix}");
+            Cache::forget($this->cacheKey($group->id, $suffix, $period));
         }
 
         foreach ($group->tenants as $tenant) {
-            Cache::forget(self::CACHE_KEY_PREFIX . "_tenant_{$tenant->id}_kpis");
+            Cache::forget(self::CACHE_KEY_PREFIX . "_tenant_{$tenant->id}_kpis_{$period->cacheKey()}");
         }
     }
 
@@ -128,6 +170,7 @@ class TenantAggregationService
 
     private function computeGroupEnrollment(Group $group): array
     {
+        // Enrollment is academic-year-scoped — no Period forwarded to tenants.
         $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantEnrollment', 'Enrollment');
 
         $enrollment = [];
@@ -139,7 +182,13 @@ class TenantAggregationService
         return $enrollment;
     }
 
-    public function computeTenantEnrollment(Tenant $tenant): array
+    /**
+     * @param  ?PeriodInterface  $period  Accepted to satisfy TenantAggregator's
+     *                                    uniform call signature — IGNORED here:
+     *                                    inscription counts are academic-year-scoped,
+     *                                    not date-window-scoped.
+     */
+    public function computeTenantEnrollment(Tenant $tenant, ?PeriodInterface $period = null): array
     {
         $conn = $this->connectionManager->createConnection($tenant);
 
@@ -190,12 +239,12 @@ class TenantAggregationService
         }
     }
 
-    private function computeGroupOutstandingAging(Group $group): array
+    private function computeGroupOutstandingAging(Group $group, PeriodInterface $period): array
     {
         $aggregated = array_fill_keys(self::AGING_BUCKETS, ['count' => 0, 'amount' => 0]);
         $aggregated['by_tenant'] = [];
 
-        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantOutstandingAging', 'Aging');
+        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantOutstandingAging', 'Aging', $period);
 
         foreach ($perTenant as $tenantCode => $aging) {
             foreach (self::AGING_BUCKETS as $bucket) {
@@ -215,8 +264,18 @@ class TenantAggregationService
         return $aggregated;
     }
 
-    public function computeTenantOutstandingAging(Tenant $tenant): array
+    /**
+     * Aging buckets are computed relative to `$period->endDate()` (PR4d) instead of
+     * `now()` — so the dashboard can answer "what were my outstanding dues as of X?"
+     * when the user shifts the Period.
+     *
+     * When called with $period === null (default path), falls back to the default
+     * period (CurrentYear) whose endDate is Dec 31 of the current year — this keeps
+     * the numbers stable for year-end reviews and bridges pre-PR4d behaviour.
+     */
+    public function computeTenantOutstandingAging(Tenant $tenant, ?PeriodInterface $period = null): array
     {
+        $period ??= PeriodFactory::default();
         $conn = $this->connectionManager->createConnection($tenant);
 
         try {
@@ -243,7 +302,11 @@ class TenantAggregationService
                 ->pluck('total', 'inscription_id');
 
             $buckets = $this->emptyAging();
-            $now = now();
+            // Reference date for aging bucketing — min(now, Period::endDate()).
+            // Aging in the future doesn't make sense (days-since-creation is clamped
+            // at today), so we cap at now(). For default CurrentYearPeriod whose
+            // endDate is Dec 31, this preserves exact pre-PR4d behaviour.
+            $referenceDate = $period->endDate()->isFuture() ? now() : $period->endDate();
 
             foreach ($activeInscriptions as $inscription) {
                 $inscSubs = $ctx['subscriptions']->get($inscription->id, collect());
@@ -258,7 +321,7 @@ class TenantAggregationService
                 }
 
                 $daysOld = $inscription->created_at
-                    ? (int) \Carbon\Carbon::parse($inscription->created_at)->diffInDays($now)
+                    ? (int) \Carbon\Carbon::parse($inscription->created_at)->diffInDays($referenceDate)
                     : 0;
                 $bucket = match (true) {
                     $daysOld <= 30 => '0-30',
@@ -293,6 +356,7 @@ class TenantAggregationService
         ];
 
         $attritionData = [];
+        // Health metrics are snapshot-style — no Period forwarded to tenants.
         $healthDetails = $this->aggregator->aggregate($group, self::class, 'computeTenantHealthDetails', 'HealthDetails');
 
         foreach ($group->activeTenants as $tenant) {
@@ -436,7 +500,12 @@ class TenantAggregationService
         return ['usage' => $usagePct, 'max' => $max, 'max_type' => $maxType];
     }
 
-    public function computeTenantHealthDetails(Tenant $tenant): array
+    /**
+     * @param  ?PeriodInterface  $period  Accepted for uniform aggregator call shape — IGNORED.
+     *                                    Health metrics (quotas, subscriptions, attrition) are
+     *                                    inherently snapshot-at-now, not period-windowed.
+     */
+    public function computeTenantHealthDetails(Tenant $tenant, ?PeriodInterface $period = null): array
     {
         $empty = ['active_reliquats' => 0, 'attrition_rate' => null, 'previous_year_inscriptions' => 0];
 
@@ -507,7 +576,7 @@ class TenantAggregationService
         }
     }
 
-    private function computeGroupTrends(Group $group): array
+    private function computeGroupTrends(Group $group, PeriodInterface $period): array
     {
         $trends = [
             'revenue_mom' => ['current' => 0, 'previous' => 0, 'delta_pct' => 0],
@@ -516,7 +585,7 @@ class TenantAggregationService
             'by_tenant' => [],
         ];
 
-        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantTrends', 'Trends');
+        $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantTrends', 'Trends', $period);
 
         foreach ($perTenant as $tenantCode => $tenantTrends) {
             foreach (['revenue_mom', 'revenue_yoy', 'inscriptions_yoy'] as $key) {
@@ -538,7 +607,15 @@ class TenantAggregationService
         return $trends;
     }
 
-    public function computeTenantTrends(Tenant $tenant): array
+    /**
+     * @param  ?PeriodInterface  $period  Accepted for uniform aggregator call shape.
+     *                                    NOT USED in PR4d: MoM/YoY windows remain calendar-relative
+     *                                    (now()-based) to preserve byte-identical output with
+     *                                    pre-PR4d callers. Period-relative trend shifting is
+     *                                    deferred — requires defining "previous period" semantics
+     *                                    for arbitrary CustomRange (a PR of its own).
+     */
+    public function computeTenantTrends(Tenant $tenant, ?PeriodInterface $period = null): array
     {
         $conn = null;
         try {
