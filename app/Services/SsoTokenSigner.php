@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\SsoClaim;
 use RuntimeException;
 
 /**
@@ -9,22 +10,15 @@ use RuntimeException;
  *
  * Why custom HMAC instead of JWT: Laravel signed URLs depend on the local APP_KEY,
  * which differs between master and tenant apps. JWT libraries (firebase/php-jwt,
- * tymon/jwt-auth) add ~500+ LOC of dependency for needs we don't have (no external
- * interop, no complex claims). HMAC-SHA256 with a shared secret gives the same
- * security guarantee in ~30 lines and zero dependencies.
+ * tymon/jwt-auth) add ~500+ LOC of dependency for needs we don't have.
+ * HMAC-SHA256 with a shared secret gives the same security guarantee, zero deps.
  *
- * Token format: base64url(payload_json) . "." . hex(hmac_sha256(payload_b64, secret))
+ * MUST stay in sync with KLASSCIv2/app/Services/SsoTokenVerifier (shared secret,
+ * claim names — see SsoClaim, algorithm).
  *
- * Payload claims:
- *   - tenant_code   : target tenant (tenant middleware checks it matches config('app.tenant_code'))
- *   - user_email    : user to log in as (tenant looks up by email)
- *   - redirect_to   : path to redirect after login (e.g. "/paiements/suivi")
- *   - exp           : unix timestamp, token rejected if past
- *   - nonce         : random bytes, makes each token unique (prevents log collision, not replay)
- *   - issued_by     : group_member email (for audit, not verified)
- *
- * Not single-use: an attacker intercepting a token can replay it within the 2min window.
- * Mitigation is short expiry + HTTPS transport.
+ * Not single-use: an attacker intercepting a token can replay it within the 2min
+ * window. Short expiry + HTTPS + Referrer-Policy: no-referrer on tenant response
+ * are the mitigations; upgrading to a nonce table (DB-backed single-use) is tracked.
  */
 class SsoTokenSigner
 {
@@ -36,8 +30,8 @@ class SsoTokenSigner
         $secret = $this->getSecret();
 
         $payload = array_merge($payload, [
-            'exp' => time() + ($ttlSeconds ?? self::DEFAULT_TTL_SECONDS),
-            'nonce' => bin2hex(random_bytes(8)),
+            SsoClaim::EXP => time() + ($ttlSeconds ?? self::DEFAULT_TTL_SECONDS),
+            SsoClaim::NONCE => bin2hex(random_bytes(8)),
         ]);
 
         $payloadB64 = $this->base64UrlEncode(json_encode($payload, JSON_THROW_ON_ERROR));
@@ -66,7 +60,7 @@ class SsoTokenSigner
             return null;
         }
 
-        if (! is_array($payload) || ! isset($payload['exp']) || $payload['exp'] < time()) {
+        if (! is_array($payload) || ! isset($payload[SsoClaim::EXP]) || $payload[SsoClaim::EXP] < time()) {
             return null;
         }
 

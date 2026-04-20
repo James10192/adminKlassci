@@ -5,6 +5,7 @@ namespace App\Filament\Group\Widgets;
 use App\Models\Tenant;
 use App\Services\SsoTokenSigner;
 use App\Services\TenantAggregationService;
+use App\Support\SsoClaim;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\Log;
 
@@ -45,11 +46,11 @@ class EstablishmentCardsWidget extends Widget
 
         try {
             $token = app(SsoTokenSigner::class)->sign([
-                'tenant_code' => $tenantCode,
-                'user_email' => $member->email,
-                'redirect_to' => $redirectTo,
-                'issued_by' => $member->email,
-                'group_member_id' => $member->id,
+                SsoClaim::TENANT_CODE => $tenantCode,
+                SsoClaim::USER_EMAIL => $member->email,
+                SsoClaim::REDIRECT_TO => $redirectTo,
+                SsoClaim::ISSUED_BY => $member->email,
+                SsoClaim::GROUP_MEMBER_ID => $member->id,
             ]);
         } catch (\Exception $e) {
             Log::warning("SSO URL generation failed for {$tenantCode}: {$e->getMessage()}");
