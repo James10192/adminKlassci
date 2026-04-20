@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Enums\AlertSeverity;
+use App\Enums\AlertType;
 use App\Models\Group;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Cache;
@@ -12,17 +14,121 @@ class TenantAggregationService
 {
     protected TenantConnectionManager $connectionManager;
 
-    // Cache TTL différencié par volatilité des données (décision PR1 portail groupe)
-    // Why: critic review 2026-04-20 — 15min trop long pour financier (paiement validé invisible 15min)
-    protected const CACHE_TTL_KPIS = 300;        // 5 min — KPIs généraux
-    protected const CACHE_TTL_FINANCIALS = 120;  // 2 min — argent: toujours frais
-    protected const CACHE_TTL_ENROLLMENT = 600;  // 10 min — inscriptions changent lentement
-    protected const CACHE_TTL_HEALTH = 300;      // 5 min — alertes quotas/abonnements
-    protected const CACHE_TTL_AGING = 180;       // 3 min — aging impayés
+    // Why: financials volatility varies — paiement validé doit être visible sous 2min, inscriptions changent lentement.
+    protected const CACHE_TTL_KPIS = 300;
+    protected const CACHE_TTL_FINANCIALS = 120;
+    protected const CACHE_TTL_ENROLLMENT = 600;
+    protected const CACHE_TTL_HEALTH = 300;
+    protected const CACHE_TTL_AGING = 180;
+
+    protected const AGING_BUCKETS = ['0-30', '31-60', '61-90', '90+'];
+
+    // Request-scoped memoization for cross-tenant heavy fetches.
+    private array $billingContextCache = [];
+    private array $tableExistsCache = [];
 
     public function __construct(TenantConnectionManager $connectionManager)
     {
         $this->connectionManager = $connectionManager;
+    }
+
+    /**
+     * Exécute une opération avec une connexion tenant, fermeture garantie.
+     */
+    private function withTenantConnection(Tenant $tenant, callable $fn): mixed
+    {
+        $conn = $this->connectionManager->createConnection($tenant);
+        try {
+            return $fn($conn);
+        } finally {
+            $this->connectionManager->closeConnection($conn);
+        }
+    }
+
+    /**
+     * Itère sur les tenants actifs en logguant les erreurs individuelles sans bloquer.
+     * @return array<string, mixed> keyed by tenant code
+     */
+    private function aggregateAcrossTenants(Group $group, callable $fn, string $label): array
+    {
+        $results = [];
+        foreach ($group->activeTenants as $tenant) {
+            try {
+                $results[$tenant->code] = $fn($tenant);
+            } catch (\Exception $e) {
+                Log::error("{$label} failed for {$tenant->code}: {$e->getMessage()}");
+            }
+        }
+        return $results;
+    }
+
+    /**
+     * Pré-charge inscriptions + categories + subscriptions + configurations pour un tenant.
+     * Mémoïsé par (tenant, année) sur le cycle de vie du request.
+     */
+    private function loadBillingContext(string $conn, int $tenantId, int $anneeId): array
+    {
+        $key = "{$tenantId}_{$anneeId}";
+        if (isset($this->billingContextCache[$key])) {
+            return $this->billingContextCache[$key];
+        }
+
+        $inscriptions = DB::connection($conn)
+            ->table('esbtp_inscriptions')
+            ->whereIn('status', ['active', 'en_attente', 'validée'])
+            ->where('annee_universitaire_id', $anneeId)
+            ->get(['id', 'filiere_id', 'niveau_id', 'affectation_status', 'status', 'workflow_step', 'etudiant_id', 'created_at']);
+
+        $categories = DB::connection($conn)
+            ->table('esbtp_frais_categories')
+            ->where('is_active', true)
+            ->get(['id', 'is_mandatory', 'default_amount']);
+
+        $subscriptions = DB::connection($conn)
+            ->table('esbtp_frais_subscriptions')
+            ->where('is_active', true)
+            ->whereIn('inscription_id', $inscriptions->pluck('id'))
+            ->get(['inscription_id', 'frais_category_id', 'amount'])
+            ->groupBy('inscription_id');
+
+        $configurations = DB::connection($conn)
+            ->table('esbtp_frais_configurations')
+            ->where('is_active', true)
+            ->whereIn('frais_category_id', $categories->pluck('id'))
+            ->get(['frais_category_id', 'filiere_id', 'niveau_id', 'amount', 'amount_affecte', 'amount_reaffecte', 'amount_non_affecte'])
+            ->groupBy(fn ($c) => $c->frais_category_id . '_' . $c->filiere_id . '_' . $c->niveau_id);
+
+        return $this->billingContextCache[$key] = compact('inscriptions', 'categories', 'subscriptions', 'configurations');
+    }
+
+    /**
+     * Résout le montant dû d'une catégorie pour une inscription (mandatory/optional + config filière/niveau + default).
+     * Source de vérité : réplique ESBTPComptabiliteController::calculerTotalDu() côté tenant.
+     */
+    private function resolveCategoryAmount($inscription, $category, $inscSubs, $configurations): float
+    {
+        $sub = $inscSubs->firstWhere('frais_category_id', $category->id);
+
+        if (! $category->is_mandatory) {
+            return $sub ? (float) $sub->amount : 0.0;
+        }
+
+        if ($sub) {
+            return (float) $sub->amount;
+        }
+
+        $key = $category->id . '_' . $inscription->filiere_id . '_' . $inscription->niveau_id;
+        $config = $configurations->get($key, collect())->first();
+
+        if (! $config) {
+            return (float) ($category->default_amount ?? 0);
+        }
+
+        // Column name derived from affectation_status: 'affecté' → amount_affecte, 'non_affecté' → amount_non_affecte.
+        $status = $inscription->affectation_status ?? 'affecté';
+        $field = 'amount_' . str_replace('é', 'e', $status);
+
+        return (float) ($config->{$field} ?? $config->amount ?? $category->default_amount ?? 0);
     }
 
     /**
@@ -216,7 +322,7 @@ class TenantAggregationService
 
             // Revenue expected: same logic as ESBTPComptabiliteController::calculerTotalDu()
             // Iterates inscriptions × mandatory categories with subscription/config/default fallback
-            $revenueExpected = $this->computeRevenueExpected($conn, $currentYear->id);
+            $revenueExpected = $this->computeRevenueExpected($conn, $tenant->id, $currentYear->id);
 
             // Revenue: collected (all validated payments for this academic year)
             // Matches suivi-categories which counts ALL validated payments
@@ -298,7 +404,7 @@ class TenantAggregationService
                     ->toArray();
 
                 // Total expected: same logic as suivi-categories
-                $totalExpected = $this->computeRevenueExpected($conn, $currentYear->id);
+                $totalExpected = $this->computeRevenueExpected($conn, $tenant->id, $currentYear->id);
 
                 $totalCollected = (float) DB::connection($conn)
                     ->table('esbtp_paiements')
@@ -430,73 +536,25 @@ class TenantAggregationService
 
     /**
      * Replicate ESBTPComptabiliteController::calculerTotalDu() logic in raw SQL.
-     * Iterates inscriptions × mandatory categories with subscription/config/default fallback.
      */
-    private function computeRevenueExpected(string $conn, int $anneeId): float
+    private function computeRevenueExpected(string $conn, int $tenantId, int $anneeId): float
     {
         try {
-            $inscriptions = DB::connection($conn)
-                ->table('esbtp_inscriptions')
-                ->whereIn('status', ['active', 'en_attente', 'validée'])
-                ->where('annee_universitaire_id', $anneeId)
-                ->get(['id', 'filiere_id', 'niveau_id', 'affectation_status']);
+            $ctx = $this->loadBillingContext($conn, $tenantId, $anneeId);
 
-            if ($inscriptions->isEmpty()) {
+            if ($ctx['inscriptions']->isEmpty()) {
                 return 0;
             }
 
-            $categories = DB::connection($conn)
-                ->table('esbtp_frais_categories')
-                ->where('is_active', true)
-                ->get();
-
-            $subscriptions = DB::connection($conn)
-                ->table('esbtp_frais_subscriptions')
-                ->where('is_active', true)
-                ->whereIn('inscription_id', $inscriptions->pluck('id'))
-                ->get()
-                ->groupBy('inscription_id');
-
-            $configurations = DB::connection($conn)
-                ->table('esbtp_frais_configurations')
-                ->where('is_active', true)
-                ->whereIn('frais_category_id', $categories->pluck('id'))
-                ->get()
-                ->groupBy(fn ($c) => $c->frais_category_id . '_' . $c->filiere_id . '_' . $c->niveau_id);
-
             $totalDue = 0;
-
-            foreach ($inscriptions as $inscription) {
-                $inscSubs = $subscriptions->get($inscription->id, collect());
-
-                foreach ($categories as $category) {
-                    $sub = $inscSubs->where('frais_category_id', $category->id)->first();
-
-                    if ($category->is_mandatory) {
-                        if ($sub) {
-                            $montant = $sub->amount;
-                        } else {
-                            $key = $category->id . '_' . $inscription->filiere_id . '_' . $inscription->niveau_id;
-                            $config = $configurations->get($key, collect())->first();
-
-                            if ($config) {
-                                $status = $inscription->affectation_status ?? 'affecté';
-                                $field = 'amount_' . str_replace('é', 'e', $status);
-                                $montant = $config->{$field} ?? $config->amount ?? $category->default_amount;
-                            } else {
-                                $montant = $category->default_amount;
-                            }
-                        }
-                    } else {
-                        $montant = $sub ? $sub->amount : 0;
-                    }
-
-                    $totalDue += $montant;
+            foreach ($ctx['inscriptions'] as $inscription) {
+                $inscSubs = $ctx['subscriptions']->get($inscription->id, collect());
+                foreach ($ctx['categories'] as $category) {
+                    $totalDue += $this->resolveCategoryAmount($inscription, $category, $inscSubs, $ctx['configurations']);
                 }
             }
 
             return $totalDue;
-
         } catch (\Exception $e) {
             Log::warning("computeRevenueExpected failed: {$e->getMessage()}");
             return 0;
@@ -507,62 +565,53 @@ class TenantAggregationService
 
     private function computeGroupOutstandingAging(Group $group): array
     {
-        $aggregated = [
-            '0-30' => ['count' => 0, 'amount' => 0],
-            '31-60' => ['count' => 0, 'amount' => 0],
-            '61-90' => ['count' => 0, 'amount' => 0],
-            '90+' => ['count' => 0, 'amount' => 0],
-            'by_tenant' => [],
-            'total_count' => 0,
-            'total_amount' => 0,
-        ];
+        $aggregated = array_fill_keys(self::AGING_BUCKETS, ['count' => 0, 'amount' => 0]);
+        $aggregated['by_tenant'] = [];
 
-        foreach ($group->activeTenants as $tenant) {
-            try {
-                $aging = $this->computeTenantOutstandingAging($tenant);
-                foreach (['0-30', '31-60', '61-90', '90+'] as $bucket) {
-                    $aggregated[$bucket]['count'] += $aging[$bucket]['count'];
-                    $aggregated[$bucket]['amount'] += $aging[$bucket]['amount'];
-                }
-                $aggregated['by_tenant'][$tenant->code] = array_merge(
-                    ['tenant_name' => $tenant->name],
-                    $aging
-                );
-            } catch (\Exception $e) {
-                Log::error("Aging failed for {$tenant->code}: {$e->getMessage()}");
+        $perTenant = $this->aggregateAcrossTenants(
+            $group,
+            fn (Tenant $t) => $this->computeTenantOutstandingAging($t),
+            'Aging'
+        );
+
+        foreach ($perTenant as $tenantCode => $aging) {
+            foreach (self::AGING_BUCKETS as $bucket) {
+                $aggregated[$bucket]['count'] += $aging[$bucket]['count'];
+                $aggregated[$bucket]['amount'] += $aging[$bucket]['amount'];
             }
+            $tenant = $group->activeTenants->firstWhere('code', $tenantCode);
+            $aggregated['by_tenant'][$tenantCode] = array_merge(
+                ['tenant_name' => $tenant?->name],
+                $aging
+            );
         }
 
-        $aggregated['total_count'] = array_sum(array_column(array_intersect_key($aggregated, array_flip(['0-30','31-60','61-90','90+'])), 'count'));
-        $aggregated['total_amount'] = array_sum(array_column(array_intersect_key($aggregated, array_flip(['0-30','31-60','61-90','90+'])), 'amount'));
+        $aggregated['total_count'] = array_sum(array_column(array_intersect_key($aggregated, array_flip(self::AGING_BUCKETS)), 'count'));
+        $aggregated['total_amount'] = array_sum(array_column(array_intersect_key($aggregated, array_flip(self::AGING_BUCKETS)), 'amount'));
 
         return $aggregated;
     }
 
     /**
      * Per-tenant outstanding aging. Bucket by inscription date (simple, not deadline-based).
-     * Limitation: le calcul "deadline-based" (suivant les payment_deadline_days par catégorie)
-     * vit dans ESBTPComptabiliteController::getImpayesAging() tenant-side. Ici on reste sur
-     * inscription_date pour garder ça léger cross-tenant.
+     * Why: la logique deadline-based (payment_deadline_days par catégorie) vit dans
+     * ESBTPComptabiliteController::getImpayesAging() tenant-side. Ici on reste sur inscription_date
+     * pour garder ça léger cross-tenant.
      */
     private function computeTenantOutstandingAging(Tenant $tenant): array
     {
-        $conn = $this->connectionManager->createConnection($tenant);
-
-        try {
+        return $this->withTenantConnection($tenant, function (string $conn) use ($tenant) {
             $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
-            if (!$currentYear) {
+            if (! $currentYear) {
                 return $this->emptyAging();
             }
 
-            $inscriptions = DB::connection($conn)
-                ->table('esbtp_inscriptions')
-                ->where('status', 'active')
-                ->where('workflow_step', 'etudiant_cree')
-                ->where('annee_universitaire_id', $currentYear->id)
-                ->get(['id', 'filiere_id', 'niveau_id', 'affectation_status', 'created_at']);
+            $ctx = $this->loadBillingContext($conn, $tenant->id, $currentYear->id);
 
-            if ($inscriptions->isEmpty()) {
+            // Filter to actively-enrolled students only for aging — avoid bucketing pending inscriptions.
+            $activeInscriptions = $ctx['inscriptions']->where('status', 'active')->where('workflow_step', 'etudiant_cree');
+
+            if ($activeInscriptions->isEmpty()) {
                 return $this->emptyAging();
             }
 
@@ -570,37 +619,29 @@ class TenantAggregationService
                 ->table('esbtp_paiements')
                 ->where('status', 'validé')
                 ->whereNull('deleted_at')
-                ->whereIn('inscription_id', $inscriptions->pluck('id'))
+                ->whereIn('inscription_id', $activeInscriptions->pluck('id'))
                 ->selectRaw('inscription_id, SUM(montant) as total')
                 ->groupBy('inscription_id')
                 ->pluck('total', 'inscription_id');
 
-            $categories = DB::connection($conn)->table('esbtp_frais_categories')->where('is_active', true)->get();
-            $subscriptions = DB::connection($conn)
-                ->table('esbtp_frais_subscriptions')
-                ->where('is_active', true)
-                ->whereIn('inscription_id', $inscriptions->pluck('id'))
-                ->get()->groupBy('inscription_id');
-            $configurations = DB::connection($conn)
-                ->table('esbtp_frais_configurations')
-                ->where('is_active', true)
-                ->whereIn('frais_category_id', $categories->pluck('id'))
-                ->get()
-                ->groupBy(fn ($c) => $c->frais_category_id . '_' . $c->filiere_id . '_' . $c->niveau_id);
-
             $buckets = $this->emptyAging();
+            $now = now();
 
-            foreach ($inscriptions as $inscription) {
-                $totalDue = $this->computeInscriptionDue($inscription, $categories, $subscriptions, $configurations);
-                $totalPaid = (float) ($paiementsByInsc[$inscription->id] ?? 0);
-                $outstanding = max(0, $totalDue - $totalPaid);
+            foreach ($activeInscriptions as $inscription) {
+                $inscSubs = $ctx['subscriptions']->get($inscription->id, collect());
+                $totalDue = 0;
+                foreach ($ctx['categories'] as $category) {
+                    $totalDue += $this->resolveCategoryAmount($inscription, $category, $inscSubs, $ctx['configurations']);
+                }
 
+                $outstanding = max(0, $totalDue - (float) ($paiementsByInsc[$inscription->id] ?? 0));
                 if ($outstanding <= 0) {
                     continue;
                 }
 
-                $createdAt = $inscription->created_at ? \Carbon\Carbon::parse($inscription->created_at) : now();
-                $daysOld = (int) $createdAt->diffInDays(now());
+                $daysOld = $inscription->created_at
+                    ? (int) \Carbon\Carbon::parse($inscription->created_at)->diffInDays($now)
+                    : 0;
                 $bucket = match (true) {
                     $daysOld <= 30 => '0-30',
                     $daysOld <= 60 => '31-60',
@@ -613,53 +654,11 @@ class TenantAggregationService
             }
 
             return $buckets;
-        } catch (\Exception $e) {
-            Log::error("Tenant aging failed for {$tenant->code}: {$e->getMessage()}");
-            return $this->emptyAging();
-        } finally {
-            $this->connectionManager->closeConnection($conn);
-        }
-    }
-
-    /**
-     * Compute expected amount for a single inscription using same logic as computeRevenueExpected.
-     */
-    private function computeInscriptionDue($inscription, $categories, $subscriptionsByInsc, $configurations): float
-    {
-        $inscSubs = $subscriptionsByInsc->get($inscription->id, collect());
-        $totalDue = 0;
-
-        foreach ($categories as $category) {
-            $sub = $inscSubs->where('frais_category_id', $category->id)->first();
-            if ($category->is_mandatory) {
-                if ($sub) {
-                    $montant = $sub->amount;
-                } else {
-                    $key = $category->id . '_' . $inscription->filiere_id . '_' . $inscription->niveau_id;
-                    $config = $configurations->get($key, collect())->first();
-                    if ($config) {
-                        $status = $inscription->affectation_status ?? 'affecté';
-                        $field = 'amount_' . str_replace('é', 'e', $status);
-                        $montant = $config->{$field} ?? $config->amount ?? $category->default_amount;
-                    } else {
-                        $montant = $category->default_amount;
-                    }
-                }
-            } else {
-                $montant = $sub ? $sub->amount : 0;
-            }
-            if ($montant > 0) {
-                $totalDue += $montant;
-            }
-        }
-
-        return (float) $totalDue;
+        });
     }
 
     private function computeGroupHealthMetrics(Group $group): array
     {
-        $tenants = $group->activeTenants;
-
         $health = [
             'quota_critical_count' => 0,
             'quota_exceeded_count' => 0,
@@ -672,91 +671,41 @@ class TenantAggregationService
 
         $attritionData = [];
 
-        foreach ($tenants as $tenant) {
-            // Quota status from master DB (no tenant connection)
-            $quotaPct = $this->computeQuotaPercentages($tenant);
-            if ($quotaPct['max'] >= 100) {
-                $health['quota_exceeded_count']++;
-                $health['alerts'][] = [
-                    'severity' => 'critical',
-                    'tenant_code' => $tenant->code,
-                    'tenant_name' => $tenant->name,
-                    'type' => 'quota_exceeded',
-                    'message' => "Quota {$quotaPct['max_type']} dépassé ({$quotaPct['max']}%)",
-                ];
-            } elseif ($quotaPct['max'] >= 90) {
-                $health['quota_critical_count']++;
-                $health['alerts'][] = [
-                    'severity' => 'warning',
-                    'tenant_code' => $tenant->code,
-                    'tenant_name' => $tenant->name,
-                    'type' => 'quota_critical',
-                    'message' => "Quota {$quotaPct['max_type']} à {$quotaPct['max']}%",
-                ];
-            }
+        foreach ($group->activeTenants as $tenant) {
+            $this->collectQuotaAlerts($tenant, $health);
+            $this->collectSubscriptionAlerts($tenant, $health);
 
-            // Subscription expiration
-            if ($tenant->subscription_end_date) {
-                $daysUntil = (int) now()->diffInDays($tenant->subscription_end_date, false);
-                if ($daysUntil < 0) {
-                    $health['subscription_expired_count']++;
-                    $health['alerts'][] = [
-                        'severity' => 'critical',
-                        'tenant_code' => $tenant->code,
-                        'tenant_name' => $tenant->name,
-                        'type' => 'subscription_expired',
-                        'message' => 'Abonnement expiré depuis ' . abs($daysUntil) . ' jours',
-                    ];
-                } elseif ($daysUntil <= 30) {
-                    $health['subscription_expiring_count']++;
-                    $health['alerts'][] = [
-                        'severity' => 'warning',
-                        'tenant_code' => $tenant->code,
-                        'tenant_name' => $tenant->name,
-                        'type' => 'subscription_expiring',
-                        'message' => "Abonnement expire dans {$daysUntil} jours",
-                    ];
-                }
-            }
-
-            // Reliquats + attrition (needs tenant connection)
             try {
                 $details = $this->computeTenantHealthDetails($tenant);
                 $health['active_reliquats_total'] += $details['active_reliquats'];
 
                 if ($details['attrition_rate'] !== null && $details['previous_year_inscriptions'] > 0) {
-                    $attritionData[] = [
-                        'rate' => $details['attrition_rate'],
-                        'weight' => $details['previous_year_inscriptions'],
-                    ];
+                    $attritionData[] = ['rate' => $details['attrition_rate'], 'weight' => $details['previous_year_inscriptions']];
 
                     if ($details['attrition_rate'] > 15) {
-                        $health['alerts'][] = [
-                            'severity' => 'warning',
-                            'tenant_code' => $tenant->code,
-                            'tenant_name' => $tenant->name,
-                            'type' => 'high_attrition',
-                            'message' => "Attrition élevée : {$details['attrition_rate']}%",
-                        ];
+                        $health['alerts'][] = $this->buildAlert(
+                            $tenant,
+                            AlertSeverity::Warning,
+                            AlertType::HighAttrition,
+                            "Attrition élevée : {$details['attrition_rate']}%"
+                        );
                     }
                 }
 
                 if ($details['active_reliquats'] > 0) {
-                    $health['alerts'][] = [
-                        'severity' => 'info',
-                        'tenant_code' => $tenant->code,
-                        'tenant_name' => $tenant->name,
-                        'type' => 'active_reliquats',
-                        'message' => number_format($details['active_reliquats'], 0, ',', ' ') . ' FCFA de reliquats actifs',
-                    ];
+                    $health['alerts'][] = $this->buildAlert(
+                        $tenant,
+                        AlertSeverity::Info,
+                        AlertType::ActiveReliquats,
+                        number_format($details['active_reliquats'], 0, ',', ' ') . ' FCFA de reliquats actifs'
+                    );
                 }
             } catch (\Exception $e) {
                 Log::error("Health details failed for {$tenant->code}: {$e->getMessage()}");
             }
         }
 
-        // Weighted avg attrition (weighted by previous year students count)
-        if (!empty($attritionData)) {
+        if (! empty($attritionData)) {
             $totalWeight = array_sum(array_column($attritionData, 'weight'));
             if ($totalWeight > 0) {
                 $weightedSum = array_sum(array_map(fn ($d) => $d['rate'] * $d['weight'], $attritionData));
@@ -764,11 +713,73 @@ class TenantAggregationService
             }
         }
 
-        // Sort alerts: critical > warning > info
-        $severityOrder = ['critical' => 0, 'warning' => 1, 'info' => 2];
-        usort($health['alerts'], fn ($a, $b) => $severityOrder[$a['severity']] <=> $severityOrder[$b['severity']]);
+        usort(
+            $health['alerts'],
+            fn ($a, $b) => AlertSeverity::from($a['severity'])->sortOrder() <=> AlertSeverity::from($b['severity'])->sortOrder()
+        );
 
         return $health;
+    }
+
+    private function buildAlert(Tenant $tenant, AlertSeverity $severity, AlertType $type, string $message): array
+    {
+        return [
+            'severity' => $severity->value,
+            'tenant_code' => $tenant->code,
+            'tenant_name' => $tenant->name,
+            'type' => $type->value,
+            'message' => $message,
+        ];
+    }
+
+    private function collectQuotaAlerts(Tenant $tenant, array &$health): void
+    {
+        $quotaPct = $this->computeQuotaPercentages($tenant);
+
+        if ($quotaPct['max'] >= 100) {
+            $health['quota_exceeded_count']++;
+            $health['alerts'][] = $this->buildAlert(
+                $tenant,
+                AlertSeverity::Critical,
+                AlertType::QuotaExceeded,
+                "Quota {$quotaPct['max_type']} dépassé ({$quotaPct['max']}%)"
+            );
+        } elseif ($quotaPct['max'] >= 90) {
+            $health['quota_critical_count']++;
+            $health['alerts'][] = $this->buildAlert(
+                $tenant,
+                AlertSeverity::Warning,
+                AlertType::QuotaCritical,
+                "Quota {$quotaPct['max_type']} à {$quotaPct['max']}%"
+            );
+        }
+    }
+
+    private function collectSubscriptionAlerts(Tenant $tenant, array &$health): void
+    {
+        if (! $tenant->subscription_end_date) {
+            return;
+        }
+
+        $daysUntil = (int) now()->diffInDays($tenant->subscription_end_date, false);
+
+        if ($daysUntil < 0) {
+            $health['subscription_expired_count']++;
+            $health['alerts'][] = $this->buildAlert(
+                $tenant,
+                AlertSeverity::Critical,
+                AlertType::SubscriptionExpired,
+                'Abonnement expiré depuis ' . abs($daysUntil) . ' jours'
+            );
+        } elseif ($daysUntil <= 30) {
+            $health['subscription_expiring_count']++;
+            $health['alerts'][] = $this->buildAlert(
+                $tenant,
+                AlertSeverity::Warning,
+                AlertType::SubscriptionExpiring,
+                "Abonnement expire dans {$daysUntil} jours"
+            );
+        }
     }
 
     private function computeQuotaPercentages(Tenant $tenant): array
@@ -805,77 +816,81 @@ class TenantAggregationService
 
     private function computeTenantHealthDetails(Tenant $tenant): array
     {
-        $conn = $this->connectionManager->createConnection($tenant);
+        $empty = ['active_reliquats' => 0, 'attrition_rate' => null, 'previous_year_inscriptions' => 0];
 
         try {
-            $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
-            if (!$currentYear) {
-                return ['active_reliquats' => 0, 'attrition_rate' => null, 'previous_year_inscriptions' => 0];
-            }
+            return $this->withTenantConnection($tenant, function (string $conn) use ($tenant, $empty) {
+                $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
+                if (! $currentYear) {
+                    return $empty;
+                }
 
-            // Active reliquats : ESBTPReliquatDetail actif/partiellement_regle via inscriptions année courante
-            $activeReliquats = 0;
-            if (DB::connection($conn)->getSchemaBuilder()->hasTable('esbtp_reliquats_details')) {
-                $activeReliquats = (float) DB::connection($conn)
-                    ->table('esbtp_reliquats_details')
-                    ->join('esbtp_inscriptions', 'esbtp_reliquats_details.inscription_destination_id', '=', 'esbtp_inscriptions.id')
-                    ->where('esbtp_inscriptions.annee_universitaire_id', $currentYear->id)
-                    ->whereIn('esbtp_reliquats_details.statut', ['actif', 'partiellement_regle'])
-                    ->sum('esbtp_reliquats_details.solde_restant');
-            }
+                $activeReliquats = $this->tenantHasTable($conn, $tenant->id, 'esbtp_reliquats_details')
+                    ? (float) DB::connection($conn)
+                        ->table('esbtp_reliquats_details')
+                        ->join('esbtp_inscriptions', 'esbtp_reliquats_details.inscription_destination_id', '=', 'esbtp_inscriptions.id')
+                        ->where('esbtp_inscriptions.annee_universitaire_id', $currentYear->id)
+                        ->whereIn('esbtp_reliquats_details.statut', ['actif', 'partiellement_regle'])
+                        ->sum('esbtp_reliquats_details.solde_restant')
+                    : 0.0;
 
-            // Attrition : étudiants année précédente NON réinscrits année courante
-            $previousYear = DB::connection($conn)
-                ->table('esbtp_annee_universitaires')
-                ->where('id', '<', $currentYear->id)
-                ->orderByDesc('id')
-                ->first();
+                $previousYear = DB::connection($conn)
+                    ->table('esbtp_annee_universitaires')
+                    ->where('id', '<', $currentYear->id)
+                    ->orderByDesc('id')
+                    ->first();
 
-            $attritionRate = null;
-            $previousYearInscriptions = 0;
+                $attritionRate = null;
+                $previousYearInscriptions = 0;
 
-            if ($previousYear) {
-                $previousYearStudents = DB::connection($conn)
-                    ->table('esbtp_inscriptions')
-                    ->where('annee_universitaire_id', $previousYear->id)
-                    ->where('status', 'active')
-                    ->where('workflow_step', 'etudiant_cree')
-                    ->pluck('etudiant_id')
-                    ->unique();
-
-                $previousYearInscriptions = $previousYearStudents->count();
-
-                if ($previousYearInscriptions > 0) {
-                    $retainedCount = DB::connection($conn)
+                if ($previousYear) {
+                    $previousYearStudents = DB::connection($conn)
                         ->table('esbtp_inscriptions')
-                        ->where('annee_universitaire_id', $currentYear->id)
+                        ->where('annee_universitaire_id', $previousYear->id)
                         ->where('status', 'active')
                         ->where('workflow_step', 'etudiant_cree')
-                        ->whereIn('etudiant_id', $previousYearStudents)
-                        ->distinct()
-                        ->count('etudiant_id');
+                        ->pluck('etudiant_id')
+                        ->unique();
 
-                    $attritionRate = round((($previousYearInscriptions - $retainedCount) / $previousYearInscriptions) * 100, 1);
+                    $previousYearInscriptions = $previousYearStudents->count();
+
+                    if ($previousYearInscriptions > 0) {
+                        $retainedCount = DB::connection($conn)
+                            ->table('esbtp_inscriptions')
+                            ->where('annee_universitaire_id', $currentYear->id)
+                            ->where('status', 'active')
+                            ->where('workflow_step', 'etudiant_cree')
+                            ->whereIn('etudiant_id', $previousYearStudents)
+                            ->distinct()
+                            ->count('etudiant_id');
+
+                        $attritionRate = round((($previousYearInscriptions - $retainedCount) / $previousYearInscriptions) * 100, 1);
+                    }
                 }
-            }
 
-            return [
-                'active_reliquats' => $activeReliquats,
-                'attrition_rate' => $attritionRate,
-                'previous_year_inscriptions' => $previousYearInscriptions,
-            ];
+                return [
+                    'active_reliquats' => $activeReliquats,
+                    'attrition_rate' => $attritionRate,
+                    'previous_year_inscriptions' => $previousYearInscriptions,
+                ];
+            });
         } catch (\Exception $e) {
             Log::error("Tenant health details failed for {$tenant->code}: {$e->getMessage()}");
-            return ['active_reliquats' => 0, 'attrition_rate' => null, 'previous_year_inscriptions' => 0];
-        } finally {
-            $this->connectionManager->closeConnection($conn);
+            return $empty;
         }
+    }
+
+    private function tenantHasTable(string $conn, int $tenantId, string $table): bool
+    {
+        $key = "{$tenantId}_{$table}";
+        if (! isset($this->tableExistsCache[$key])) {
+            $this->tableExistsCache[$key] = DB::connection($conn)->getSchemaBuilder()->hasTable($table);
+        }
+        return $this->tableExistsCache[$key];
     }
 
     private function computeGroupTrends(Group $group): array
     {
-        $tenants = $group->activeTenants;
-
         $trends = [
             'revenue_mom' => ['current' => 0, 'previous' => 0, 'delta_pct' => 0],
             'revenue_yoy' => ['current' => 0, 'previous' => 0, 'delta_pct' => 0],
@@ -883,31 +898,27 @@ class TenantAggregationService
             'by_tenant' => [],
         ];
 
-        foreach ($tenants as $tenant) {
-            try {
-                $tenantTrends = $this->computeTenantTrends($tenant);
-                $trends['revenue_mom']['current'] += $tenantTrends['revenue_mom']['current'];
-                $trends['revenue_mom']['previous'] += $tenantTrends['revenue_mom']['previous'];
-                $trends['revenue_yoy']['current'] += $tenantTrends['revenue_yoy']['current'];
-                $trends['revenue_yoy']['previous'] += $tenantTrends['revenue_yoy']['previous'];
-                $trends['inscriptions_yoy']['current'] += $tenantTrends['inscriptions_yoy']['current'];
-                $trends['inscriptions_yoy']['previous'] += $tenantTrends['inscriptions_yoy']['previous'];
-                $trends['by_tenant'][$tenant->code] = array_merge(
-                    ['tenant_name' => $tenant->name],
-                    $tenantTrends
-                );
-            } catch (\Exception $e) {
-                Log::error("Trends failed for {$tenant->code}: {$e->getMessage()}");
+        $perTenant = $this->aggregateAcrossTenants(
+            $group,
+            fn (Tenant $t) => $this->computeTenantTrends($t),
+            'Trends'
+        );
+
+        foreach ($perTenant as $tenantCode => $tenantTrends) {
+            foreach (['revenue_mom', 'revenue_yoy', 'inscriptions_yoy'] as $key) {
+                $trends[$key]['current'] += $tenantTrends[$key]['current'];
+                $trends[$key]['previous'] += $tenantTrends[$key]['previous'];
             }
+            $tenant = $group->activeTenants->firstWhere('code', $tenantCode);
+            $trends['by_tenant'][$tenantCode] = array_merge(['tenant_name' => $tenant?->name], $tenantTrends);
         }
 
         foreach (['revenue_mom', 'revenue_yoy', 'inscriptions_yoy'] as $key) {
             $prev = $trends[$key]['previous'];
-            if ($prev > 0) {
-                $trends[$key]['delta_pct'] = round((($trends[$key]['current'] - $prev) / $prev) * 100, 1);
-            } elseif ($trends[$key]['current'] > 0) {
-                $trends[$key]['delta_pct'] = 100; // from 0 to something = 100%
-            }
+            $curr = $trends[$key]['current'];
+            $trends[$key]['delta_pct'] = $prev > 0
+                ? round((($curr - $prev) / $prev) * 100, 1)
+                : ($curr > 0 ? 100 : 0);
         }
 
         return $trends;
@@ -915,105 +926,63 @@ class TenantAggregationService
 
     private function computeTenantTrends(Tenant $tenant): array
     {
-        $conn = $this->connectionManager->createConnection($tenant);
-
         try {
-            $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
-            if (!$currentYear) {
-                return $this->emptyTrends();
-            }
+            return $this->withTenantConnection($tenant, function (string $conn) {
+                $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
+                if (! $currentYear) {
+                    return $this->emptyTrends();
+                }
 
-            $previousYear = DB::connection($conn)
-                ->table('esbtp_annee_universitaires')
-                ->where('id', '<', $currentYear->id)
-                ->orderByDesc('id')
-                ->first();
+                $previousYear = DB::connection($conn)
+                    ->table('esbtp_annee_universitaires')
+                    ->where('id', '<', $currentYear->id)
+                    ->orderByDesc('id')
+                    ->first();
 
-            $currentMonthStart = now()->startOfMonth();
-            $currentMonthEnd = now()->endOfMonth();
-            $previousMonthStart = now()->subMonth()->startOfMonth();
-            $previousMonthEnd = now()->subMonth()->endOfMonth();
-
-            $revenueCurrentMonth = (float) DB::connection($conn)
-                ->table('esbtp_paiements')
-                ->where('annee_universitaire_id', $currentYear->id)
-                ->where('status', 'validé')
-                ->whereNull('deleted_at')
-                ->whereBetween('date_paiement', [$currentMonthStart, $currentMonthEnd])
-                ->sum('montant');
-
-            $revenuePreviousMonth = (float) DB::connection($conn)
-                ->table('esbtp_paiements')
-                ->where('annee_universitaire_id', $currentYear->id)
-                ->where('status', 'validé')
-                ->whereNull('deleted_at')
-                ->whereBetween('date_paiement', [$previousMonthStart, $previousMonthEnd])
-                ->sum('montant');
-
-            $revenueCurrentYear = (float) DB::connection($conn)
-                ->table('esbtp_paiements')
-                ->where('annee_universitaire_id', $currentYear->id)
-                ->where('status', 'validé')
-                ->whereNull('deleted_at')
-                ->sum('montant');
-
-            $revenuePreviousYear = 0;
-            $inscriptionsPreviousYear = 0;
-            if ($previousYear) {
-                $revenuePreviousYear = (float) DB::connection($conn)
-                    ->table('esbtp_paiements')
-                    ->where('annee_universitaire_id', $previousYear->id)
-                    ->where('status', 'validé')
-                    ->whereNull('deleted_at')
-                    ->sum('montant');
-
-                $inscriptionsPreviousYear = DB::connection($conn)
+                $inscriptionsCount = fn ($anneeId) => DB::connection($conn)
                     ->table('esbtp_inscriptions')
-                    ->where('annee_universitaire_id', $previousYear->id)
+                    ->where('annee_universitaire_id', $anneeId)
                     ->where('status', 'active')
                     ->where('workflow_step', 'etudiant_cree')
                     ->distinct()
                     ->count('etudiant_id');
-            }
 
-            $inscriptionsCurrentYear = DB::connection($conn)
-                ->table('esbtp_inscriptions')
-                ->where('annee_universitaire_id', $currentYear->id)
-                ->where('status', 'active')
-                ->where('workflow_step', 'etudiant_cree')
-                ->distinct()
-                ->count('etudiant_id');
+                $revenue = function ($anneeId, $startDate = null, $endDate = null) use ($conn) {
+                    $q = DB::connection($conn)
+                        ->table('esbtp_paiements')
+                        ->where('annee_universitaire_id', $anneeId)
+                        ->where('status', 'validé')
+                        ->whereNull('deleted_at');
+                    if ($startDate && $endDate) {
+                        $q->whereBetween('date_paiement', [$startDate, $endDate]);
+                    }
+                    return (float) $q->sum('montant');
+                };
 
-            return [
-                'revenue_mom' => [
-                    'current' => $revenueCurrentMonth,
-                    'previous' => $revenuePreviousMonth,
-                ],
-                'revenue_yoy' => [
-                    'current' => $revenueCurrentYear,
-                    'previous' => $revenuePreviousYear,
-                ],
-                'inscriptions_yoy' => [
-                    'current' => $inscriptionsCurrentYear,
-                    'previous' => $inscriptionsPreviousYear,
-                ],
-            ];
+                return [
+                    'revenue_mom' => [
+                        'current' => $revenue($currentYear->id, now()->startOfMonth(), now()->endOfMonth()),
+                        'previous' => $revenue($currentYear->id, now()->subMonth()->startOfMonth(), now()->subMonth()->endOfMonth()),
+                    ],
+                    'revenue_yoy' => [
+                        'current' => $revenue($currentYear->id),
+                        'previous' => $previousYear ? $revenue($previousYear->id) : 0,
+                    ],
+                    'inscriptions_yoy' => [
+                        'current' => $inscriptionsCount($currentYear->id),
+                        'previous' => $previousYear ? $inscriptionsCount($previousYear->id) : 0,
+                    ],
+                ];
+            });
         } catch (\Exception $e) {
             Log::error("Tenant trends failed for {$tenant->code}: {$e->getMessage()}");
             return $this->emptyTrends();
-        } finally {
-            $this->connectionManager->closeConnection($conn);
         }
     }
 
     private function emptyAging(): array
     {
-        return [
-            '0-30' => ['count' => 0, 'amount' => 0],
-            '31-60' => ['count' => 0, 'amount' => 0],
-            '61-90' => ['count' => 0, 'amount' => 0],
-            '90+' => ['count' => 0, 'amount' => 0],
-        ];
+        return array_fill_keys(self::AGING_BUCKETS, ['count' => 0, 'amount' => 0]);
     }
 
     private function emptyTrends(): array

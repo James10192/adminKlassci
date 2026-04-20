@@ -909,10 +909,10 @@
     color: #64748b;
 }
 
-/* ─── Alerts panel (PR1 portail groupe) ─── */
+/* ─── Alerts panel ─── */
 .gp-alerts-panel {
     background: #ffffff;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--gp-border);
     border-radius: 14px;
     overflow: hidden;
     box-shadow: 0 1px 3px rgba(15,23,42,.04), 0 1px 2px rgba(15,23,42,.06);
@@ -925,8 +925,8 @@
     gap: 1rem;
     flex-wrap: wrap;
     padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid #e2e8f0;
-    background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+    border-bottom: 1px solid var(--gp-border);
+    background: linear-gradient(135deg, var(--gp-bg-subtle) 0%, #ffffff 100%);
 }
 
 .gp-alerts-title-block {
@@ -939,7 +939,7 @@
     width: 44px;
     height: 44px;
     border-radius: 11px;
-    background: linear-gradient(135deg, #0453cb, #3b7ddb);
+    background: linear-gradient(135deg, var(--gp-primary), var(--gp-primary-light));
     color: #fff;
     display: flex;
     align-items: center;
@@ -957,7 +957,7 @@
 
 .gp-alerts-subtitle {
     font-size: .82rem;
-    color: #64748b;
+    color: var(--gp-text-secondary);
     margin: 0;
 }
 
@@ -978,7 +978,7 @@
     font-weight: 600;
     background: #f1f5f9;
     color: #475569;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--gp-border);
 }
 
 .gp-alerts-chip--critical {
@@ -995,14 +995,14 @@
 
 .gp-alerts-chip--info {
     background: #eff6ff;
-    color: #0453cb;
+    color: var(--gp-primary);
     border-color: #bfdbfe;
 }
 
 .gp-alerts-chip--neutral {
     background: #f1f5f9;
     color: #475569;
-    border-color: #e2e8f0;
+    border-color: var(--gp-border);
 }
 
 .gp-alerts-list {
@@ -1060,13 +1060,13 @@
 .gp-alert-message {
     font-size: .85rem;
     font-weight: 600;
-    color: #0f172a;
+    color: var(--gp-text);
     margin-bottom: .2rem;
 }
 
 .gp-alert-tenant {
     font-size: .72rem;
-    color: #64748b;
+    color: var(--gp-text-secondary);
     display: inline-flex;
     align-items: center;
     gap: .3rem;
@@ -1088,7 +1088,7 @@
 .gp-alerts-empty {
     padding: 2.5rem 1.5rem;
     text-align: center;
-    color: #64748b;
+    color: var(--gp-text-secondary);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1096,7 +1096,7 @@
 }
 
 .gp-alerts-empty svg {
-    color: #10b981;
+    color: var(--gp-success);
 }
 
 .gp-alerts-empty p {
