@@ -2,11 +2,14 @@
 
 namespace App\Filament\Group\Widgets;
 
+use App\Filament\Group\Concerns\PeriodAwareConcern;
 use App\Services\TenantAggregationService;
 use Filament\Widgets\ChartWidget;
 
 class RevenueComparisonWidget extends ChartWidget
 {
+    use PeriodAwareConcern;
+
     // Keep lazy: cross-DB queries can be slow
 
     protected static ?string $heading = 'Revenus par établissement';
@@ -21,7 +24,7 @@ class RevenueComparisonWidget extends ChartWidget
     {
         $group = auth('group')->user()->group;
         $service = app(TenantAggregationService::class);
-        $financials = $service->getGroupFinancials($group);
+        $financials = $service->getGroupFinancials($group, $this->currentPeriod());
 
         $labels = [];
         $expected = [];

@@ -2,12 +2,15 @@
 
 namespace App\Filament\Group\Widgets;
 
+use App\Filament\Group\Concerns\PeriodAwareConcern;
 use App\Services\TenantAggregationService;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class KpiOverviewWidget extends StatsOverviewWidget
 {
+    use PeriodAwareConcern;
+
     protected static ?int $sort = 2;
 
     protected static ?string $pollingInterval = '300s';
@@ -21,10 +24,13 @@ class KpiOverviewWidget extends StatsOverviewWidget
     {
         $group = auth('group')->user()->group;
         $service = app(TenantAggregationService::class);
+        // All 3 service calls MUST receive the same period — otherwise MoM/YoY
+        // deltas would be computed against a different window than the snapshot.
+        $period = $this->currentPeriod();
 
-        $kpis = $service->getGroupKpis($group);
-        $trends = $service->getGroupTrends($group);
-        $aging = $service->getGroupOutstandingAging($group);
+        $kpis = $service->getGroupKpis($group, $period);
+        $trends = $service->getGroupTrends($group, $period);
+        $aging = $service->getGroupOutstandingAging($group, $period);
 
         // Delta MoM revenus
         $revenueDelta = $trends['revenue_mom']['delta_pct'] ?? 0;

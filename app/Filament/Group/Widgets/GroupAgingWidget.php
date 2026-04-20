@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Widgets;
 
+use App\Filament\Group\Concerns\PeriodAwareConcern;
 use App\Services\TenantAggregationService;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -9,6 +10,8 @@ use Illuminate\Support\Str;
 
 class GroupAgingWidget extends StatsOverviewWidget
 {
+    use PeriodAwareConcern;
+
     protected static ?int $sort = 3;
 
     protected static ?string $pollingInterval = '180s';
@@ -23,7 +26,8 @@ class GroupAgingWidget extends StatsOverviewWidget
     protected function getStats(): array
     {
         $group = auth('group')->user()->group;
-        $aging = app(TenantAggregationService::class)->getGroupOutstandingAging($group);
+        $aging = app(TenantAggregationService::class)
+            ->getGroupOutstandingAging($group, $this->currentPeriod());
 
         // `pluralize_qualifier` only true when the suffix is an adjective (critique → critiques).
         // Invariant suffixes like "à surveiller" / "à recouvrer urgemment" keep the same form.

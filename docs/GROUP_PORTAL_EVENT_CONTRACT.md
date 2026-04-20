@@ -57,46 +57,49 @@ The selector dispatches ONLY when:
 
 ## How to subscribe — Livewire widget
 
-```blade
-<div
-    x-data
-    @klassci:group-portal:period-change.window="$wire.onPeriodChanged($event.detail)"
->
-    {{ $this->render() }}
-</div>
+Livewire 3 `#[On(...)]` listens to browser `window` CustomEvents natively — no per-widget Alpine bridge is required on the consumer side. Use the `PeriodAwareConcern` trait for the boilerplate (wired up in PR4e):
+
+```php
+use App\Filament\Group\Concerns\PeriodAwareConcern;
+use App\Services\TenantAggregationService;
+use Filament\Widgets\StatsOverviewWidget;
+
+class MyPeriodAwareWidget extends StatsOverviewWidget
+{
+    use PeriodAwareConcern;
+
+    protected function getStats(): array
+    {
+        $group = auth('group')->user()->group;
+        // $this->currentPeriod() returns PeriodFactory::default() when either
+        //   a) the `group_portal.widgets_period_aware` flag is OFF, or
+        //   b) no period-change event has been received yet, or
+        //   c) the last received payload was malformed.
+        $period = $this->currentPeriod();
+
+        $kpis = app(TenantAggregationService::class)->getGroupKpis($group, $period);
+        // ... build stats array
+    }
+}
 ```
+
+Manual subscription (without the trait) — kept for reference:
 
 ```php
 use App\Support\Period\PeriodEventContract;
 use App\Support\Period\PeriodType;
 use Carbon\CarbonImmutable;
+use Livewire\Attributes\On;
 
 class MyPeriodAwareWidget extends Widget
 {
-    public ?PeriodType $type = null;
-    public ?CarbonImmutable $start = null;
-    public ?CarbonImmutable $end = null;
+    public ?array $periodPayload = null;
 
+    #[On(PeriodEventContract::EVENT_NAME)]
     public function onPeriodChanged(array $payload): void
     {
-        $this->type = PeriodType::tryFromSafe($payload['type'] ?? null);
-
-        try {
-            $this->start = isset($payload['start'])
-                ? CarbonImmutable::parse($payload['start'])
-                : null;
-            $this->end = isset($payload['end'])
-                ? CarbonImmutable::parse($payload['end'])
-                : null;
-        } catch (\Throwable) {
-            // Malformed ISO → log + fall back to default.
-            logger()->warning('[group-portal] malformed period payload', $payload);
-            $this->type = PeriodType::default();
-            $this->start = null;
-            $this->end = null;
-        }
-
-        // Trigger recompute of getStats() / $this->dispatch('refresh') etc.
+        // Always validate — never trust the payload blindly.
+        $this->periodPayload = $payload;
     }
 }
 ```
