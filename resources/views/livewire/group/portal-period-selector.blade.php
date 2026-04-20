@@ -84,6 +84,19 @@
     }"
     @keydown.escape.window="open = false; customOpen = (localType === 'custom-range')"
 >
+    {{-- Screen-reader announcement — fires on every broadcast() so assistive --}}
+    {{-- tech users hear the new period label when widgets re-render silently. --}}
+    <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        class="gp-period-live"
+        x-text="(() => {
+            const payload = buildPayload();
+            return payload ? `Période sélectionnée : ${payload.label}` : '';
+        })()"
+    ></div>
+
     <button
         type="button"
         class="gp-period-button"
