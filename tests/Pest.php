@@ -15,6 +15,10 @@ pest()->extend(Tests\TestCase::class)
  // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature');
 
+// Tests that resolve from the container need the Laravel app booted.
+pest()->extend(Tests\TestCase::class)
+    ->in('Unit/Services');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations

@@ -19,19 +19,22 @@ Artisan::command('inspire', function () {
 
 /**
  * Helper : ajoute un horodatage avant/après chaque tâche dans le log.
+ * Guarded against double-declaration when the app boots multiple times (tests, tinker reruns).
  */
-function scheduleWithTimestamp($event, string $logFile, string $taskName)
-{
-    return $event
-        ->before(function () use ($logFile, $taskName) {
-            $ts = now()->format('Y-m-d H:i:s');
-            file_put_contents($logFile, "\n[{$ts}] ▶ {$taskName} — début\n", FILE_APPEND);
-        })
-        ->after(function () use ($logFile, $taskName) {
-            $ts = now()->format('Y-m-d H:i:s');
-            file_put_contents($logFile, "[{$ts}] ■ {$taskName} — fin\n", FILE_APPEND);
-        })
-        ->appendOutputTo($logFile);
+if (!function_exists('scheduleWithTimestamp')) {
+    function scheduleWithTimestamp($event, string $logFile, string $taskName)
+    {
+        return $event
+            ->before(function () use ($logFile, $taskName) {
+                $ts = now()->format('Y-m-d H:i:s');
+                file_put_contents($logFile, "\n[{$ts}] ▶ {$taskName} — début\n", FILE_APPEND);
+            })
+            ->after(function () use ($logFile, $taskName) {
+                $ts = now()->format('Y-m-d H:i:s');
+                file_put_contents($logFile, "[{$ts}] ■ {$taskName} — fin\n", FILE_APPEND);
+            })
+            ->appendOutputTo($logFile);
+    }
 }
 
 // 1. Health Check — toutes les heures
