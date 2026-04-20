@@ -7,6 +7,7 @@ use App\Enums\AlertType;
 use App\Models\Group;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Concurrency;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -47,14 +48,45 @@ class TenantAggregationService
 
     /**
      * Itère sur les tenants actifs en logguant les erreurs individuelles sans bloquer.
+     * Utilise Concurrency::run (process pool) quand >2 tenants — l'overhead process (~50-100ms)
+     * est plus rentable seulement si assez de tenants à traiter en parallèle.
      * @return array<string, mixed> keyed by tenant code
      */
-    private function aggregateAcrossTenants(Group $group, callable $fn, string $label): array
+    private function aggregateAcrossTenants(Group $group, string $methodName, string $label): array
+    {
+        $tenants = $group->activeTenants;
+
+        if ($tenants->count() <= 2 || config('concurrency.default') === 'sync') {
+            return $this->aggregateAcrossTenantsSync($tenants, $methodName, $label);
+        }
+
+        $tasks = [];
+        foreach ($tenants as $tenant) {
+            $tasks[$tenant->code] = function () use ($tenant, $methodName, $label) {
+                try {
+                    return app(self::class)->{$methodName}($tenant);
+                } catch (\Exception $e) {
+                    Log::error("{$label} failed for {$tenant->code}: {$e->getMessage()}");
+                    return null;
+                }
+            };
+        }
+
+        try {
+            $results = Concurrency::run($tasks);
+            return array_filter($results, fn ($r) => $r !== null);
+        } catch (\Exception $e) {
+            Log::warning("Concurrency::run failed for {$label}, falling back to sync: {$e->getMessage()}");
+            return $this->aggregateAcrossTenantsSync($tenants, $methodName, $label);
+        }
+    }
+
+    private function aggregateAcrossTenantsSync($tenants, string $methodName, string $label): array
     {
         $results = [];
-        foreach ($group->activeTenants as $tenant) {
+        foreach ($tenants as $tenant) {
             try {
-                $results[$tenant->code] = $fn($tenant);
+                $results[$tenant->code] = $this->{$methodName}($tenant);
             } catch (\Exception $e) {
                 Log::error("{$label} failed for {$tenant->code}: {$e->getMessage()}");
             }
@@ -238,7 +270,6 @@ class TenantAggregationService
 
     private function computeGroupKpis(Group $group): array
     {
-        $tenants = $group->activeTenants;
         $totals = [
             'total_students' => 0,
             'total_inscriptions' => 0,
@@ -248,21 +279,16 @@ class TenantAggregationService
             'establishments' => [],
         ];
 
-        foreach ($tenants as $tenant) {
-            try {
-                $kpis = $this->computeTenantKpis($tenant);
-                $totals['total_students'] += $kpis['students'];
-                $totals['total_inscriptions'] += $kpis['inscriptions'];
-                $totals['total_revenue_expected'] += $kpis['revenue_expected'];
-                $totals['total_revenue_collected'] += $kpis['revenue_collected'];
-                $totals['total_staff'] += $kpis['staff'];
-                $totals['establishments'][$tenant->code] = $kpis;
-            } catch (\Exception $e) {
-                Log::error("Failed to get KPIs for tenant {$tenant->code}", [
-                    'error' => $e->getMessage(),
-                ]);
-                $totals['establishments'][$tenant->code] = $this->emptyKpis($tenant);
-            }
+        $perTenant = $this->aggregateAcrossTenants($group, 'computeTenantKpis', 'TenantKpis');
+
+        foreach ($group->activeTenants as $tenant) {
+            $kpis = $perTenant[$tenant->code] ?? $this->emptyKpis($tenant);
+            $totals['total_students'] += $kpis['students'];
+            $totals['total_inscriptions'] += $kpis['inscriptions'];
+            $totals['total_revenue_expected'] += $kpis['revenue_expected'];
+            $totals['total_revenue_collected'] += $kpis['revenue_collected'];
+            $totals['total_staff'] += $kpis['staff'];
+            $totals['establishments'][$tenant->code] = $kpis;
         }
 
         $totals['collection_rate'] = $totals['total_revenue_expected'] > 0
@@ -271,9 +297,9 @@ class TenantAggregationService
 
         $totals['has_surplus'] = $totals['total_revenue_collected'] > $totals['total_revenue_expected'];
 
-        $totals['establishment_count'] = $tenants->count();
+        $totals['establishment_count'] = count($totals['establishments']);
 
-        // Taux de présence moyen pondéré par nb étudiants (PR1 portail groupe)
+        // Weighted by student count.
         $weightedAttendanceSum = 0;
         $studentsForAttendance = 0;
         foreach ($totals['establishments'] as $est) {
@@ -377,139 +403,121 @@ class TenantAggregationService
 
     private function computeGroupFinancials(Group $group): array
     {
-        $tenants = $group->activeTenants;
+        $perTenant = $this->aggregateAcrossTenants($group, 'computeTenantFinancials', 'Financials');
+
         $financials = [];
-
-        foreach ($tenants as $tenant) {
-            try {
-                $conn = $this->connectionManager->createConnection($tenant);
-                $currentYear = DB::connection($conn)
-                    ->table('esbtp_annee_universitaires')
-                    ->where('is_current', 1)
-                    ->first();
-
-                if (!$currentYear) {
-                    $financials[$tenant->code] = $this->emptyFinancials($tenant);
-                    continue;
-                }
-
-                // Monthly revenue for current year
-                $monthlyRevenue = DB::connection($conn)
-                    ->table('esbtp_paiements')
-                    ->where('annee_universitaire_id', $currentYear->id)
-                    ->where('status', 'validé')
-                    ->selectRaw('MONTH(date_paiement) as month, SUM(montant) as total')
-                    ->groupByRaw('MONTH(date_paiement)')
-                    ->pluck('total', 'month')
-                    ->toArray();
-
-                // Total expected: same logic as suivi-categories
-                $totalExpected = $this->computeRevenueExpected($conn, $tenant->id, $currentYear->id);
-
-                $totalCollected = (float) DB::connection($conn)
-                    ->table('esbtp_paiements')
-                    ->where('annee_universitaire_id', $currentYear->id)
-                    ->where('status', 'validé')
-                    ->sum('montant');
-
-                // Payment type breakdown
-                $byType = DB::connection($conn)
-                    ->table('esbtp_paiements')
-                    ->where('annee_universitaire_id', $currentYear->id)
-                    ->where('status', 'validé')
-                    ->selectRaw('type_paiement, SUM(montant) as total, COUNT(*) as count')
-                    ->groupBy('type_paiement')
-                    ->get()
-                    ->keyBy('type_paiement')
-                    ->toArray();
-
-                $financials[$tenant->code] = [
-                    'tenant_name' => $tenant->name,
-                    'revenue_expected' => $totalExpected,
-                    'revenue_collected' => $totalCollected,
-                    'outstanding' => max(0, $totalExpected - $totalCollected),
-                    'surplus' => max(0, $totalCollected - $totalExpected),
-                    'collection_rate' => $totalExpected > 0
-                        ? min(100, round(($totalCollected / $totalExpected) * 100, 1))
-                        : 0,
-                    'monthly_revenue' => $monthlyRevenue,
-                    'by_type' => $byType,
-                ];
-
-                $this->connectionManager->closeConnection($conn);
-
-            } catch (\Exception $e) {
-                Log::error("Financial data failed for {$tenant->code}: {$e->getMessage()}");
-                $financials[$tenant->code] = $this->emptyFinancials($tenant);
-            }
+        foreach ($group->activeTenants as $tenant) {
+            $financials[$tenant->code] = $perTenant[$tenant->code] ?? $this->emptyFinancials($tenant);
         }
 
         return $financials;
     }
 
+    private function computeTenantFinancials(Tenant $tenant): array
+    {
+        return $this->withTenantConnection($tenant, function (string $conn) use ($tenant) {
+            $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
+            if (! $currentYear) {
+                return $this->emptyFinancials($tenant);
+            }
+
+            $monthlyRevenue = DB::connection($conn)
+                ->table('esbtp_paiements')
+                ->where('annee_universitaire_id', $currentYear->id)
+                ->where('status', 'validé')
+                ->selectRaw('MONTH(date_paiement) as month, SUM(montant) as total')
+                ->groupByRaw('MONTH(date_paiement)')
+                ->pluck('total', 'month')
+                ->toArray();
+
+            $totalExpected = $this->computeRevenueExpected($conn, $tenant->id, $currentYear->id);
+
+            $totalCollected = (float) DB::connection($conn)
+                ->table('esbtp_paiements')
+                ->where('annee_universitaire_id', $currentYear->id)
+                ->where('status', 'validé')
+                ->sum('montant');
+
+            $byType = DB::connection($conn)
+                ->table('esbtp_paiements')
+                ->where('annee_universitaire_id', $currentYear->id)
+                ->where('status', 'validé')
+                ->selectRaw('type_paiement, SUM(montant) as total, COUNT(*) as count')
+                ->groupBy('type_paiement')
+                ->get()
+                ->keyBy('type_paiement')
+                ->toArray();
+
+            return [
+                'tenant_name' => $tenant->name,
+                'revenue_expected' => $totalExpected,
+                'revenue_collected' => $totalCollected,
+                'outstanding' => max(0, $totalExpected - $totalCollected),
+                'surplus' => max(0, $totalCollected - $totalExpected),
+                'collection_rate' => $totalExpected > 0
+                    ? min(100, round(($totalCollected / $totalExpected) * 100, 1))
+                    : 0,
+                'monthly_revenue' => $monthlyRevenue,
+                'by_type' => $byType,
+            ];
+        });
+    }
+
     private function computeGroupEnrollment(Group $group): array
     {
-        $tenants = $group->activeTenants;
+        $perTenant = $this->aggregateAcrossTenants($group, 'computeTenantEnrollment', 'Enrollment');
+
         $enrollment = [];
-
-        foreach ($tenants as $tenant) {
-            try {
-                $conn = $this->connectionManager->createConnection($tenant);
-                $currentYear = DB::connection($conn)
-                    ->table('esbtp_annee_universitaires')
-                    ->where('is_current', 1)
-                    ->first();
-
-                if (!$currentYear) {
-                    $enrollment[$tenant->code] = ['tenant_name' => $tenant->name, 'filieres' => []];
-                    continue;
-                }
-
-                // Inscriptions by filiere
-                $byFiliere = DB::connection($conn)
-                    ->table('esbtp_inscriptions as i')
-                    ->join('esbtp_filieres as f', 'i.filiere_id', '=', 'f.id')
-                    ->where('i.annee_universitaire_id', $currentYear->id)
-                    ->where('i.status', 'active')
-                    ->where('i.workflow_step', 'etudiant_cree')
-                    ->selectRaw('f.name as filiere_name, COUNT(*) as count')
-                    ->groupBy('f.name')
-                    ->orderByDesc('count')
-                    ->get()
-                    ->toArray();
-
-                // Class occupancy
-                $classOccupancy = DB::connection($conn)
-                    ->table('esbtp_classes as c')
-                    ->leftJoin('esbtp_inscriptions as i', function ($join) use ($currentYear) {
-                        $join->on('c.id', '=', 'i.classe_id')
-                            ->where('i.annee_universitaire_id', '=', $currentYear->id)
-                            ->where('i.status', '=', 'active')
-                            ->where('i.workflow_step', '=', 'etudiant_cree');
-                    })
-                    ->selectRaw('c.name as class_name, c.capacity, COUNT(i.id) as enrolled')
-                    ->groupBy('c.id', 'c.name', 'c.capacity')
-                    ->having('enrolled', '>', 0)
-                    ->orderByDesc('enrolled')
-                    ->limit(20)
-                    ->get()
-                    ->toArray();
-
-                $enrollment[$tenant->code] = [
-                    'tenant_name' => $tenant->name,
-                    'filieres' => $byFiliere,
-                    'classes' => $classOccupancy,
-                ];
-
-                $this->connectionManager->closeConnection($conn);
-
-            } catch (\Exception $e) {
-                Log::error("Enrollment data failed for {$tenant->code}: {$e->getMessage()}");
-                $enrollment[$tenant->code] = ['tenant_name' => $tenant->name, 'filieres' => [], 'classes' => []];
-            }
+        foreach ($group->activeTenants as $tenant) {
+            $enrollment[$tenant->code] = $perTenant[$tenant->code]
+                ?? ['tenant_name' => $tenant->name, 'filieres' => [], 'classes' => []];
         }
 
         return $enrollment;
+    }
+
+    private function computeTenantEnrollment(Tenant $tenant): array
+    {
+        return $this->withTenantConnection($tenant, function (string $conn) use ($tenant) {
+            $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
+            if (! $currentYear) {
+                return ['tenant_name' => $tenant->name, 'filieres' => [], 'classes' => []];
+            }
+
+            $byFiliere = DB::connection($conn)
+                ->table('esbtp_inscriptions as i')
+                ->join('esbtp_filieres as f', 'i.filiere_id', '=', 'f.id')
+                ->where('i.annee_universitaire_id', $currentYear->id)
+                ->where('i.status', 'active')
+                ->where('i.workflow_step', 'etudiant_cree')
+                ->selectRaw('f.name as filiere_name, COUNT(*) as count')
+                ->groupBy('f.name')
+                ->orderByDesc('count')
+                ->get()
+                ->toArray();
+
+            $classOccupancy = DB::connection($conn)
+                ->table('esbtp_classes as c')
+                ->leftJoin('esbtp_inscriptions as i', function ($join) use ($currentYear) {
+                    $join->on('c.id', '=', 'i.classe_id')
+                        ->where('i.annee_universitaire_id', '=', $currentYear->id)
+                        ->where('i.status', '=', 'active')
+                        ->where('i.workflow_step', '=', 'etudiant_cree');
+                })
+                ->selectRaw('c.name as class_name, c.capacity, COUNT(i.id) as enrolled')
+                ->groupBy('c.id', 'c.name', 'c.capacity')
+                ->having('enrolled', '>', 0)
+                ->orderByDesc('enrolled')
+                ->limit(20)
+                ->get()
+                ->toArray();
+
+            return [
+                'tenant_name' => $tenant->name,
+                'filieres' => $byFiliere,
+                'classes' => $classOccupancy,
+            ];
+        });
     }
 
     private function computeAttendanceRate(string $conn): float
@@ -568,11 +576,7 @@ class TenantAggregationService
         $aggregated = array_fill_keys(self::AGING_BUCKETS, ['count' => 0, 'amount' => 0]);
         $aggregated['by_tenant'] = [];
 
-        $perTenant = $this->aggregateAcrossTenants(
-            $group,
-            fn (Tenant $t) => $this->computeTenantOutstandingAging($t),
-            'Aging'
-        );
+        $perTenant = $this->aggregateAcrossTenants($group, 'computeTenantOutstandingAging', 'Aging');
 
         foreach ($perTenant as $tenantCode => $aging) {
             foreach (self::AGING_BUCKETS as $bucket) {
@@ -670,13 +674,14 @@ class TenantAggregationService
         ];
 
         $attritionData = [];
+        $healthDetails = $this->aggregateAcrossTenants($group, 'computeTenantHealthDetails', 'HealthDetails');
 
         foreach ($group->activeTenants as $tenant) {
             $this->collectQuotaAlerts($tenant, $health);
             $this->collectSubscriptionAlerts($tenant, $health);
 
-            try {
-                $details = $this->computeTenantHealthDetails($tenant);
+            $details = $healthDetails[$tenant->code] ?? null;
+            if ($details !== null) {
                 $health['active_reliquats_total'] += $details['active_reliquats'];
 
                 if ($details['attrition_rate'] !== null && $details['previous_year_inscriptions'] > 0) {
@@ -700,8 +705,6 @@ class TenantAggregationService
                         number_format($details['active_reliquats'], 0, ',', ' ') . ' FCFA de reliquats actifs'
                     );
                 }
-            } catch (\Exception $e) {
-                Log::error("Health details failed for {$tenant->code}: {$e->getMessage()}");
             }
         }
 
@@ -898,11 +901,7 @@ class TenantAggregationService
             'by_tenant' => [],
         ];
 
-        $perTenant = $this->aggregateAcrossTenants(
-            $group,
-            fn (Tenant $t) => $this->computeTenantTrends($t),
-            'Trends'
-        );
+        $perTenant = $this->aggregateAcrossTenants($group, 'computeTenantTrends', 'Trends');
 
         foreach ($perTenant as $tenantCode => $tenantTrends) {
             foreach (['revenue_mom', 'revenue_yoy', 'inscriptions_yoy'] as $key) {
