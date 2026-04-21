@@ -1,8 +1,64 @@
+@php use App\Support\FcfaFormatter; @endphp
 <x-filament-panels::page>
     @php
         $establishments = $this->getComparisonData();
         $enrollment = $this->getEnrollmentData();
+
+        // Hero KPIs aggregated from comparison data (zero new service call).
+        $totalInscriptions = 0;
+        $totalStaff = 0;
+        $totalRevenueCollected = 0.0;
+        $rateSum = 0.0;
+        $rateCount = 0;
+        foreach ($establishments as $d) {
+            $totalInscriptions += (int) ($d['inscriptions'] ?? 0);
+            $totalStaff += (int) ($d['staff'] ?? 0);
+            $totalRevenueCollected += (float) ($d['revenue_collected'] ?? 0);
+            if (isset($d['collection_rate'])) {
+                $rateSum += (float) $d['collection_rate'];
+                $rateCount++;
+            }
+        }
+        $avgRate = $rateCount > 0 ? $rateSum / $rateCount : 0;
+        $avgRatio = $totalStaff > 0 ? round($totalInscriptions / $totalStaff, 1) : 0;
+        $avgRateColor = $avgRate >= 70 ? 'success' : ($avgRate >= 50 ? 'warning' : 'danger');
     @endphp
+
+    <x-group-hero
+        title="Benchmarking"
+        subtitle="Comparaison des indicateurs clés entre établissements"
+        icon-path="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"
+    >
+        <x-slot:badges>
+            <span class="gp-hero-chip">{{ count($establishments) }} établissements comparés</span>
+        </x-slot:badges>
+
+        <x-slot:kpis>
+            <div class="gp-hero-kpi">
+                <span class="gp-hero-kpi-label">Étudiants total</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $totalInscriptions) }}</span>
+                <span class="gp-hero-kpi-meta">cumul du groupe</span>
+            </div>
+
+            <div class="gp-hero-kpi">
+                <span class="gp-hero-kpi-label">Personnel total</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $totalStaff) }}</span>
+                <span class="gp-hero-kpi-meta">ratio {{ $avgRatio }}:1</span>
+            </div>
+
+            <div class="gp-hero-kpi" data-tone="{{ $avgRateColor }}">
+                <span class="gp-hero-kpi-label">Taux moyen recouvrement</span>
+                <span class="gp-hero-kpi-value">{{ number_format($avgRate, 1, ',', ' ') }}&nbsp;%</span>
+                <span class="gp-hero-kpi-meta">moyenne simple</span>
+            </div>
+
+            <div class="gp-hero-kpi" data-tone="success">
+                <span class="gp-hero-kpi-label">Encaissés cumulés</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact($totalRevenueCollected) }}</span>
+                <span class="gp-hero-kpi-meta">FCFA cross-établissements</span>
+            </div>
+        </x-slot:kpis>
+    </x-group-hero>
 
     {{-- Scorecard --}}
     <div class="gp-scorecard-wrap">
@@ -28,7 +84,7 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        <td class="cell-bold">{{ number_format($data['inscriptions'] ?? 0, 0, ',', ' ') }}</td>
+                        <td class="cell-bold">{{ FcfaFormatter::full((float) ($data['inscriptions'] ?? 0)) }}</td>
                     @endforeach
                 </tr>
                 <tr>
@@ -74,7 +130,7 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        <td class="cell-bold" style="color: var(--gp-success)">{{ number_format(($data['revenue_collected'] ?? 0) / 1000000, 1, ',', ' ') }}M</td>
+                        <td class="cell-bold" style="color: var(--gp-success)">{{ FcfaFormatter::millions((float) ($data['revenue_collected'] ?? 0)) }} M</td>
                     @endforeach
                 </tr>
                 <tr>

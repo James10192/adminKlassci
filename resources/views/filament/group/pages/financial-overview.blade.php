@@ -1,51 +1,50 @@
+@php use App\Support\FcfaFormatter; @endphp
 <x-filament-panels::page>
     @php
         $financials = $this->getFinancials();
         $totals = $this->getTotals();
+        $rate = (float) ($totals['rate'] ?? 0);
+        $rateColor = $rate >= 70 ? 'success' : ($rate >= 50 ? 'warning' : 'danger');
+        $outstanding = (float) ($totals['outstanding'] ?? 0);
+        $surplus = (float) ($totals['surplus'] ?? 0);
     @endphp
 
-    {{-- Summary cards --}}
-    <div class="gp-summary-grid">
-        <div class="gp-summary-card blue">
-            <div class="gp-summary-label blue">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" /></svg>
-                Revenus attendus
-            </div>
-            <div class="gp-summary-amount">{{ number_format($totals['expected'], 0, ',', ' ') }}</div>
-            <div class="gp-summary-unit">FCFA</div>
-        </div>
+    <x-group-hero
+        title="Vue financière"
+        subtitle="Consolidation des revenus et encaissements du groupe"
+        icon-path="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
+    >
+        <x-slot:badges>
+            <span class="gp-hero-chip">Année universitaire en cours</span>
+            <span class="gp-hero-chip">Montants en FCFA</span>
+        </x-slot:badges>
 
-        <div class="gp-summary-card green">
-            <div class="gp-summary-label green">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                Encaissés
+        <x-slot:kpis>
+            <div class="gp-hero-kpi">
+                <span class="gp-hero-kpi-label">Revenus attendus</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact((float) ($totals['expected'] ?? 0)) }}</span>
+                <span class="gp-hero-kpi-meta">cross-établissements</span>
             </div>
-            <div class="gp-summary-amount green">{{ number_format($totals['collected'], 0, ',', ' ') }}</div>
-            <div class="gp-summary-unit">FCFA</div>
-        </div>
 
-        <div class="gp-summary-card red">
-            <div class="gp-summary-label red">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
-                {{ $totals['outstanding'] > 0 ? 'Impayés' : 'Surplus' }}
+            <div class="gp-hero-kpi" data-tone="success">
+                <span class="gp-hero-kpi-label">Encaissés</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact((float) ($totals['collected'] ?? 0)) }}</span>
+                <span class="gp-hero-kpi-meta">paiements validés</span>
             </div>
-            <div class="gp-summary-amount {{ $totals['outstanding'] > 0 ? 'red' : 'green' }}">
-                {{ number_format(max($totals['outstanding'], $totals['surplus'] ?? 0), 0, ',', ' ') }}
-            </div>
-            <div class="gp-summary-unit">FCFA</div>
-        </div>
 
-        <div class="gp-summary-card blue">
-            <div class="gp-summary-label blue">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
-                Taux de recouvrement
+            <div class="gp-hero-kpi" data-tone="{{ $outstanding > 0 ? 'danger' : 'success' }}">
+                <span class="gp-hero-kpi-label">{{ $outstanding > 0 ? 'Impayés' : 'Surplus' }}</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact(max($outstanding, $surplus)) }}</span>
+                <span class="gp-hero-kpi-meta">{{ $outstanding > 0 ? 'à recouvrer' : 'trop-perçu' }}</span>
             </div>
-            <div class="gp-summary-amount">{{ $totals['rate'] }}%</div>
-            <div class="gp-progress-track" style="margin-top: 0.5rem;">
-                <div class="gp-progress-bar {{ $totals['rate'] >= 70 ? 'success' : ($totals['rate'] >= 50 ? 'warning' : 'danger') }}" style="width: {{ min($totals['rate'], 100) }}%"></div>
+
+            <div class="gp-hero-kpi" data-tone="{{ $rateColor }}">
+                <span class="gp-hero-kpi-label">Taux de recouvrement</span>
+                <span class="gp-hero-kpi-value">{{ number_format($rate, 1, ',', ' ') }}&nbsp;%</span>
+                <span class="gp-hero-kpi-meta">{{ $rate >= 70 ? 'sain' : ($rate >= 50 ? 'à surveiller' : 'critique') }}</span>
             </div>
-        </div>
-    </div>
+        </x-slot:kpis>
+    </x-group-hero>
 
     {{-- Comparison table --}}
     <div class="gp-fin-table-wrap">
@@ -82,9 +81,9 @@
                                 {{ $data['tenant_name'] }}
                             </div>
                         </td>
-                        <td>{{ number_format($data['revenue_expected'], 0, ',', ' ') }}</td>
-                        <td class="cell-green">{{ number_format($data['revenue_collected'], 0, ',', ' ') }}</td>
-                        <td class="{{ ($data['outstanding'] ?? 0) > 0 ? 'cell-red' : '' }}">{{ number_format($data['outstanding'] ?? 0, 0, ',', ' ') }}</td>
+                        <td>{{ FcfaFormatter::full((float) $data['revenue_expected']) }}</td>
+                        <td class="cell-green">{{ FcfaFormatter::full((float) $data['revenue_collected']) }}</td>
+                        <td class="{{ ($data['outstanding'] ?? 0) > 0 ? 'cell-red' : '' }}">{{ FcfaFormatter::full((float) ($data['outstanding'] ?? 0)) }}</td>
                         <td style="text-align:center"><span class="gp-rate-badge {{ $rateClass }}">{{ $data['collection_rate'] }}%</span></td>
                         <td style="text-align:center">
                             <div class="gp-progress-track">
@@ -104,9 +103,9 @@
                             TOTAL GROUPE
                         </div>
                     </td>
-                    <td>{{ number_format($totals['expected'], 0, ',', ' ') }}</td>
-                    <td class="cell-green">{{ number_format($totals['collected'], 0, ',', ' ') }}</td>
-                    <td>{{ number_format($totals['outstanding'], 0, ',', ' ') }}</td>
+                    <td>{{ FcfaFormatter::full((float) $totals['expected']) }}</td>
+                    <td class="cell-green">{{ FcfaFormatter::full((float) $totals['collected']) }}</td>
+                    <td>{{ FcfaFormatter::full((float) $totals['outstanding']) }}</td>
                     <td style="text-align:center"><span class="gp-rate-badge primary">{{ $totals['rate'] }}%</span></td>
                     <td style="text-align:center">
                         <div class="gp-progress-track">
