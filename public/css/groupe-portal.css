@@ -146,6 +146,28 @@
     gap: 0.5rem;
     flex-wrap: wrap;
 }
+.gp-hero-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 1.1rem;
+    background: #fff;
+    color: var(--gp-primary);
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform .15s ease, box-shadow .15s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.gp-hero-action:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.gp-hero-action svg {
+    width: 1rem;
+    height: 1rem;
+}
 .gp-hero-kpis {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
