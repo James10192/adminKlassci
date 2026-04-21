@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Resources\EstablishmentResource\Pages;
 
+use App\Filament\Group\Concerns\HasCustomHero;
 use App\Filament\Group\Resources\EstablishmentResource;
 use App\Services\TenantAggregationService;
 use Filament\Resources\Pages\ListRecords;
@@ -9,6 +10,8 @@ use Illuminate\Contracts\View\View;
 
 class ListEstablishments extends ListRecords
 {
+    use HasCustomHero;
+
     protected static string $resource = EstablishmentResource::class;
 
     protected static ?string $title = 'Mes Établissements';
@@ -18,11 +21,6 @@ class ListEstablishments extends ListRecords
         return view('filament.group.partials.establishments-hero', [
             'context' => $this->buildHeroContext(),
         ]);
-    }
-
-    public function getHeading(): string
-    {
-        return '';
     }
 
     /**

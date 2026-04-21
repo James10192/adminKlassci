@@ -1,4 +1,4 @@
-@php use App\Support\FcfaFormatter; @endphp
+@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
 
 @php
     /** @var \App\Models\Tenant $tenant */
@@ -6,7 +6,6 @@
     $students = (int) ($kpis['students'] ?? $kpis['inscriptions'] ?? 0);
     $staff = (int) ($kpis['staff'] ?? 0);
     $rate = (float) ($kpis['collection_rate'] ?? 0);
-    $rateColor = $rate >= 70 ? 'success' : ($rate >= 50 ? 'warning' : 'danger');
     $academicYear = $kpis['academic_year'] ?? 'N/A';
 
     $statusLabel = match ($tenant->status ?? '') {
@@ -52,20 +51,20 @@
     <x-slot:kpis>
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Étudiants inscrits</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $students) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($students) }}</span>
             <span class="gp-hero-kpi-meta">année en cours</span>
         </div>
 
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Personnel</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $staff) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($staff) }}</span>
             <span class="gp-hero-kpi-meta">membres actifs</span>
         </div>
 
-        <div class="gp-hero-kpi" data-tone="{{ $rateColor }}">
+        <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($rate) }}">
             <span class="gp-hero-kpi-label">Recouvrement</span>
             <span class="gp-hero-kpi-value">{{ number_format($rate, 1, ',', ' ') }}&nbsp;%</span>
-            <span class="gp-hero-kpi-meta">{{ $rate >= 70 ? 'sain' : ($rate >= 50 ? 'à surveiller' : 'critique') }}</span>
+            <span class="gp-hero-kpi-meta">{{ RateHealth::label($rate) }}</span>
         </div>
 
         <div class="gp-hero-kpi">

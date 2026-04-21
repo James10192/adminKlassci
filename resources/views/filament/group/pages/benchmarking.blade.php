@@ -1,4 +1,4 @@
-@php use App\Support\FcfaFormatter; @endphp
+@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
 <x-filament-panels::page>
     @php
         $establishments = $this->getComparisonData();
@@ -21,7 +21,6 @@
         }
         $avgRate = $rateCount > 0 ? $rateSum / $rateCount : 0;
         $avgRatio = $totalStaff > 0 ? round($totalInscriptions / $totalStaff, 1) : 0;
-        $avgRateColor = $avgRate >= 70 ? 'success' : ($avgRate >= 50 ? 'warning' : 'danger');
     @endphp
 
     <x-group-hero
@@ -36,20 +35,20 @@
         <x-slot:kpis>
             <div class="gp-hero-kpi">
                 <span class="gp-hero-kpi-label">Étudiants total</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $totalInscriptions) }}</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($totalInscriptions) }}</span>
                 <span class="gp-hero-kpi-meta">cumul du groupe</span>
             </div>
 
             <div class="gp-hero-kpi">
                 <span class="gp-hero-kpi-label">Personnel total</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $totalStaff) }}</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($totalStaff) }}</span>
                 <span class="gp-hero-kpi-meta">ratio {{ $avgRatio }}:1</span>
             </div>
 
-            <div class="gp-hero-kpi" data-tone="{{ $avgRateColor }}">
+            <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($avgRate) }}">
                 <span class="gp-hero-kpi-label">Taux moyen recouvrement</span>
                 <span class="gp-hero-kpi-value">{{ number_format($avgRate, 1, ',', ' ') }}&nbsp;%</span>
-                <span class="gp-hero-kpi-meta">moyenne simple</span>
+                <span class="gp-hero-kpi-meta">{{ RateHealth::label($avgRate) }}</span>
             </div>
 
             <div class="gp-hero-kpi" data-tone="success">

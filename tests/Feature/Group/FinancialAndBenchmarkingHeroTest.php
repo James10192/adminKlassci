@@ -28,14 +28,13 @@ it('benchmarking view source uses FcfaFormatter and x-group-hero', function () {
     expect($source)->toContain('FcfaFormatter::millions');
 });
 
-it('financial-overview hero KPI has tone logic for collection rate', function () {
+it('financial-overview hero KPI uses RateHealth helper for tone mapping', function () {
     $source = file_get_contents(
         resource_path('views/filament/group/pages/financial-overview.blade.php')
     );
 
-    // The view must define a rate→tone mapping
-    expect($source)->toMatch('/\$rate\s*>=\s*70/');
-    expect($source)->toMatch('/\$rate\s*>=\s*50/');
+    expect($source)->toContain('RateHealth::tone($rate)');
+    expect($source)->toContain('RateHealth::label($rate)');
 });
 
 it('benchmarking hero aggregates counts from establishments array', function () {

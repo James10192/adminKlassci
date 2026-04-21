@@ -1,10 +1,9 @@
-@php use App\Support\FcfaFormatter; @endphp
+@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
 <x-filament-panels::page>
     @php
         $financials = $this->getFinancials();
         $totals = $this->getTotals();
         $rate = (float) ($totals['rate'] ?? 0);
-        $rateColor = $rate >= 70 ? 'success' : ($rate >= 50 ? 'warning' : 'danger');
         $outstanding = (float) ($totals['outstanding'] ?? 0);
         $surplus = (float) ($totals['surplus'] ?? 0);
     @endphp
@@ -38,10 +37,10 @@
                 <span class="gp-hero-kpi-meta">{{ $outstanding > 0 ? 'à recouvrer' : 'trop-perçu' }}</span>
             </div>
 
-            <div class="gp-hero-kpi" data-tone="{{ $rateColor }}">
+            <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($rate) }}">
                 <span class="gp-hero-kpi-label">Taux de recouvrement</span>
                 <span class="gp-hero-kpi-value">{{ number_format($rate, 1, ',', ' ') }}&nbsp;%</span>
-                <span class="gp-hero-kpi-meta">{{ $rate >= 70 ? 'sain' : ($rate >= 50 ? 'à surveiller' : 'critique') }}</span>
+                <span class="gp-hero-kpi-meta">{{ RateHealth::label($rate) }}</span>
             </div>
         </x-slot:kpis>
     </x-group-hero>

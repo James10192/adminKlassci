@@ -2,11 +2,14 @@
 
 namespace App\Filament\Group\Pages;
 
+use App\Filament\Group\Concerns\HasCustomHero;
 use App\Services\TenantAggregationService;
 use Filament\Pages\Page;
 
 class FinancialOverview extends Page
 {
+    use HasCustomHero;
+
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 
     protected static ?string $navigationLabel = 'Vue Financière';
@@ -18,17 +21,6 @@ class FinancialOverview extends Page
     protected static ?int $navigationSort = 3;
 
     protected static string $view = 'filament.group.pages.financial-overview';
-
-    /** Hero custom affiche le titre — Filament ne doit pas le répéter. */
-    public function getHeading(): string
-    {
-        return '';
-    }
-
-    public function getSubheading(): ?string
-    {
-        return null;
-    }
 
     public function getFinancials(): array
     {
