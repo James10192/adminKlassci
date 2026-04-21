@@ -3,9 +3,9 @@
 use App\View\Components\GroupHero;
 
 /**
- * PR6a — Dashboard hero structural tests. Behavior under a real authenticated
- * group member is covered by visual check / Playwright; here we pin the Blade
- * component contract and the header wiring on GroupDashboard.
+ * Structural tests pinning the Blade component contract + the header wiring
+ * on GroupDashboard. Behavior under a real authenticated group member is
+ * covered by visual check / Playwright.
  */
 
 it('GroupHero component has required props', function () {
@@ -42,7 +42,7 @@ it('GroupDashboard provides hero context with expected keys', function () {
     expect($reflection->getMethod('getHeroContext')->isPrivate())->toBeTrue();
 });
 
-it('GroupWelcomeWidget has been retired (PR6a)', function () {
+it('GroupWelcomeWidget has been retired — hero lives at the page level', function () {
     // Check the file, not the class — composer autoload caches can lag in test envs.
     expect(file_exists(app_path('Filament/Group/Widgets/GroupWelcomeWidget.php')))
         ->toBeFalse('GroupWelcomeWidget.php should be removed — hero lives at the page level now');
@@ -58,8 +58,49 @@ it('GroupDashboard does not register GroupWelcomeWidget', function () {
     expect($source)->not->toContain('GroupWelcomeWidget');
 });
 
-it('dashboard-hero partial renders without error given a valid context shape', function () {
-    $context = [
+it('dashboard-hero partial renders the happy path', function () {
+    $context = makeHeroContext();
+
+    $html = view('filament.group.partials.dashboard-hero', compact('context'))->render();
+
+    expect($html)->toContain('Test Group');
+    expect($html)->toContain('Jane Doe');
+    expect($html)->toContain('Fondateur');
+    expect($html)->toContain('1 234');
+    expect($html)->toContain('72,5');
+    expect($html)->toContain('Portail Groupe');
+});
+
+it('hides academic-year chip when no years are available', function () {
+    $context = makeHeroContext(['academic_years' => []]);
+
+    $html = view('filament.group.partials.dashboard-hero', compact('context'))->render();
+
+    expect($html)->not->toContain('2025-2026');
+});
+
+it('applies danger tone when collection rate is below 50%', function () {
+    $context = makeHeroContext(['kpis' => ['collection_rate' => 12.0] + makeHeroContext()['kpis']]);
+
+    $html = view('filament.group.partials.dashboard-hero', compact('context'))->render();
+
+    expect($html)->toContain('data-tone="danger"');
+});
+
+it('uses singular "établissement" when count is 1', function () {
+    $context = makeHeroContext(['establishment_count' => 1]);
+
+    $html = view('filament.group.partials.dashboard-hero', compact('context'))->render();
+
+    expect($html)->toContain('1 établissement');
+    expect($html)->not->toContain('1 établissements');
+});
+
+function makeHeroContext(array $overrides = []): array
+{
+    // array_replace (not recursive) so overriding `academic_years` with an
+    // empty list actually empties it instead of merging.
+    return array_replace([
         'group_name' => 'Test Group',
         'user_name' => 'Jane Doe',
         'role' => 'Fondateur',
@@ -73,14 +114,5 @@ it('dashboard-hero partial renders without error given a valid context shape', f
             'total_staff' => 45,
             'avg_attendance_rate' => 88.3,
         ],
-    ];
-
-    $html = view('filament.group.partials.dashboard-hero', compact('context'))->render();
-
-    expect($html)->toContain('Test Group');
-    expect($html)->toContain('Jane Doe');
-    expect($html)->toContain('Fondateur');
-    expect($html)->toContain('1 234');   // thousand-sep
-    expect($html)->toContain('72,5');     // FR decimal
-    expect($html)->toContain('Portail Groupe');
-});
+    ], $overrides);
+}

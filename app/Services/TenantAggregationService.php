@@ -62,6 +62,13 @@ class TenantAggregationService
         return self::CACHE_KEY_PREFIX . "_{$groupId}_{$suffix}_{$period->cacheKey()}";
     }
 
+    public function hasFreshGroupKpis(Group $group, ?PeriodInterface $period = null): bool
+    {
+        $period ??= PeriodFactory::default();
+
+        return Cache::has($this->cacheKey($group->id, 'kpis', $period));
+    }
+
     public function getGroupKpis(Group $group, ?PeriodInterface $period = null): array
     {
         $period ??= PeriodFactory::default();

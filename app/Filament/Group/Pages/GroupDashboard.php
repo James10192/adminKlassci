@@ -48,11 +48,27 @@ class GroupDashboard extends Dashboard
             'group_name' => $group->name ?? 'Mon Groupe',
             'user_name' => $user->name ?? '',
             'role' => self::roleLabel($user->role ?? ''),
-            'establishment_count' => $group?->tenants()->active()->count() ?? 0,
+            'establishment_count' => self::cachedTenantCount($group),
             'academic_years' => self::extractAcademicYears($kpis),
-            'last_sync' => self::lastSyncLabel($user?->group_id),
+            'last_sync' => $group && $service->hasFreshGroupKpis($group)
+                ? 'il y a moins de 15 min'
+                : 'non synchronisé',
             'kpis' => $kpis,
         ];
+    }
+
+    private static function cachedTenantCount(?\App\Models\Group $group): int
+    {
+        if ($group === null) {
+            return 0;
+        }
+
+        // 2 min TTL — avoids a COUNT() query on every Filament render / Livewire poll.
+        return (int) Cache::remember(
+            "group_{$group->id}_tenant_count",
+            120,
+            fn () => $group->tenants()->active()->count()
+        );
     }
 
     private static function roleLabel(string $role): string
@@ -78,17 +94,6 @@ class GroupDashboard extends Dashboard
         return $years;
     }
 
-    private static function lastSyncLabel(?int $groupId): string
-    {
-        if ($groupId === null) {
-            return 'non synchronisé';
-        }
-
-        return Cache::has("group_{$groupId}_kpis")
-            ? 'il y a moins de 15 min'
-            : 'non synchronisé';
-    }
-
     protected function getHeaderActions(): array
     {
         return [
@@ -101,6 +106,7 @@ class GroupDashboard extends Dashboard
                     $service = app(TenantAggregationService::class);
                     $service->refreshGroupCache($group);
                     EstablishmentResource::forgetAlertsCache($group->id);
+                    Cache::forget("group_{$group->id}_tenant_count");
                     $service->getGroupKpis($group);
 
                     Notification::make()
