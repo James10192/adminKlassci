@@ -172,7 +172,7 @@ Doc complète + exemples subscribers : [GROUP_PORTAL_EVENT_CONTRACT.md](GROUP_PO
 
 ### Non-wiring
 
-Les 7 widgets (`KpiOverviewWidget`, `GroupAlertsWidget`, `GroupAgingWidget`, `EstablishmentCardsWidget`, `GroupWelcomeWidget`, `RevenueComparisonWidget`, `EnrollmentWidget`) ne réagissent pas encore à l'event en PR4c. Si un observateur externe souscrit avant PR4d, il fonctionnera immédiatement (contract stable).
+Les 6 widgets dashboard (`KpiOverviewWidget`, `GroupAlertsWidget`, `GroupAgingWidget`, `EstablishmentCardsWidget`, `RevenueComparisonWidget`, `EnrollmentWidget`) ne réagissent pas encore à l'event en PR4c. Si un observateur externe souscrit avant PR4d, il fonctionnera immédiatement (contract stable). Le hero de bienvenue est désormais rendu au niveau page via `GroupDashboard::getHeader()` depuis PR6a — plus de widget dédié.
 
 ### Migration widgets (PR4d prévu)
 

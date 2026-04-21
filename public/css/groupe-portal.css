@@ -15,103 +15,141 @@
     --gp-bg-subtle: #f8fafc;
 }
 
-/* ─── Welcome Hero Banner ─── */
+/* ─── Premium Hero (PR6a) — reusable via <x-group-hero> ─── */
 .gp-hero {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(135deg, var(--gp-primary) 0%, var(--gp-primary-light) 100%);
-    border-radius: 1rem;
-    padding: 1.75rem 2rem;
+    background: linear-gradient(135deg, #0a3d8f 0%, var(--gp-primary) 40%, #3b7ddb 100%);
+    border-radius: 1.125rem;
+    padding: 2rem 2.25rem 1.5rem;
     color: #fff;
     box-shadow: 0 4px 24px rgba(4, 83, 203, 0.18);
+    margin-bottom: 1.25rem;
 }
-.gp-hero::before {
-    content: '';
-    position: absolute;
-    top: -40px;
-    right: -20px;
-    width: 180px;
-    height: 180px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 50%;
-}
-.gp-hero::after {
-    content: '';
-    position: absolute;
-    bottom: -30px;
-    right: 80px;
-    width: 100px;
-    height: 100px;
-    background: rgba(255,255,255,0.06);
-    border-radius: 50%;
-}
-.gp-hero-inner {
-    position: relative;
-    z-index: 1;
+.gp-hero-top {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1.25rem;
 }
 .gp-hero-left {
     display: flex;
-    align-items: center;
-    gap: 1.25rem;
+    align-items: flex-start;
+    gap: 1rem;
+    min-width: 0;
 }
 .gp-hero-icon {
-    width: 3.5rem;
-    height: 3.5rem;
-    background: rgba(255,255,255,0.18);
+    width: 3.25rem;
+    height: 3.25rem;
     border-radius: 0.875rem;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(4px);
-}
-.gp-hero-icon svg {
-    width: 2rem;
-    height: 2rem;
+    flex-shrink: 0;
     color: #fff;
 }
+.gp-hero-icon svg {
+    width: 1.65rem;
+    height: 1.65rem;
+}
+.gp-hero-text { min-width: 0; }
 .gp-hero-title {
     font-size: 1.5rem;
     font-weight: 700;
     letter-spacing: -0.01em;
-    margin: 0;
     color: #fff;
+    margin: 0;
 }
 .gp-hero-subtitle {
-    font-size: 0.875rem;
-    color: rgba(255,255,255,0.8);
-    margin-top: 0.25rem;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.75);
+    margin: 0.2rem 0 0;
 }
-.gp-hero-subtitle strong {
-    color: #fff;
-    font-weight: 600;
-}
-.gp-hero-right {
+.gp-hero-badges {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
 }
-.gp-hero-meta {
-    text-align: right;
-    font-size: 0.8rem;
-    color: rgba(255,255,255,0.7);
-    line-height: 1.6;
+.gp-hero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.85);
 }
-.gp-hero-meta svg {
-    width: 0.875rem;
-    height: 0.875rem;
-    display: inline;
-    vertical-align: -2px;
-    margin-right: 4px;
+.gp-hero-chip svg { width: 0.9rem; height: 0.9rem; }
+.gp-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.85rem;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #fff;
 }
-.gp-hero-divider {
-    width: 1px;
-    height: 2.5rem;
-    background: rgba(255,255,255,0.2);
+.gp-hero-badge-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: #34d399;
+    animation: gp-pulse 2s ease-in-out infinite;
 }
+.gp-hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.gp-hero-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+.gp-hero-kpi {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 0.75rem;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    position: relative;
+}
+.gp-hero-kpi[data-tone="warning"] { border-top: 3px solid #fbbf24; padding-top: 0.7rem; }
+.gp-hero-kpi[data-tone="danger"] { border-top: 3px solid #f87171; padding-top: 0.7rem; }
+.gp-hero-kpi[data-tone="success"] { border-top: 3px solid #4ade80; padding-top: 0.7rem; }
+.gp-hero-kpi-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+}
+.gp-hero-kpi-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+}
+.gp-hero-kpi-meta {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.65);
+    margin-top: 0.1rem;
+}
+/* Keep .gp-badge*/.gp-badge-dot from PR4b (used by period selector) below */
 .gp-badge {
     display: inline-flex;
     align-items: center;
@@ -648,10 +686,19 @@
     --gp-bg-subtle: #0f172a;
 }
 
-/* ─── Dark: Hero Banner ─── */
+/* ─── Dark: Premium Hero (PR6a) ─── */
 .dark .gp-hero {
-    background: linear-gradient(135deg, #1e3a5f 0%, #2d4a7a 100%);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    background: linear-gradient(135deg, #0a1f3d 0%, #0f3a7d 50%, #1e4a9e 100%);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+.dark .gp-hero-icon,
+.dark .gp-hero-kpi {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+.dark .gp-hero-chip {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.09);
 }
 
 /* ─── Dark: Establishment Cards ─── */
@@ -1152,9 +1199,12 @@
 
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
-    .gp-hero-right { display: none; }
-    .gp-hero { padding: 1.25rem; }
+    .gp-hero { padding: 1.5rem 1.25rem 1.25rem; }
     .gp-hero-title { font-size: 1.25rem; }
+    .gp-hero-kpis { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; margin-top: 1rem; }
+    .gp-hero-kpi { padding: 0.7rem; }
+    .gp-hero-kpi-value { font-size: 1.2rem; }
+    .gp-hero-actions { width: 100%; justify-content: flex-start; }
     .gp-cards-grid { grid-template-columns: 1fr; }
     .gp-summary-grid { grid-template-columns: 1fr 1fr; }
     .gp-filiere-grid { grid-template-columns: 1fr; }
