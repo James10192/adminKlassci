@@ -26,6 +26,12 @@ class GroupDashboard extends Dashboard
         ]);
     }
 
+    /** Hero custom affiche le titre — Filament ne doit pas le répéter. */
+    public function getHeading(): string
+    {
+        return '';
+    }
+
     /**
      * @return array{
      *     group_name: string,

@@ -19,6 +19,17 @@ class FinancialOverview extends Page
 
     protected static string $view = 'filament.group.pages.financial-overview';
 
+    /** Hero custom affiche le titre — Filament ne doit pas le répéter. */
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    public function getSubheading(): ?string
+    {
+        return null;
+    }
+
     public function getFinancials(): array
     {
         $group = auth('group')->user()->group;

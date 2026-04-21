@@ -13,11 +13,22 @@ class Benchmarking extends Page
 
     protected static ?string $navigationGroup = 'Analytiques';
 
-    protected static ?string $title = 'Comparaison des établissements';
+    protected static ?string $title = 'Benchmarking';
 
     protected static ?int $navigationSort = 4;
 
     protected static string $view = 'filament.group.pages.benchmarking';
+
+    /** Hero custom affiche le titre — Filament ne doit pas le répéter. */
+    public function getHeading(): string
+    {
+        return '';
+    }
+
+    public function getSubheading(): ?string
+    {
+        return null;
+    }
 
     public function getComparisonData(): array
     {
