@@ -403,65 +403,7 @@
 }
 
 /* ─── Financial Overview ─── */
-.gp-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-.gp-summary-card {
-    background: #fff;
-    border-radius: 0.875rem;
-    border: 1px solid var(--gp-border);
-    padding: 1.25rem;
-    position: relative;
-    overflow: hidden;
-}
-.gp-summary-card::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 5rem;
-    height: 5rem;
-    border-radius: 0 0 0 100%;
-    opacity: 0.06;
-}
-.gp-summary-card.blue::after { background: var(--gp-primary); }
-.gp-summary-card.green { border-color: #a7f3d0; }
-.gp-summary-card.green::after { background: var(--gp-success); }
-.gp-summary-card.red::after { background: var(--gp-danger); }
-.gp-summary-label {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--gp-text-secondary);
-    margin-bottom: 0.5rem;
-}
-.gp-summary-label svg {
-    width: 1rem;
-    height: 1rem;
-}
-.gp-summary-label.green { color: var(--gp-success); }
-.gp-summary-label.green svg { color: var(--gp-success); }
-.gp-summary-label.red svg { color: var(--gp-danger); }
-.gp-summary-label.blue svg { color: var(--gp-primary); }
-.gp-summary-amount {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--gp-text);
-}
-.gp-summary-amount.green { color: var(--gp-success); }
-.gp-summary-amount.red { color: var(--gp-danger); }
-.gp-summary-unit {
-    font-size: 0.75rem;
-    color: #94a3b8;
-    margin-top: 0.125rem;
-}
+/* (Summary cards removed — hero KPIs replace them since PR6b) */
 
 /* Financial table */
 .gp-fin-table-wrap {
@@ -796,24 +738,6 @@
     color: #94a3b8;
 }
 .dark .gp-empty-text {
-    color: #64748b;
-}
-
-/* ─── Dark: Summary Cards ─── */
-.dark .gp-summary-card {
-    background: #1e293b;
-    border-color: #334155;
-}
-.dark .gp-summary-card.green {
-    border-color: rgba(52, 211, 153, 0.3);
-}
-.dark .gp-summary-label {
-    color: #94a3b8;
-}
-.dark .gp-summary-amount {
-    color: #f1f5f9;
-}
-.dark .gp-summary-unit {
     color: #64748b;
 }
 
@@ -1206,7 +1130,6 @@
     .gp-hero-kpi-value { font-size: 1.2rem; }
     .gp-hero-actions { width: 100%; justify-content: flex-start; }
     .gp-cards-grid { grid-template-columns: 1fr; }
-    .gp-summary-grid { grid-template-columns: 1fr 1fr; }
     .gp-filiere-grid { grid-template-columns: 1fr; }
     .gp-alerts-header { flex-direction: column; align-items: stretch; }
     .gp-alert-type { display: none; }
