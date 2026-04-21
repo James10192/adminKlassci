@@ -10,17 +10,13 @@
      *     kpis: array<string,mixed>,
      * } $context
      */
+    use App\Support\FcfaFormatter;
+
     $k = $context['kpis'];
     $totalStudents = (int) ($k['total_students'] ?? 0);
     $collectionRate = (float) ($k['collection_rate'] ?? 0);
     $revenueCollected = (float) ($k['total_revenue_collected'] ?? 0);
     $establishmentCount = $context['establishment_count'];
-
-    $formatNumber = fn (float $n): string => number_format($n, 0, ',', ' ');
-    $formatFcfa = fn (float $n): string => $n >= 1_000_000
-        ? number_format($n / 1_000_000, 1, ',', ' ') . ' M'
-        : number_format($n / 1_000, 0, ',', ' ') . ' k';
-
     $recoveryColor = $collectionRate >= 70 ? 'success' : ($collectionRate >= 50 ? 'warning' : 'danger');
 @endphp
 
@@ -49,19 +45,19 @@
     <x-slot:kpis>
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Étudiants inscrits</span>
-            <span class="gp-hero-kpi-value">{{ $formatNumber($totalStudents) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full($totalStudents) }}</span>
             <span class="gp-hero-kpi-meta">{{ $establishmentCount }} {{ \Illuminate\Support\Str::plural('établissement', $establishmentCount) }}</span>
         </div>
 
         <div class="gp-hero-kpi" data-tone="{{ $recoveryColor }}">
             <span class="gp-hero-kpi-label">Recouvrement</span>
             <span class="gp-hero-kpi-value">{{ number_format($collectionRate, 1, ',', ' ') }}&nbsp;%</span>
-            <span class="gp-hero-kpi-meta">{{ $formatFcfa($revenueCollected) }} FCFA encaissés</span>
+            <span class="gp-hero-kpi-meta">{{ FcfaFormatter::compact($revenueCollected) }} FCFA encaissés</span>
         </div>
 
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Personnel</span>
-            <span class="gp-hero-kpi-value">{{ $formatNumber((float) ($k['total_staff'] ?? 0)) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) ($k['total_staff'] ?? 0)) }}</span>
             <span class="gp-hero-kpi-meta">membres cross-groupe</span>
         </div>
 
