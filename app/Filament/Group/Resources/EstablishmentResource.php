@@ -28,14 +28,22 @@ class EstablishmentResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
+    /**
+     * Must stay <= TenantAggregationService::CACHE_TTL_HEALTH (300s) so the badge
+     * never shows data staler than the service-level cache that backs it.
+     */
     private const ALERTS_CACHE_TTL = 300;
 
     private const ALERTS_CACHE_PREFIX = 'group:alerts_v1:';
 
+    /** @var array<int, list<array<string,mixed>>> per-request memo on top of Cache::remember — kills double Cache driver hit from getNavigationBadge() + getNavigationBadgeColor() */
+    private static array $alertsRequestMemo = [];
+
     /**
-     * Badge alerts read from Cache::remember (5min TTL). Filament calls this on
-     * every render + Livewire poll + 60s notification poll — direct service
-     * hit was an N+1 perf bomb (see PR5 issue #20).
+     * Filament calls this twice per sidebar render (badge count + color) plus
+     * once per Livewire poll and per 60s notification poll. Direct service hits
+     * are an N+1 bomb — we layer a 5-min cross-request cache AND a per-request
+     * memo so a single page render = at most 1 cache driver round-trip.
      *
      * @return list<array<string,mixed>>
      */
@@ -46,7 +54,7 @@ class EstablishmentResource extends Resource
             return [];
         }
 
-        return Cache::remember(
+        return self::$alertsRequestMemo[$group->id] ??= Cache::remember(
             self::ALERTS_CACHE_PREFIX . $group->id,
             self::ALERTS_CACHE_TTL,
             static function () use ($group): array {
@@ -63,6 +71,7 @@ class EstablishmentResource extends Resource
     public static function forgetAlertsCache(int $groupId): void
     {
         Cache::forget(self::ALERTS_CACHE_PREFIX . $groupId);
+        unset(self::$alertsRequestMemo[$groupId]);
     }
 
     public static function getNavigationBadge(): ?string
