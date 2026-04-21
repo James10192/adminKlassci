@@ -42,4 +42,33 @@ return [
     |
     */
     'widgets_period_aware' => env('GROUP_PORTAL_WIDGETS_PERIOD_AWARE', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Subscription alerts banner (PR7a)
+    |--------------------------------------------------------------------------
+    |
+    | Permanent banner at the top of every /groupe page, mirroring the
+    | KLASSCIv2 PaywallMiddleware pattern: surfaces the worst subscription
+    | expiry tier across the group's tenants so the founder sees a single
+    | actionable summary instead of digging into GroupAlertsWidget.
+    |
+    |   GROUP_PORTAL_ALERTS_BANNER_ENABLED=false   # kill switch
+    |
+    | Tier thresholds are expressed in days remaining on
+    | `tenants.subscription_end_date`:
+    |
+    |   expired  : days < 0
+    |   urgent   : days <= subscription_urgent_days    (maps to AlertSeverity::Critical)
+    |   warning  : days <= subscription_warning_days   (maps to AlertSeverity::Warning)
+    |   info     : days <= subscription_info_days      (maps to AlertSeverity::Info)
+    |   null     : days > subscription_info_days OR end_date is null (free tier)
+    |
+    | Free-tier tenants (subscription_end_date = null) are always ignored —
+    | they have no expiry to worry about.
+    */
+    'alerts_banner_enabled' => env('GROUP_PORTAL_ALERTS_BANNER_ENABLED', true),
+    'subscription_urgent_days' => env('GROUP_PORTAL_SUBSCRIPTION_URGENT_DAYS', 7),
+    'subscription_warning_days' => env('GROUP_PORTAL_SUBSCRIPTION_WARNING_DAYS', 14),
+    'subscription_info_days' => env('GROUP_PORTAL_SUBSCRIPTION_INFO_DAYS', 30),
 ];

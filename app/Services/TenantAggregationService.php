@@ -8,6 +8,7 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertType;
 use App\Models\Group;
 use App\Models\Tenant;
+use App\Services\Group\SubscriptionTierResolver;
 use App\Services\Group\TenantAggregator;
 use App\Services\Group\TenantBillingContext;
 use App\Support\Period\PeriodFactory;
@@ -49,6 +50,7 @@ class TenantAggregationService
         protected TenantBillingContext $billingContext,
         protected GroupKpiProviderInterface $kpiProvider,
         protected GroupFinancialsProviderInterface $financialsProvider,
+        protected SubscriptionTierResolver $tierResolver,
     ) {
     }
 
@@ -357,6 +359,14 @@ class TenantAggregationService
             'quota_exceeded_count' => 0,
             'subscription_expiring_count' => 0,
             'subscription_expired_count' => 0,
+            'subscription_urgent_count' => 0,
+            'subscription_warning_count' => 0,
+            'subscription_info_count' => 0,
+            'subscription_expiring_total_count' => 0,
+            'subscription_worst_tier' => null,
+            'subscription_worst_tenant_name' => null,
+            'subscription_worst_tenant_code' => null,
+            'subscription_worst_days_remaining' => null,
             'active_reliquats_total' => 0,
             'attrition_rate_avg' => 0,
             'alerts' => [],
@@ -450,28 +460,67 @@ class TenantAggregationService
 
     private function collectSubscriptionAlerts(Tenant $tenant, array &$health): void
     {
-        if (! $tenant->subscription_end_date) {
+        $tier = $this->tierResolver->resolveTier($tenant);
+
+        if ($tier === null) {
             return;
         }
 
-        $daysUntil = (int) now()->diffInDays($tenant->subscription_end_date, false);
+        $daysUntil = $tenant->daysRemaining();
+        $severity = $this->tierResolver->severityForTier($tier);
 
-        if ($daysUntil < 0) {
-            $health['subscription_expired_count']++;
-            $health['alerts'][] = $this->buildAlert(
-                $tenant,
-                AlertSeverity::Critical,
+        [$alertType, $message] = match ($tier) {
+            SubscriptionTierResolver::TIER_EXPIRED => [
                 AlertType::SubscriptionExpired,
-                'Abonnement expiré depuis ' . abs($daysUntil) . ' jours'
-            );
-        } elseif ($daysUntil <= 30) {
-            $health['subscription_expiring_count']++;
-            $health['alerts'][] = $this->buildAlert(
-                $tenant,
-                AlertSeverity::Warning,
+                'Abonnement expiré depuis ' . abs($daysUntil) . ' jours',
+            ],
+            SubscriptionTierResolver::TIER_URGENT => [
                 AlertType::SubscriptionExpiring,
-                "Abonnement expire dans {$daysUntil} jours"
-            );
+                "Abonnement expire dans {$daysUntil} jours (urgent)",
+            ],
+            SubscriptionTierResolver::TIER_WARNING, SubscriptionTierResolver::TIER_INFO => [
+                AlertType::SubscriptionExpiring,
+                "Abonnement expire dans {$daysUntil} jours",
+            ],
+        };
+
+        $health['alerts'][] = $this->buildAlert($tenant, $severity, $alertType, $message);
+
+        match ($tier) {
+            SubscriptionTierResolver::TIER_EXPIRED => $health['subscription_expired_count']++,
+            SubscriptionTierResolver::TIER_URGENT => $health['subscription_urgent_count']++,
+            SubscriptionTierResolver::TIER_WARNING => $health['subscription_warning_count']++,
+            SubscriptionTierResolver::TIER_INFO => $health['subscription_info_count']++,
+        };
+
+        // Legacy counters preserved for widgets already reading them.
+        if ($tier === SubscriptionTierResolver::TIER_URGENT
+            || $tier === SubscriptionTierResolver::TIER_WARNING
+            || $tier === SubscriptionTierResolver::TIER_INFO) {
+            $health['subscription_expiring_count']++;
+        }
+
+        $health['subscription_expiring_total_count']++;
+
+        $currentWorst = $health['subscription_worst_tier'];
+        $newWorst = $this->tierResolver->worstTier([$currentWorst, $tier]);
+
+        // Promote when: (a) tier rank is strictly worse, or (b) same tier but
+        // fewer days remaining, or (c) same tier and same days but earlier
+        // name — deterministic ordering so UI never flickers between ties.
+        $shouldPromote = $newWorst !== $currentWorst
+            || ($newWorst === $tier
+                && $currentWorst === $tier
+                && ($health['subscription_worst_days_remaining'] === null
+                    || $daysUntil < $health['subscription_worst_days_remaining']
+                    || ($daysUntil === $health['subscription_worst_days_remaining']
+                        && strcasecmp($tenant->name, (string) $health['subscription_worst_tenant_name']) < 0)));
+
+        if ($shouldPromote) {
+            $health['subscription_worst_tier'] = $newWorst;
+            $health['subscription_worst_tenant_name'] = $tenant->name;
+            $health['subscription_worst_tenant_code'] = $tenant->code;
+            $health['subscription_worst_days_remaining'] = $daysUntil;
         }
     }
 
