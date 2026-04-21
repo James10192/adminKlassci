@@ -8,6 +8,8 @@ use App\Enums\AlertSeverity;
 use App\Enums\AlertType;
 use App\Models\Group;
 use App\Models\Tenant;
+use App\Services\Group\EnrollmentTrendAnalyzer;
+use App\Services\Group\HealthCheckAlertResolver;
 use App\Services\Group\SubscriptionTierResolver;
 use App\Services\Group\TenantAggregator;
 use App\Services\Group\TenantBillingContext;
@@ -51,6 +53,8 @@ class TenantAggregationService
         protected GroupKpiProviderInterface $kpiProvider,
         protected GroupFinancialsProviderInterface $financialsProvider,
         protected SubscriptionTierResolver $tierResolver,
+        protected HealthCheckAlertResolver $healthResolver,
+        protected EnrollmentTrendAnalyzer $enrollmentAnalyzer,
     ) {
     }
 
@@ -369,6 +373,12 @@ class TenantAggregationService
             'subscription_worst_days_remaining' => null,
             'active_reliquats_total' => 0,
             'attrition_rate_avg' => 0,
+            'plan_overage_count' => 0,
+            'stale_tenant_count' => 0,
+            'unhealthy_tenant_count' => 0,
+            'ssl_expiring_count' => 0,
+            'ssl_critical_count' => 0,
+            'enrollment_decline_count' => 0,
             'alerts' => [],
         ];
 
@@ -376,8 +386,40 @@ class TenantAggregationService
         // Health metrics are snapshot-style — no Period forwarded to tenants.
         $healthDetails = $this->aggregator->aggregate($group, self::class, 'computeTenantHealthDetails', 'HealthDetails');
 
+        $healthAlertsEnabled = (bool) config('group_portal.health_alerts_enabled', true);
+        $monthlyEnrollments = [];
+
+        if ($healthAlertsEnabled) {
+            // Eager-load the two latestOfMany relations once per group call to
+            // avoid one extra SELECT per tenant in the alert loop below.
+            $group->activeTenants->load(['latestHealthCheck', 'latestSslHealthCheck']);
+
+            // Fan out to tenant databases in parallel — we need 3 months of
+            // new inscriptions per tenant for the decline analyzer, and the
+            // aggregator already handles connection pooling + error isolation.
+            $monthlyEnrollments = $this->aggregator->aggregate(
+                $group,
+                self::class,
+                'computeTenantMonthlyEnrollments',
+                'MonthlyEnrollments'
+            );
+        }
+
         foreach ($group->activeTenants as $tenant) {
-            $this->collectQuotaAlerts($tenant, $health);
+            $planMismatchFired = false;
+
+            if ($healthAlertsEnabled) {
+                $planMismatchFired = $this->collectPlanMismatchAlerts($tenant, $health);
+                $this->collectStaleTenantAlerts($tenant, $health);
+                $this->collectSslExpiryAlerts($tenant, $health);
+                $this->collectEnrollmentDeclineAlerts(
+                    $tenant,
+                    $health,
+                    $monthlyEnrollments[$tenant->code] ?? null
+                );
+            }
+
+            $this->collectQuotaAlerts($tenant, $health, $planMismatchFired);
             $this->collectSubscriptionAlerts($tenant, $health);
 
             $details = $healthDetails[$tenant->code] ?? null;
@@ -435,9 +477,16 @@ class TenantAggregationService
         ];
     }
 
-    private function collectQuotaAlerts(Tenant $tenant, array &$health): void
+    /**
+     * When `$planMismatchFired` is true, PlanMismatch has already surfaced a
+     * richer students-quota alert (with the plan name + upgrade hint) — we
+     * skip the generic QuotaExceeded/QuotaCritical here so the widget doesn't
+     * show two bullets for the same underlying condition. Other quotas
+     * (users, staff, inscriptions, storage) always flow through normally.
+     */
+    private function collectQuotaAlerts(Tenant $tenant, array &$health, bool $planMismatchFired = false): void
     {
-        $quotaPct = $this->computeQuotaPercentages($tenant);
+        $quotaPct = $this->computeQuotaPercentages($tenant, skipStudents: $planMismatchFired);
 
         if ($quotaPct['max'] >= 100) {
             $health['quota_exceeded_count']++;
@@ -524,7 +573,129 @@ class TenantAggregationService
         }
     }
 
-    private function computeQuotaPercentages(Tenant $tenant): array
+    /**
+     * Returns true when a PlanMismatch alert was emitted (so the caller can
+     * suppress the generic QuotaExceeded for the students quota). Warning
+     * fires at >=warning_pct, Critical fires at >=critical_pct (default
+     * 100% and 110% — the gap lets a tenant sit briefly "at limit" without
+     * looking red immediately after a spike).
+     */
+    private function collectPlanMismatchAlerts(Tenant $tenant, array &$health): bool
+    {
+        if ($tenant->max_students <= 0) {
+            return false;
+        }
+
+        $pct = ($tenant->current_students / $tenant->max_students) * 100;
+        $warningPct = (float) config('group_portal.plan_overage_warning_pct', 100);
+        $criticalPct = (float) config('group_portal.plan_overage_critical_pct', 110);
+
+        if ($pct < $warningPct) {
+            return false;
+        }
+
+        $severity = $pct >= $criticalPct ? AlertSeverity::Critical : AlertSeverity::Warning;
+        $planLabel = $tenant->plan ? ucfirst($tenant->plan) : 'Actuel';
+        $message = "Plan {$planLabel} dépassé — {$tenant->current_students}/{$tenant->max_students} étudiants. Passer au palier supérieur.";
+
+        $health['alerts'][] = $this->buildAlert($tenant, $severity, AlertType::PlanMismatch, $message);
+        $health['plan_overage_count']++;
+
+        return true;
+    }
+
+    /**
+     * Two mutually-exclusive outcomes per tenant: `unhealthy` (latest overall
+     * check failed → Critical) takes precedence over `stale` (last_deployed_at
+     * older than threshold → Warning). Resolver returns null when neither
+     * applies, keeping the noise out of the alerts list.
+     */
+    private function collectStaleTenantAlerts(Tenant $tenant, array &$health): void
+    {
+        $tier = $this->healthResolver->resolveStaleTier($tenant, $tenant->latestHealthCheck);
+
+        if ($tier === null) {
+            return;
+        }
+
+        $severity = $this->healthResolver->severityForStaleTier($tier);
+
+        if ($tier === HealthCheckAlertResolver::STALE_TIER_UNHEALTHY) {
+            $health['unhealthy_tenant_count']++;
+            $detail = $tenant->latestHealthCheck?->details ?: 'aucun détail';
+            $message = "Health check échec : {$detail}";
+        } else {
+            $health['stale_tenant_count']++;
+            $days = $tenant->last_deployed_at
+                ? (int) $tenant->last_deployed_at->diffInDays(now())
+                : 0;
+            $message = "Tenant inactif depuis {$days} jours (dernier déploiement).";
+        }
+
+        $health['alerts'][] = $this->buildAlert($tenant, $severity, AlertType::StaleTenant, $message);
+    }
+
+    /**
+     * Reads `metadata.days_remaining` from the latest ssl_certificate check
+     * (already computed by the health-check command — don't re-parse
+     * `expires_at` here). Thresholds default to 15/7 days, more conservative
+     * than the per-tenant health status flip (30/7).
+     */
+    private function collectSslExpiryAlerts(Tenant $tenant, array &$health): void
+    {
+        $tier = $this->healthResolver->resolveSslTier($tenant->latestSslHealthCheck);
+
+        if ($tier === null) {
+            return;
+        }
+
+        $severity = $this->healthResolver->severityForSslTier($tier);
+        $days = (int) ($tenant->latestSslHealthCheck->metadata['days_remaining'] ?? 0);
+
+        if ($tier === HealthCheckAlertResolver::SSL_TIER_CRITICAL) {
+            $health['ssl_critical_count']++;
+        } else {
+            $health['ssl_expiring_count']++;
+        }
+
+        $message = "Certificat SSL expire dans {$days} jour" . ($days > 1 ? 's' : '') . '.';
+        $health['alerts'][] = $this->buildAlert($tenant, $severity, AlertType::SslExpiring, $message);
+    }
+
+    /**
+     * $monthlyData shape: ['current' => int, 'previous' => int, 'two_months_ago' => int]
+     * Returned by computeTenantMonthlyEnrollments — when the tenant query
+     * fails, the value is null and we skip the alert silently (logging was
+     * already done inside computeTenantMonthlyEnrollments).
+     */
+    private function collectEnrollmentDeclineAlerts(Tenant $tenant, array &$health, ?array $monthlyData): void
+    {
+        if ($monthlyData === null) {
+            return;
+        }
+
+        $result = $this->enrollmentAnalyzer->detectDecline(
+            (int) ($monthlyData['current'] ?? 0),
+            (int) ($monthlyData['previous'] ?? 0),
+            (int) ($monthlyData['two_months_ago'] ?? 0)
+        );
+
+        if ($result === null) {
+            return;
+        }
+
+        $health['enrollment_decline_count']++;
+        $message = "Inscriptions en baisse : -{$result['drop_pct_current']}% vs mois dernier, -{$result['drop_pct_previous']}% le mois précédent.";
+
+        $health['alerts'][] = $this->buildAlert(
+            $tenant,
+            AlertSeverity::Warning,
+            AlertType::EnrollmentDecline,
+            $message
+        );
+    }
+
+    private function computeQuotaPercentages(Tenant $tenant, bool $skipStudents = false): array
     {
         $usagePct = [];
 
@@ -534,7 +705,7 @@ class TenantAggregationService
         if ($tenant->max_staff > 0) {
             $usagePct['staff'] = round(($tenant->current_staff / $tenant->max_staff) * 100, 1);
         }
-        if ($tenant->max_students > 0) {
+        if (! $skipStudents && $tenant->max_students > 0) {
             $usagePct['students'] = round(($tenant->current_students / $tenant->max_students) * 100, 1);
         }
         if ($tenant->max_inscriptions_per_year > 0) {
@@ -725,6 +896,52 @@ class TenantAggregationService
         } catch (\Exception $e) {
             Log::error("[group-refactor] computeTenantTrends failed for {$tenant->code}: {$e->getMessage()}");
             return $this->emptyTrends();
+        } finally {
+            if ($conn !== null) {
+                $this->connectionManager->closeConnection($conn);
+            }
+        }
+    }
+
+    /**
+     * Counts new inscriptions in the current, previous, and month-before
+     * windows — feeds `EnrollmentTrendAnalyzer` for PR7b decline detection.
+     *
+     * @param  ?PeriodInterface  $period  Accepted for uniform aggregator call shape — IGNORED.
+     *                                    Windows are calendar-month-relative (Carbon now()),
+     *                                    not period-relative, because the decline check is
+     *                                    a rolling-window signal that shouldn't shift when
+     *                                    the user scrolls the Period selector.
+     *
+     * @return array{current: int, previous: int, two_months_ago: int}
+     */
+    public function computeTenantMonthlyEnrollments(Tenant $tenant, ?PeriodInterface $period = null): array
+    {
+        $empty = ['current' => 0, 'previous' => 0, 'two_months_ago' => 0];
+
+        $conn = null;
+        try {
+            $conn = $this->connectionManager->createConnection($tenant);
+
+            $currentStart = now()->startOfMonth();
+            $previousStart = now()->subMonth()->startOfMonth();
+            $twoMonthsAgoStart = now()->subMonths(2)->startOfMonth();
+
+            $count = fn ($from, $to) => DB::connection($conn)
+                ->table('esbtp_inscriptions')
+                ->whereBetween('created_at', [$from, $to])
+                ->where('status', 'active')
+                ->where('workflow_step', 'etudiant_cree')
+                ->count();
+
+            return [
+                'current' => $count($currentStart, now()),
+                'previous' => $count($previousStart, $currentStart->copy()->subSecond()),
+                'two_months_ago' => $count($twoMonthsAgoStart, $previousStart->copy()->subSecond()),
+            ];
+        } catch (\Exception $e) {
+            Log::error("[group-refactor] computeTenantMonthlyEnrollments failed for {$tenant->code}: {$e->getMessage()}");
+            return $empty;
         } finally {
             if ($conn !== null) {
                 $this->connectionManager->closeConnection($conn);
