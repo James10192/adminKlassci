@@ -5,7 +5,6 @@ use App\Filament\Group\Widgets\EnrollmentWidget;
 use App\Filament\Group\Widgets\EstablishmentCardsWidget;
 use App\Filament\Group\Widgets\GroupAgingWidget;
 use App\Filament\Group\Widgets\GroupAlertsWidget;
-use App\Filament\Group\Widgets\GroupWelcomeWidget;
 use App\Filament\Group\Widgets\KpiOverviewWidget;
 use App\Filament\Group\Widgets\RevenueComparisonWidget;
 
@@ -32,7 +31,6 @@ it('snapshot widgets do NOT apply PeriodAwareConcern (scope guard)', function (s
     EnrollmentWidget::class,
     EstablishmentCardsWidget::class,
     GroupAlertsWidget::class,
-    GroupWelcomeWidget::class,
 ]);
 
 it('KpiOverviewWidget passes the period to all 3 aggregation service calls', function () {
