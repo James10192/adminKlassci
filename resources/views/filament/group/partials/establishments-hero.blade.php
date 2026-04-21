@@ -1,9 +1,8 @@
-@php use App\Support\FcfaFormatter; @endphp
+@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
 
 @php
     /** @var array{total_students:int,total_staff:int,establishment_count:int,avg_rate:float} $context */
     $rate = (float) $context['avg_rate'];
-    $rateColor = $rate >= 70 ? 'success' : ($rate >= 50 ? 'warning' : 'danger');
 @endphp
 
 <x-group-hero
@@ -18,13 +17,13 @@
     <x-slot:kpis>
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Étudiants inscrits</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $context['total_students']) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($context['total_students']) }}</span>
             <span class="gp-hero-kpi-meta">cumul cross-groupe</span>
         </div>
 
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Personnel</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) $context['total_staff']) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($context['total_staff']) }}</span>
             <span class="gp-hero-kpi-meta">membres actifs</span>
         </div>
 
@@ -34,10 +33,10 @@
             <span class="gp-hero-kpi-meta">sous pilotage</span>
         </div>
 
-        <div class="gp-hero-kpi" data-tone="{{ $rateColor }}">
+        <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($rate) }}">
             <span class="gp-hero-kpi-label">Recouvrement moyen</span>
             <span class="gp-hero-kpi-value">{{ number_format($rate, 1, ',', ' ') }}&nbsp;%</span>
-            <span class="gp-hero-kpi-meta">{{ $rate >= 70 ? 'sain' : ($rate >= 50 ? 'à surveiller' : 'critique') }}</span>
+            <span class="gp-hero-kpi-meta">{{ RateHealth::label($rate) }}</span>
         </div>
     </x-slot:kpis>
 </x-group-hero>

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Pages;
 
+use App\Filament\Group\Concerns\HasCustomHero;
 use App\Filament\Group\Resources\EstablishmentResource;
 use App\Services\TenantAggregationService;
 use Filament\Actions\Action;
@@ -13,6 +14,8 @@ use Illuminate\Support\Facades\Cache;
 
 class GroupDashboard extends Dashboard
 {
+    use HasCustomHero;
+
     protected static ?string $navigationIcon = 'heroicon-o-building-office-2';
 
     protected static ?string $title = 'Tableau de bord';
@@ -24,12 +27,6 @@ class GroupDashboard extends Dashboard
         return view('filament.group.partials.dashboard-hero', [
             'context' => $this->getHeroContext(),
         ]);
-    }
-
-    /** Hero custom affiche le titre — Filament ne doit pas le répéter. */
-    public function getHeading(): string
-    {
-        return '';
     }
 
     /**

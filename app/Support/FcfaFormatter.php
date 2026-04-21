@@ -39,4 +39,10 @@ final class FcfaFormatter
     {
         return number_format($amount, 0, ',', ' ');
     }
+
+    /** Integer count with thin-space thousand separator: `1 234`. Use for student/staff counts, not money. */
+    public static function integer(int $count): string
+    {
+        return number_format($count, 0, ',', ' ');
+    }
 }

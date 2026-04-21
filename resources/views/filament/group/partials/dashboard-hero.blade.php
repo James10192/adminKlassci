@@ -1,3 +1,5 @@
+@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
+
 @php
     /**
      * @var array{
@@ -10,14 +12,11 @@
      *     kpis: array<string,mixed>,
      * } $context
      */
-    use App\Support\FcfaFormatter;
-
     $k = $context['kpis'];
     $totalStudents = (int) ($k['total_students'] ?? 0);
     $collectionRate = (float) ($k['collection_rate'] ?? 0);
     $revenueCollected = (float) ($k['total_revenue_collected'] ?? 0);
     $establishmentCount = $context['establishment_count'];
-    $recoveryColor = $collectionRate >= 70 ? 'success' : ($collectionRate >= 50 ? 'warning' : 'danger');
 @endphp
 
 <x-group-hero
@@ -45,11 +44,11 @@
     <x-slot:kpis>
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Étudiants inscrits</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full($totalStudents) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($totalStudents) }}</span>
             <span class="gp-hero-kpi-meta">{{ $establishmentCount }} {{ \Illuminate\Support\Str::plural('établissement', $establishmentCount) }}</span>
         </div>
 
-        <div class="gp-hero-kpi" data-tone="{{ $recoveryColor }}">
+        <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($collectionRate) }}">
             <span class="gp-hero-kpi-label">Recouvrement</span>
             <span class="gp-hero-kpi-value">{{ number_format($collectionRate, 1, ',', ' ') }}&nbsp;%</span>
             <span class="gp-hero-kpi-meta">{{ FcfaFormatter::compact($revenueCollected) }} FCFA encaissés</span>
@@ -57,7 +56,7 @@
 
         <div class="gp-hero-kpi">
             <span class="gp-hero-kpi-label">Personnel</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::full((float) ($k['total_staff'] ?? 0)) }}</span>
+            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer((int) ($k['total_staff'] ?? 0)) }}</span>
             <span class="gp-hero-kpi-meta">membres cross-groupe</span>
         </div>
 
