@@ -10,4 +10,8 @@ enum AlertType: string
     case SubscriptionExpiring = 'subscription_expiring';
     case HighAttrition = 'high_attrition';
     case ActiveReliquats = 'active_reliquats';
+    case PlanMismatch = 'plan_mismatch';
+    case StaleTenant = 'stale_tenant';
+    case SslExpiring = 'ssl_expiring';
+    case EnrollmentDecline = 'enrollment_decline';
 }

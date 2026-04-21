@@ -71,4 +71,38 @@ return [
     'subscription_urgent_days' => env('GROUP_PORTAL_SUBSCRIPTION_URGENT_DAYS', 7),
     'subscription_warning_days' => env('GROUP_PORTAL_SUBSCRIPTION_WARNING_DAYS', 14),
     'subscription_info_days' => env('GROUP_PORTAL_SUBSCRIPTION_INFO_DAYS', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Health alerts (PR7b)
+    |--------------------------------------------------------------------------
+    |
+    | Additional group-level alerts surfaced in GroupAlertsWidget (NOT the
+    | permanent banner — that remains reserved for subscription expiry).
+    | Four families: plan overage, stale tenant, SSL cert expiry, enrollment
+    | decline. Single coarse kill switch (per-alert toggles proved ops burden
+    | without operational gain in review).
+    |
+    |   GROUP_PORTAL_HEALTH_ALERTS_ENABLED=false
+    |
+    | PlanMismatch replaces the generic QuotaExceeded alert for the `students`
+    | quota specifically — the message is richer (plan name + upgrade hint).
+    | Other quotas (users, staff, storage) still flow through QuotaExceeded.
+    */
+    'health_alerts_enabled' => env('GROUP_PORTAL_HEALTH_ALERTS_ENABLED', true),
+
+    'plan_overage_warning_pct' => env('GROUP_PORTAL_PLAN_OVERAGE_WARNING_PCT', 100),
+    'plan_overage_critical_pct' => env('GROUP_PORTAL_PLAN_OVERAGE_CRITICAL_PCT', 110),
+
+    'stale_tenant_days' => env('GROUP_PORTAL_STALE_TENANT_DAYS', 30),
+
+    // Group-level SSL thresholds are intentionally more conservative than the
+    // per-tenant TenantHealthCheck thresholds (30/7) so the founder is alerted
+    // before any single tenant flips to degraded/unhealthy status.
+    'ssl_expiry_warning_days' => env('GROUP_PORTAL_SSL_EXPIRY_WARNING_DAYS', 15),
+    'ssl_expiry_critical_days' => env('GROUP_PORTAL_SSL_EXPIRY_CRITICAL_DAYS', 7),
+
+    // Single-month dips are noise; the two-consecutive-months requirement in
+    // EnrollmentTrendAnalyzer filters for genuine trends.
+    'enrollment_decline_threshold_pct' => env('GROUP_PORTAL_ENROLLMENT_DECLINE_THRESHOLD_PCT', 10),
 ];

@@ -79,6 +79,30 @@ class Tenant extends Model
         return $this->hasMany(TenantHealthCheck::class);
     }
 
+    /**
+     * Latest health check across all check types — used by the group portal
+     * stale-tenant detection (tenant hasn't checked in recently OR is flagged
+     * unhealthy). latestOfMany() avoids the per-tenant subquery that naive
+     * "$tenant->healthChecks->first()" would trigger on a group dashboard.
+     */
+    public function latestHealthCheck()
+    {
+        return $this->hasOne(TenantHealthCheck::class)->latestOfMany('checked_at');
+    }
+
+    /**
+     * Latest ssl_certificate health check specifically. Filtered aggregate so
+     * PR7b SSL expiry alerts can read `metadata.days_remaining` directly
+     * without scanning the full health_checks history.
+     */
+    public function latestSslHealthCheck()
+    {
+        return $this->hasOne(TenantHealthCheck::class)->ofMany(
+            ['checked_at' => 'max'],
+            fn ($query) => $query->where('check_type', 'ssl_certificate')
+        );
+    }
+
     public function backups()
     {
         return $this->hasMany(TenantBackup::class);
