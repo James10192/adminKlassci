@@ -142,7 +142,27 @@ class Tenant extends Model
 
     public function getIsExpiredAttribute(): bool
     {
-        return $this->subscription_end_date && $this->subscription_end_date->isPast();
+        $days = $this->daysRemaining();
+
+        return $days !== null && $days < 0;
+    }
+
+    /**
+     * Days remaining on the subscription; null when there is no end date
+     * (free tier or missing data), negative when already expired. The
+     * startOfDay() calls are defensive — the `date` cast already strips
+     * time, but this keeps behaviour stable if the cast ever changes.
+     */
+    public function daysRemaining(): ?int
+    {
+        if (! $this->subscription_end_date) {
+            return null;
+        }
+
+        return (int) now()->startOfDay()->diffInDays(
+            $this->subscription_end_date->startOfDay(),
+            false
+        );
     }
 
     /**

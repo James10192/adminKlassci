@@ -67,6 +67,10 @@ class GroupPanelProvider extends PanelProvider
                 PanelsRenderHook::TOPBAR_END,
                 fn () => view('filament.group.partials.topbar-period'),
             )
+            ->renderHook(
+                PanelsRenderHook::BODY_START,
+                fn () => view('filament.group.partials.subscription-banner'),
+            )
             ->sidebarCollapsibleOnDesktop()
             ->maxContentWidth('full')
             ->databaseNotifications()
