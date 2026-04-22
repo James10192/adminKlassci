@@ -122,3 +122,36 @@ scheduleWithTimestamp(
     storage_path('logs/rotate-logs.log'),
     'tenant:rotate-logs --days=30'
 );
+
+// ============================================
+// Group portal email notifications (PR-C)
+// ============================================
+
+// Immediate critical alerts — every 15 min (alerts already cached 5 min,
+// so this means up to 20 min lag end-to-end). Skipped entirely when the
+// feature flag is off.
+scheduleWithTimestamp(
+    Schedule::command('group:dispatch-alert-notifications')
+        ->everyFifteenMinutes()
+        ->withoutOverlapping()
+        ->runInBackground()
+        ->skip(fn () => ! config('group_portal.notifications_enabled', false))
+        ->onSuccess(fn () => \Log::info('✅ Group immediate alerts dispatched'))
+        ->onFailure(fn () => \Log::error('❌ Group immediate alerts dispatch failed')),
+    storage_path('logs/group-notifications.log'),
+    'group:dispatch-alert-notifications'
+);
+
+// Digest sweep — every 30 min the dispatcher checks each member's
+// digest_time slot; actual send happens once per day when the slot matches.
+scheduleWithTimestamp(
+    Schedule::command('group:send-alert-digests')
+        ->everyThirtyMinutes()
+        ->withoutOverlapping()
+        ->runInBackground()
+        ->skip(fn () => ! config('group_portal.notifications_enabled', false))
+        ->onSuccess(fn () => \Log::info('✅ Group digests dispatched'))
+        ->onFailure(fn () => \Log::error('❌ Group digests dispatch failed')),
+    storage_path('logs/group-digests.log'),
+    'group:send-alert-digests'
+);
