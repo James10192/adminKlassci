@@ -3,7 +3,6 @@
 namespace App\Services\Group;
 
 use App\Enums\AlertSeverity;
-use App\Enums\AlertType;
 use App\Mail\Group\CriticalAlertMail;
 use App\Mail\Group\DailyAlertDigestMail;
 use App\Models\Group;
@@ -11,6 +10,7 @@ use App\Models\GroupAlertNotificationLog;
 use App\Models\GroupMember;
 use App\Models\GroupMemberNotificationPreference;
 use App\Services\TenantAggregationService;
+use App\Support\Alerts\AlertPayload;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -52,7 +52,8 @@ class AlertNotificationDispatcher
 
         $health = $this->aggregationService->getGroupHealthMetrics($group);
         $alerts = collect($health['alerts'] ?? [])
-            ->filter(fn ($alert) => ($alert['severity'] ?? '') === AlertSeverity::Critical->value)
+            ->map(fn ($alert) => AlertPayload::from($alert))
+            ->filter(fn (AlertPayload $alert) => $alert->severity === AlertSeverity::Critical)
             ->values()
             ->all();
 
@@ -103,7 +104,7 @@ class AlertNotificationDispatcher
                     Log::error('[group-notifications] immediate dispatch failed', [
                         'group' => $group->code,
                         'member' => $member->email,
-                        'alert_type' => $alert['type'] ?? 'unknown',
+                        'alert_type' => $alert->type->value,
                         'error' => $e->getMessage(),
                     ]);
                 }
@@ -128,11 +129,11 @@ class AlertNotificationDispatcher
         }
 
         $health = $this->aggregationService->getGroupHealthMetrics($group);
-        $allAlerts = $health['alerts'] ?? [];
-        $warningAlerts = array_values(array_filter(
-            $allAlerts,
-            fn ($alert) => ($alert['severity'] ?? '') === AlertSeverity::Warning->value
-        ));
+        $warningAlerts = collect($health['alerts'] ?? [])
+            ->map(fn ($alert) => AlertPayload::from($alert))
+            ->filter(fn (AlertPayload $alert) => $alert->severity === AlertSeverity::Warning)
+            ->values()
+            ->all();
 
         if (empty($warningAlerts)) {
             return 0;
@@ -206,17 +207,10 @@ class AlertNotificationDispatcher
         return $sentCount;
     }
 
-    private function memberAcceptsAlert(GroupMember $member, GroupMemberNotificationPreference $prefs, array $alert): bool
+    private function memberAcceptsAlert(GroupMember $member, GroupMemberNotificationPreference $prefs, AlertPayload $alert): bool
     {
-        // Parse once — both downstream checks work with the enum case directly,
-        // avoiding two separate AlertType::tryFrom() conversions.
-        $type = AlertType::tryFrom($alert['type'] ?? '');
-        if ($type === null) {
-            return false;
-        }
-
-        return $prefs->acceptsAlertType($type)
-            && $this->roleMatcher->isSubscribed($member->role, $type);
+        return $prefs->acceptsAlertType($alert->type)
+            && $this->roleMatcher->isSubscribed($member->role, $alert->type);
     }
 
     private function isWithinDigestSlot(GroupMemberNotificationPreference $prefs): bool
@@ -238,14 +232,14 @@ class AlertNotificationDispatcher
         return true;
     }
 
-    private function logDispatch(Group $group, GroupMember $member, array $alert, string $fingerprint, string $channel): void
+    private function logDispatch(Group $group, GroupMember $member, AlertPayload $alert, string $fingerprint, string $channel): void
     {
         GroupAlertNotificationLog::create([
             'group_member_id' => $member->id,
             'group_id' => $group->id,
-            'tenant_code' => $alert['tenant_code'] ?? null,
-            'alert_type' => $alert['type'] ?? 'unknown',
-            'severity' => $alert['severity'] ?? 'info',
+            'tenant_code' => $alert->tenantCode,
+            'alert_type' => $alert->type->value,
+            'severity' => $alert->severity->value,
             'fingerprint' => $fingerprint,
             'channel' => $channel,
             'sent_at' => now(),

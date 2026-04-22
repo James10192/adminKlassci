@@ -3,6 +3,7 @@
 namespace App\Filament\Group\Widgets;
 
 use App\Services\TenantAggregationService;
+use App\Support\Alerts\AlertPayload;
 use Filament\Widgets\Widget;
 
 class GroupAlertsWidget extends Widget
@@ -21,10 +22,14 @@ class GroupAlertsWidget extends Widget
         $service = app(TenantAggregationService::class);
 
         $health = $service->getGroupHealthMetrics($group);
+        $alerts = array_map(
+            fn ($alert) => AlertPayload::from($alert)->toArray(),
+            $health['alerts']
+        );
 
         return [
-            'alerts' => array_slice($health['alerts'], 0, 5),
-            'totalAlerts' => count($health['alerts']),
+            'alerts' => array_slice($alerts, 0, 5),
+            'totalAlerts' => count($alerts),
             'quotaCriticalCount' => $health['quota_critical_count'],
             'quotaExceededCount' => $health['quota_exceeded_count'],
             'subscriptionExpiringCount' => $health['subscription_expiring_count'],

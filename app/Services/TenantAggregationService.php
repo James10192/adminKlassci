@@ -14,6 +14,7 @@ use App\Services\Group\SubscriptionTierResolver;
 use App\Services\Group\TeacherWorkloadResolver;
 use App\Services\Group\TenantAggregator;
 use App\Services\Group\TenantBillingContext;
+use App\Support\Alerts\AlertPayload;
 use App\Support\Period\PeriodFactory;
 use App\Support\Period\PeriodInterface;
 use Illuminate\Support\Facades\Cache;
@@ -493,21 +494,15 @@ class TenantAggregationService
 
         usort(
             $health['alerts'],
-            fn ($a, $b) => AlertSeverity::from($a['severity'])->sortOrder() <=> AlertSeverity::from($b['severity'])->sortOrder()
+            fn ($a, $b) => $a->severity->sortOrder() <=> $b->severity->sortOrder()
         );
 
         return $health;
     }
 
-    private function buildAlert(Tenant $tenant, AlertSeverity $severity, AlertType $type, string $message): array
+    private function buildAlert(Tenant $tenant, AlertSeverity $severity, AlertType $type, string $message): AlertPayload
     {
-        return [
-            'severity' => $severity->value,
-            'tenant_code' => $tenant->code,
-            'tenant_name' => $tenant->name,
-            'type' => $type->value,
-            'message' => $message,
-        ];
+        return AlertPayload::make($tenant, $severity, $type, $message);
     }
 
     /**

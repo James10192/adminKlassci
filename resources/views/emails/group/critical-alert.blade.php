@@ -10,9 +10,9 @@
     Une action immédiate peut être nécessaire pour éviter une interruption de service.</p>
 
     <div class="alert-card alert-critical">
-        <p class="alert-title">{{ $alert['message'] }}</p>
+        <p class="alert-title">{{ $alert->message }}</p>
         <p class="alert-tenant">
-            Établissement : <strong>{{ $alert['tenant_name'] ?? $alert['tenant_code'] ?? '—' }}</strong>
+            Établissement : <strong>{{ $alert->tenantName !== '' ? $alert->tenantName : ($alert->tenantCode ?? '—') }}</strong>
         </p>
     </div>
 

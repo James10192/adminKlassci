@@ -2,6 +2,8 @@
 
 namespace App\Services\Group;
 
+use App\Support\Alerts\AlertPayload;
+
 /**
  * Deterministic fingerprint per alert, used by the dedup layer to avoid
  * spamming the same alert to the same recipient within a time window.
@@ -12,16 +14,13 @@ namespace App\Services\Group;
  */
 class AlertFingerprintGenerator
 {
-    /**
-     * @param  array{tenant_code?: string, type: string, severity: string}  $alert
-     */
-    public function generate(int $groupId, array $alert): string
+    public function generate(int $groupId, AlertPayload $alert): string
     {
         $payload = implode('|', [
             $groupId,
-            $alert['tenant_code'] ?? '',
-            $alert['type'] ?? '',
-            $alert['severity'] ?? '',
+            $alert->tenantCode ?? '',
+            $alert->type->value,
+            $alert->severity->value,
         ]);
 
         return hash('sha256', $payload);

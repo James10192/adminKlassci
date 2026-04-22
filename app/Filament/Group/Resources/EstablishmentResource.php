@@ -89,7 +89,7 @@ class EstablishmentResource extends Resource
         }
 
         foreach ($alerts as $alert) {
-            if (($alert['severity'] ?? null) === AlertSeverity::Critical->value) {
+            if (\App\Support\Alerts\AlertPayload::from($alert)->severity === AlertSeverity::Critical) {
                 return 'danger';
             }
         }
