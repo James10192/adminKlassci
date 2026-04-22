@@ -15,6 +15,8 @@
         AlertType::StaleTenant->value => 'Tenant inactif',
         AlertType::SslExpiring->value => 'SSL expirant',
         AlertType::EnrollmentDecline->value => 'Inscriptions en baisse',
+        AlertType::UnpaidInvoices->value => 'Factures impayées',
+        AlertType::TeacherOverload->value => 'Surcharge enseignante',
     ];
 @endphp
 
