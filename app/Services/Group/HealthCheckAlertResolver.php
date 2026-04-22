@@ -44,6 +44,13 @@ class HealthCheckAlertResolver
             return null;
         }
 
+        // Guard against corrupted metadata where `days_remaining` is a string
+        // like "expired" or null — silent `(int)` coercion would produce 0 and
+        // fire a phantom Critical alert ("expire dans 0 jour").
+        if (! is_numeric($metadata['days_remaining'])) {
+            return null;
+        }
+
         $days = (int) $metadata['days_remaining'];
 
         if ($days <= (int) config('group_portal.ssl_expiry_critical_days', 7)) {

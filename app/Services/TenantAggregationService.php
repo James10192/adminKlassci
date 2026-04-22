@@ -685,7 +685,7 @@ class TenantAggregationService
         }
 
         $health['enrollment_decline_count']++;
-        $message = "Inscriptions en baisse : -{$result['drop_pct_current']}% vs mois dernier, -{$result['drop_pct_previous']}% le mois précédent.";
+        $message = "Inscriptions en baisse : -{$result->dropPctCurrent}% vs mois dernier, -{$result->dropPctPrevious}% le mois précédent.";
 
         $health['alerts'][] = $this->buildAlert(
             $tenant,
