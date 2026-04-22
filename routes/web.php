@@ -53,3 +53,32 @@ Route::middleware(['web', 'auth:group', 'throttle:30,1'])
         return back();
     })
     ->name('groupe.alerts.unacknowledge');
+
+// Signed unsubscribe link included in every notification email — adds the
+// alert type to the member's `disabled_alert_types` so future notifications
+// of that type are skipped by AlertNotificationDispatcher. No auth: the
+// signature itself proves identity (signed route with member id in URL).
+Route::middleware(['web', 'signed'])
+    ->get('/groupe/notifications/desabonner/{member}/{type}', function (int $member, string $type) {
+        $memberModel = \App\Models\GroupMember::findOrFail($member);
+        $prefs = \App\Models\GroupMemberNotificationPreference::forMember($memberModel);
+
+        if ($type === 'digest') {
+            $prefs->update(['daily_digest_warnings' => false]);
+        } elseif (\App\Enums\AlertType::tryFrom($type) !== null) {
+            $disabled = (array) ($prefs->disabled_alert_types ?? []);
+            if (! in_array($type, $disabled, true)) {
+                $disabled[] = $type;
+                $prefs->update(['disabled_alert_types' => array_values($disabled)]);
+            }
+        } else {
+            // Generic opt-out — kill email entirely
+            $prefs->update(['email_enabled' => false]);
+        }
+
+        return response()->view('emails.group.unsubscribed', [
+            'member' => $memberModel,
+            'type' => $type,
+        ]);
+    })
+    ->name('groupe.notifications.unsubscribe');

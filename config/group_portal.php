@@ -119,4 +119,28 @@ return [
     // warning at 30h gives a 10h cushion before the hard ceiling.
     'teacher_workload_warning_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_WARNING_HOURS', 30),
     'teacher_workload_critical_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_CRITICAL_HOURS', 40),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Founder email notifications (PR-C)
+    |--------------------------------------------------------------------------
+    |
+    | Pushes alerts surfaced by GroupAlertsWidget directly to group member
+    | inboxes (founder, directeur_general, directeur_financier). Two channels:
+    |
+    |   immediate  — Critical severity alerts, dispatched every 15 min
+    |                (aligned with the 5-min health-metrics cache)
+    |   digest     — Warning severity, one email/day per member at their
+    |                configured digest_time slot
+    |
+    | Default OFF for safe rollout — ship with the pipeline wired but dark.
+    | Flip on per-environment via env:
+    |
+    |   GROUP_PORTAL_NOTIFICATIONS_ENABLED=true
+    |
+    | Dedup: each member's `group_alert_notifications_log` is consulted BEFORE
+    | dispatch — same fingerprint (group+tenant+type+severity) within the
+    | member's dedup_hours window is skipped silently.
+    */
+    'notifications_enabled' => env('GROUP_PORTAL_NOTIFICATIONS_ENABLED', false),
 ];
