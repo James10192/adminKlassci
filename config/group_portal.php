@@ -112,4 +112,11 @@ return [
     // tenant queries. Thresholds match the general KLASSCI spending bands.
     'unpaid_invoices_warning_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_WARNING_FCFA', 200000),
     'unpaid_invoices_critical_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_CRITICAL_FCFA', 500000),
+
+    // Teacher workload (PR7d): weekly hours per teacher thresholds.
+    // Computed from `esbtp_seance_cours` (current academic year) per tenant,
+    // fanned out via the aggregator pattern. CI labor convention is 40h/week;
+    // warning at 30h gives a 10h cushion before the hard ceiling.
+    'teacher_workload_warning_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_WARNING_HOURS', 30),
+    'teacher_workload_critical_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_CRITICAL_HOURS', 40),
 ];
