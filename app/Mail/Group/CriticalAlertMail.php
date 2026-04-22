@@ -4,36 +4,21 @@ namespace App\Mail\Group;
 
 use App\Models\Group;
 use App\Models\GroupMember;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Mail\Mailable;
-use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\URL;
 
-class CriticalAlertMail extends Mailable implements ShouldQueue
+class CriticalAlertMail extends AbstractGroupAlertMail
 {
-    use Queueable, SerializesModels;
-
-    public int $tries = 3;
-
-    public array $backoff = [30, 120, 300];
-
     public function __construct(
-        public Group $group,
-        public GroupMember $member,
+        Group $group,
+        GroupMember $member,
         public array $alert,
     ) {
+        parent::__construct($group, $member);
     }
 
     public function build(): self
     {
-        $typeLabel = $this->alert['type'] ?? 'alerte';
         $tenant = $this->alert['tenant_name'] ?? $this->alert['tenant_code'] ?? $this->group->name;
-
-        $unsubscribeUrl = URL::signedRoute('groupe.notifications.unsubscribe', [
-            'member' => $this->member->id,
-            'type' => $typeLabel,
-        ]);
+        $type = $this->alert['type'] ?? 'alerte';
 
         return $this->subject("[KLASSCI] Alerte critique — {$tenant}")
             ->view('emails.group.critical-alert')
@@ -41,7 +26,7 @@ class CriticalAlertMail extends Mailable implements ShouldQueue
                 'group' => $this->group,
                 'member' => $this->member,
                 'alert' => $this->alert,
-                'unsubscribeUrl' => $unsubscribeUrl,
+                'unsubscribeUrl' => $this->buildUnsubscribeUrl($type),
             ]);
     }
 }

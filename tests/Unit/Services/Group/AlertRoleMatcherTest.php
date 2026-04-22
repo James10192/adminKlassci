@@ -43,9 +43,13 @@ it('unknown roles receive nothing (default-deny)', function () {
     expect($matcher->isSubscribed('', AlertType::UnpaidInvoices))->toBeFalse();
 });
 
-it('isSubscribedByValue handles invalid AlertType strings gracefully', function () {
+it('isSubscribed requires a typed AlertType (string variant removed post-simplify)', function () {
     $matcher = new AlertRoleMatcher();
 
-    expect($matcher->isSubscribedByValue('fondateur', 'not_a_real_type'))->toBeFalse();
-    expect($matcher->isSubscribedByValue('fondateur', 'subscription_expired'))->toBeTrue();
+    // The string-based thin wrapper was inlined into the dispatcher where the
+    // AlertType::tryFrom() + null guard already happen. Nothing here to test
+    // beyond the typed path covered above — this test pins the surface so
+    // a future refactor doesn't quietly reintroduce the string API.
+    $reflection = new ReflectionClass($matcher);
+    expect($reflection->hasMethod('isSubscribedByValue'))->toBeFalse();
 });

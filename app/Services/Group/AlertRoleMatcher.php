@@ -35,11 +35,4 @@ class AlertRoleMatcher
             default => false,
         };
     }
-
-    public function isSubscribedByValue(string $role, string $typeValue): bool
-    {
-        $type = AlertType::tryFrom($typeValue);
-
-        return $type !== null && $this->isSubscribed($role, $type);
-    }
 }

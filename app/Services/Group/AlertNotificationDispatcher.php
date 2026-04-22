@@ -3,6 +3,7 @@
 namespace App\Services\Group;
 
 use App\Enums\AlertSeverity;
+use App\Enums\AlertType;
 use App\Mail\Group\CriticalAlertMail;
 use App\Mail\Group\DailyAlertDigestMail;
 use App\Models\Group;
@@ -78,7 +79,19 @@ class AlertNotificationDispatcher
                 }
 
                 $fingerprint = $this->fingerprints->generate($group->id, $alert);
-                if (GroupAlertNotificationLog::wasRecentlyNotified($member->id, $fingerprint, $prefs->dedup_hours)) {
+
+                // Dedup check in its own try/catch so a DB failure doesn't get
+                // miscategorised as a mail-send failure in the logs downstream.
+                try {
+                    if (GroupAlertNotificationLog::wasRecentlyNotified($member->id, $fingerprint, $prefs->dedup_hours)) {
+                        continue;
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('[group-notifications] dedup check failed — skipping to avoid duplicate send', [
+                        'group' => $group->code,
+                        'member' => $member->email,
+                        'error' => $e->getMessage(),
+                    ]);
                     continue;
                 }
 
@@ -149,7 +162,17 @@ class AlertNotificationDispatcher
                 }
 
                 $fingerprint = $this->fingerprints->generate($group->id, $alert);
-                if (GroupAlertNotificationLog::wasRecentlyNotified($member->id, $fingerprint, $prefs->dedup_hours)) {
+
+                try {
+                    if (GroupAlertNotificationLog::wasRecentlyNotified($member->id, $fingerprint, $prefs->dedup_hours)) {
+                        continue;
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('[group-notifications] dedup check failed during digest — skipping', [
+                        'group' => $group->code,
+                        'member' => $member->email,
+                        'error' => $e->getMessage(),
+                    ]);
                     continue;
                 }
 
@@ -185,12 +208,15 @@ class AlertNotificationDispatcher
 
     private function memberAcceptsAlert(GroupMember $member, GroupMemberNotificationPreference $prefs, array $alert): bool
     {
-        $type = $alert['type'] ?? null;
-        if ($type === null || ! $prefs->acceptsAlertType($type)) {
+        // Parse once — both downstream checks work with the enum case directly,
+        // avoiding two separate AlertType::tryFrom() conversions.
+        $type = AlertType::tryFrom($alert['type'] ?? '');
+        if ($type === null) {
             return false;
         }
 
-        return $this->roleMatcher->isSubscribedByValue($member->role, $type);
+        return $prefs->acceptsAlertType($type)
+            && $this->roleMatcher->isSubscribed($member->role, $type);
     }
 
     private function isWithinDigestSlot(GroupMemberNotificationPreference $prefs): bool
