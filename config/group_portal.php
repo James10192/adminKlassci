@@ -143,4 +143,30 @@ return [
     | member's dedup_hours window is skipped silently.
     */
     'notifications_enabled' => env('GROUP_PORTAL_NOTIFICATIONS_ENABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Storage ingestion (PR7e)
+    |--------------------------------------------------------------------------
+    |
+    | Populates `tenants.current_storage_mb` from real disk usage via SSH +
+    | `du -sm`. Once populated, the existing `collectQuotaAlerts` starts
+    | firing for storage — no additional alert plumbing needed.
+    |
+    | Default OFF so local dev doesn't crash on missing SSH credentials.
+    | Production enables via env:
+    |
+    |   GROUP_PORTAL_STORAGE_INGESTION_ENABLED=true
+    |   GROUP_PORTAL_STORAGE_SSH_HOST=web44.lws-hosting.com
+    |   GROUP_PORTAL_STORAGE_SSH_USER=c2569688c
+    |   GROUP_PORTAL_STORAGE_TENANT_BASE_PATH=/home/c2569688c/public_html
+    |
+    | SSH keys must be deployed on the master host in the runtime user's
+    | ~/.ssh — we don't embed them in config.
+    */
+    'storage_ingestion_enabled' => env('GROUP_PORTAL_STORAGE_INGESTION_ENABLED', false),
+    'storage_ssh_host' => env('GROUP_PORTAL_STORAGE_SSH_HOST', ''),
+    'storage_ssh_user' => env('GROUP_PORTAL_STORAGE_SSH_USER', ''),
+    'storage_tenant_base_path' => env('GROUP_PORTAL_STORAGE_TENANT_BASE_PATH', ''),
+    'storage_ssh_timeout_sec' => env('GROUP_PORTAL_STORAGE_SSH_TIMEOUT_SEC', 30),
 ];

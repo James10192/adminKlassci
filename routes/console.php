@@ -155,3 +155,18 @@ scheduleWithTimestamp(
     storage_path('logs/group-digests.log'),
     'group:send-alert-digests'
 );
+
+// Storage ingestion — nightly run populates tenants.current_storage_mb
+// from real disk usage. Once populated, collectQuotaAlerts fires storage
+// alerts naturally. Skipped when the feature flag is off.
+scheduleWithTimestamp(
+    Schedule::command('tenant:update-storage')
+        ->dailyAt('03:30')
+        ->withoutOverlapping()
+        ->runInBackground()
+        ->skip(fn () => ! config('group_portal.storage_ingestion_enabled', false))
+        ->onSuccess(fn () => \Log::info('✅ Tenant storage ingestion complete'))
+        ->onFailure(fn () => \Log::error('❌ Tenant storage ingestion failed')),
+    storage_path('logs/storage-ingestion.log'),
+    'tenant:update-storage'
+);
