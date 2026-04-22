@@ -14,4 +14,5 @@ enum AlertType: string
     case StaleTenant = 'stale_tenant';
     case SslExpiring = 'ssl_expiring';
     case EnrollmentDecline = 'enrollment_decline';
+    case UnpaidInvoices = 'unpaid_invoices';
 }

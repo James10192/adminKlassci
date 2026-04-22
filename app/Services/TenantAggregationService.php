@@ -379,6 +379,8 @@ class TenantAggregationService
             'ssl_expiring_count' => 0,
             'ssl_critical_count' => 0,
             'enrollment_decline_count' => 0,
+            'unpaid_invoices_count' => 0,
+            'unpaid_invoices_total_fcfa' => 0,
             'alerts' => [],
         ];
 
@@ -388,6 +390,7 @@ class TenantAggregationService
 
         $healthAlertsEnabled = (bool) config('group_portal.health_alerts_enabled', true);
         $monthlyEnrollments = [];
+        $unpaidBalances = [];
 
         if ($healthAlertsEnabled) {
             // Eager-load the two latestOfMany relations once per group call to
@@ -403,6 +406,12 @@ class TenantAggregationService
                 'computeTenantMonthlyEnrollments',
                 'MonthlyEnrollments'
             );
+
+            // One grouped master-DB SELECT for unpaid invoices per tenant —
+            // data lives in the master schema so no cross-DB fan-out needed.
+            // Filter on sent/overdue statuses (paid + draft + cancelled don't
+            // surface in balance-due by design).
+            $unpaidBalances = $this->loadUnpaidInvoiceBalances($group);
         }
 
         foreach ($group->activeTenants as $tenant) {
@@ -416,6 +425,11 @@ class TenantAggregationService
                     $tenant,
                     $health,
                     $monthlyEnrollments[$tenant->code] ?? null
+                );
+                $this->collectUnpaidInvoicesAlerts(
+                    $tenant,
+                    $health,
+                    (float) ($unpaidBalances[$tenant->id] ?? 0)
                 );
             }
 
@@ -693,6 +707,64 @@ class TenantAggregationService
             AlertType::EnrollmentDecline,
             $message
         );
+    }
+
+    /**
+     * Reads from the master DB `invoices` table — single grouped SELECT per
+     * group call. Returns `[tenant_id => balance_due_fcfa]`. Paid + draft +
+     * cancelled invoices are filtered out (they don't contribute to the
+     * outstanding balance by definition). Soft-deleted rows excluded.
+     *
+     * @return array<int, float>
+     */
+    private function loadUnpaidInvoiceBalances(Group $group): array
+    {
+        $tenantIds = $group->activeTenants->pluck('id')->all();
+
+        if (empty($tenantIds)) {
+            return [];
+        }
+
+        return DB::table('invoices')
+            ->whereIn('tenant_id', $tenantIds)
+            ->whereIn('status', ['sent', 'overdue'])
+            ->whereNull('deleted_at')
+            ->selectRaw('tenant_id, SUM(total_amount - amount_paid) as balance_due')
+            ->groupBy('tenant_id')
+            ->pluck('balance_due', 'tenant_id')
+            ->map(fn ($amount) => max(0.0, (float) $amount))
+            ->all();
+    }
+
+    /**
+     * Fires when a tenant's outstanding invoice balance exceeds the configured
+     * threshold. Separate from the cross-tenant outstanding_aging aggregate
+     * (that's for analytics); this is an actionable alert the founder can
+     * chase with the tenant admin immediately.
+     */
+    private function collectUnpaidInvoicesAlerts(Tenant $tenant, array &$health, float $balanceDue): void
+    {
+        if ($balanceDue <= 0) {
+            return;
+        }
+
+        $warningThreshold = (float) config('group_portal.unpaid_invoices_warning_fcfa', 200000);
+        $criticalThreshold = (float) config('group_portal.unpaid_invoices_critical_fcfa', 500000);
+
+        if ($balanceDue < $warningThreshold) {
+            return;
+        }
+
+        $severity = $balanceDue >= $criticalThreshold
+            ? AlertSeverity::Critical
+            : AlertSeverity::Warning;
+
+        $formatted = number_format($balanceDue, 0, ',', ' ');
+        $message = "Factures impayées : {$formatted} FCFA en attente de règlement.";
+
+        $health['alerts'][] = $this->buildAlert($tenant, $severity, AlertType::UnpaidInvoices, $message);
+        $health['unpaid_invoices_count']++;
+        $health['unpaid_invoices_total_fcfa'] += $balanceDue;
     }
 
     private function computeQuotaPercentages(Tenant $tenant, bool $skipStudents = false): array

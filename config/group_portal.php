@@ -105,4 +105,11 @@ return [
     // Single-month dips are noise; the two-consecutive-months requirement in
     // EnrollmentTrendAnalyzer filters for genuine trends.
     'enrollment_decline_threshold_pct' => env('GROUP_PORTAL_ENROLLMENT_DECLINE_THRESHOLD_PCT', 10),
+
+    // Unpaid invoices (PR7c): per-tenant balance_due threshold in FCFA.
+    // Pre-aggregated from the master-DB `invoices` table (status sent|overdue)
+    // so a group with 20 tenants incurs a single grouped SELECT, not 20 per-
+    // tenant queries. Thresholds match the general KLASSCI spending bands.
+    'unpaid_invoices_warning_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_WARNING_FCFA', 200000),
+    'unpaid_invoices_critical_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_CRITICAL_FCFA', 500000),
 ];
