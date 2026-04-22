@@ -11,6 +11,7 @@ use App\Models\Tenant;
 use App\Services\Group\EnrollmentTrendAnalyzer;
 use App\Services\Group\HealthCheckAlertResolver;
 use App\Services\Group\SubscriptionTierResolver;
+use App\Services\Group\TeacherWorkloadResolver;
 use App\Services\Group\TenantAggregator;
 use App\Services\Group\TenantBillingContext;
 use App\Support\Period\PeriodFactory;
@@ -55,6 +56,7 @@ class TenantAggregationService
         protected SubscriptionTierResolver $tierResolver,
         protected HealthCheckAlertResolver $healthResolver,
         protected EnrollmentTrendAnalyzer $enrollmentAnalyzer,
+        protected TeacherWorkloadResolver $workloadResolver,
     ) {
     }
 
@@ -381,6 +383,8 @@ class TenantAggregationService
             'enrollment_decline_count' => 0,
             'unpaid_invoices_count' => 0,
             'unpaid_invoices_total_fcfa' => 0,
+            'teacher_overload_count' => 0,
+            'teacher_overload_critical_count' => 0,
             'alerts' => [],
         ];
 
@@ -391,6 +395,7 @@ class TenantAggregationService
         $healthAlertsEnabled = (bool) config('group_portal.health_alerts_enabled', true);
         $monthlyEnrollments = [];
         $unpaidBalances = [];
+        $teacherWorkload = [];
 
         if ($healthAlertsEnabled) {
             // Eager-load the two latestOfMany relations once per group call to
@@ -412,6 +417,15 @@ class TenantAggregationService
             // Filter on sent/overdue statuses (paid + draft + cancelled don't
             // surface in balance-due by design).
             $unpaidBalances = $this->loadUnpaidInvoiceBalances($group);
+
+            // Teacher workload lives in tenant DBs — aggregator fans out,
+            // handles error isolation and connection pooling.
+            $teacherWorkload = $this->aggregator->aggregate(
+                $group,
+                self::class,
+                'computeTenantTeacherWorkload',
+                'TeacherWorkload'
+            );
         }
 
         foreach ($group->activeTenants as $tenant) {
@@ -430,6 +444,11 @@ class TenantAggregationService
                     $tenant,
                     $health,
                     (float) ($unpaidBalances[$tenant->id] ?? 0)
+                );
+                $this->collectTeacherWorkloadAlerts(
+                    $tenant,
+                    $health,
+                    $teacherWorkload[$tenant->code] ?? null
                 );
             }
 
@@ -707,6 +726,34 @@ class TenantAggregationService
             AlertType::EnrollmentDecline,
             $message
         );
+    }
+
+    /**
+     * $workloadData shape: `['teachers' => [id => ['name', 'hours'], ...]]`
+     * as returned by computeTenantTeacherWorkload. Null = aggregator failed
+     * (error already logged) — skip the alert silently.
+     */
+    private function collectTeacherWorkloadAlerts(Tenant $tenant, array &$health, ?array $workloadData): void
+    {
+        if ($workloadData === null || empty($workloadData['teachers'] ?? [])) {
+            return;
+        }
+
+        $verdict = $this->workloadResolver->resolve($workloadData['teachers']);
+        if ($verdict === null) {
+            return;
+        }
+
+        $worstHours = number_format($verdict['worst_hours'], 1, ',', ' ');
+        $count = $verdict['overloaded_count'];
+
+        $message = $count === 1
+            ? "{$verdict['worst_name']} atteint {$worstHours} h/sem — surcharge à revoir."
+            : "{$count} enseignants en surcharge (pire : {$verdict['worst_name']} à {$worstHours} h/sem).";
+
+        $health['alerts'][] = $this->buildAlert($tenant, $verdict['severity'], AlertType::TeacherOverload, $message);
+        $health['teacher_overload_count'] += $count;
+        $health['teacher_overload_critical_count'] += $verdict['critical_count'];
     }
 
     /**
@@ -1013,6 +1060,72 @@ class TenantAggregationService
             ];
         } catch (\Exception $e) {
             Log::error("[group-refactor] computeTenantMonthlyEnrollments failed for {$tenant->code}: {$e->getMessage()}");
+            return $empty;
+        } finally {
+            if ($conn !== null) {
+                $this->connectionManager->closeConnection($conn);
+            }
+        }
+    }
+
+    /**
+     * Per-teacher weekly hours for the current academic year, computed from
+     * `esbtp_seance_cours` (the actual schedule — `esbtp_emploi_temps` is the
+     * parent template). Hours = Σ (heure_fin - heure_debut) in minutes / 60.
+     * MySQL's TIMESTAMPDIFF on TIME columns doesn't exist, so we cast both
+     * sides to seconds and divide.
+     *
+     * Teacher name resolution joins the `users` table inside the tenant DB
+     * (enseignants are regular users with the `enseignant` role). Uses LEFT
+     * JOIN so un-named entries still surface (shown as "Enseignant #id").
+     *
+     * @param  ?PeriodInterface  $period  Accepted for uniform aggregator call shape — IGNORED.
+     *                                    Workload is a current-week rolling signal,
+     *                                    not a windowed historical query.
+     *
+     * @return array{teachers: array<int, array{name: string, hours: float}>}
+     */
+    public function computeTenantTeacherWorkload(Tenant $tenant, ?PeriodInterface $period = null): array
+    {
+        $empty = ['teachers' => []];
+
+        $conn = null;
+        try {
+            $conn = $this->connectionManager->createConnection($tenant);
+
+            $currentYear = DB::connection($conn)
+                ->table('esbtp_annee_universitaires')
+                ->where('is_current', 1)
+                ->first();
+
+            if (! $currentYear) {
+                return $empty;
+            }
+
+            $rows = DB::connection($conn)
+                ->table('esbtp_seance_cours as s')
+                ->leftJoin('users as u', 's.enseignant_id', '=', 'u.id')
+                ->whereNotNull('s.enseignant_id')
+                ->where('s.annee_universitaire_id', $currentYear->id)
+                ->whereNull('s.deleted_at')
+                ->selectRaw(
+                    's.enseignant_id, u.name, '
+                    . 'SUM(TIME_TO_SEC(s.heure_fin) - TIME_TO_SEC(s.heure_debut)) / 3600.0 as weekly_hours'
+                )
+                ->groupBy('s.enseignant_id', 'u.name')
+                ->get();
+
+            $teachers = [];
+            foreach ($rows as $row) {
+                $teachers[(int) $row->enseignant_id] = [
+                    'name' => (string) ($row->name ?? "Enseignant #{$row->enseignant_id}"),
+                    'hours' => round((float) $row->weekly_hours, 2),
+                ];
+            }
+
+            return ['teachers' => $teachers];
+        } catch (\Exception $e) {
+            Log::error("[group-refactor] computeTenantTeacherWorkload failed for {$tenant->code}: {$e->getMessage()}");
             return $empty;
         } finally {
             if ($conn !== null) {

@@ -15,4 +15,5 @@ enum AlertType: string
     case SslExpiring = 'ssl_expiring';
     case EnrollmentDecline = 'enrollment_decline';
     case UnpaidInvoices = 'unpaid_invoices';
+    case TeacherOverload = 'teacher_overload';
 }
