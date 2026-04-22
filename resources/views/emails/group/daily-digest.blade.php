@@ -11,9 +11,9 @@
 
     @foreach ($alerts as $alert)
         <div class="alert-card alert-warning">
-            <p class="alert-title">{{ $alert['message'] }}</p>
+            <p class="alert-title">{{ $alert->message }}</p>
             <p class="alert-tenant">
-                Établissement : <strong>{{ $alert['tenant_name'] ?? $alert['tenant_code'] ?? '—' }}</strong>
+                Établissement : <strong>{{ $alert->tenantName !== '' ? $alert->tenantName : ($alert->tenantCode ?? '—') }}</strong>
             </p>
         </div>
     @endforeach

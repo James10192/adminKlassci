@@ -4,9 +4,13 @@ namespace App\Mail\Group;
 
 use App\Models\Group;
 use App\Models\GroupMember;
+use App\Support\Alerts\AlertPayload;
 
 class DailyAlertDigestMail extends AbstractGroupAlertMail
 {
+    /**
+     * @param  array<int, AlertPayload>  $alerts
+     */
     public function __construct(
         Group $group,
         GroupMember $member,

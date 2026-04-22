@@ -4,6 +4,7 @@ namespace App\Filament\Group\Pages;
 
 use App\Filament\Group\Concerns\HasCustomHero;
 use App\Services\TenantAggregationService;
+use App\Support\Alerts\AlertPayload;
 use Filament\Pages\Page;
 
 /**
@@ -46,13 +47,15 @@ class AlertsIndex extends Page
         // can filter acknowledged ones without a server round-trip. Same
         // tenant+type combo is considered the "same" alert across polls —
         // message text changes (e.g. days remaining) don't break the ack.
-        return array_map(function (array $alert) use ($dismissed) {
-            $fingerprint = $this->fingerprintOf($alert);
-            $alert['fingerprint'] = $fingerprint;
-            $alert['acknowledged'] = isset($dismissed[$fingerprint])
+        return array_map(function ($alert) use ($dismissed) {
+            $payload = AlertPayload::from($alert);
+            $row = $payload->toArray();
+            $fingerprint = $this->fingerprintOf($payload);
+            $row['fingerprint'] = $fingerprint;
+            $row['acknowledged'] = isset($dismissed[$fingerprint])
                 && now()->lessThan($dismissed[$fingerprint]);
 
-            return $alert;
+            return $row;
         }, $alerts);
     }
 
@@ -90,8 +93,8 @@ class AlertsIndex extends Page
         return app(TenantAggregationService::class)->getGroupHealthMetrics($group);
     }
 
-    private function fingerprintOf(array $alert): string
+    private function fingerprintOf(AlertPayload $alert): string
     {
-        return md5(($alert['tenant_code'] ?? '') . '|' . ($alert['type'] ?? ''));
+        return md5(($alert->tenantCode ?? '') . '|' . $alert->type->value);
     }
 }
