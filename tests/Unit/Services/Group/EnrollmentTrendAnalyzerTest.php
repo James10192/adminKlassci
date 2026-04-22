@@ -12,10 +12,9 @@ it('flags a decline when both consecutive months drop above the threshold', func
     // 100 → 80 (20% drop) → 60 (25% drop) — both exceed 10%
     $result = $analyzer->detectDecline(60, 80, 100);
 
-    expect($result)->not->toBeNull();
-    expect($result['declining'])->toBeTrue();
-    expect($result['drop_pct_current'])->toBe(25.0);
-    expect($result['drop_pct_previous'])->toBe(20.0);
+    expect($result)->toBeInstanceOf(\App\Services\Group\EnrollmentDeclineResult::class);
+    expect($result->dropPctCurrent)->toBe(25.0);
+    expect($result->dropPctPrevious)->toBe(20.0);
 });
 
 it('returns null when only the current month drops below the threshold', function () {
@@ -55,17 +54,26 @@ it('honours overridden threshold from config', function () {
     // 100 → 93 (7%) → 86 (7.5%) — above 5%, would not flag at default 10%
     $result = $analyzer->detectDecline(86, 93, 100);
 
-    expect($result)->not->toBeNull();
-    expect($result['declining'])->toBeTrue();
+    expect($result)->toBeInstanceOf(\App\Services\Group\EnrollmentDeclineResult::class);
 });
 
-it('returns null for exactly the threshold value (strict comparison)', function () {
+it('flags exactly the threshold value (inclusive boundary, strict less-than filter)', function () {
     config()->set('group_portal.enrollment_decline_threshold_pct', 10);
 
     $analyzer = new EnrollmentTrendAnalyzer();
 
-    // Exactly 10% drop on both — strict < threshold means flagged
+    // Exactly 10% drop on both months. Source filter is `$drop < $threshold`,
+    // so a 10% drop is NOT filtered out — the boundary is inclusive on flag side.
     $result = $analyzer->detectDecline(81, 90, 100);
 
-    expect($result)->not->toBeNull();
+    expect($result)->toBeInstanceOf(\App\Services\Group\EnrollmentDeclineResult::class);
+});
+
+it('returns null just below the threshold (9.99%)', function () {
+    config()->set('group_portal.enrollment_decline_threshold_pct', 10);
+
+    $analyzer = new EnrollmentTrendAnalyzer();
+
+    // 100 → 90.01 (9.99% drop) → 81.00 (10.00% drop) — first month just below threshold
+    expect($analyzer->detectDecline(81, 9001, 10000))->toBeNull();
 });

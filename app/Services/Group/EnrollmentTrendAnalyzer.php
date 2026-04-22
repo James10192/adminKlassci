@@ -18,15 +18,15 @@ class EnrollmentTrendAnalyzer
     /**
      * Analyses a three-month window of new-inscription counts.
      *
-     * @param  int  $currentMonth     New inscriptions in the current calendar month.
-     * @param  int  $previousMonth    New inscriptions in the previous calendar month.
-     * @param  int  $twoMonthsAgo     New inscriptions two calendar months back.
+     * Returns null when no decline is detected. The presence of an
+     * `EnrollmentDeclineResult` instance IS the "declining" signal — no
+     * redundant boolean flag, no typo-prone array keys.
      *
-     * @return array{declining: bool, drop_pct_current: ?float, drop_pct_previous: ?float}|null
-     *         Null when no decline is detected. When declining, returns both
-     *         drop percentages so the caller can build a precise alert message.
+     * @param  int  $currentMonth   New inscriptions in the current calendar month.
+     * @param  int  $previousMonth  New inscriptions in the previous calendar month.
+     * @param  int  $twoMonthsAgo   New inscriptions two calendar months back.
      */
-    public function detectDecline(int $currentMonth, int $previousMonth, int $twoMonthsAgo): ?array
+    public function detectDecline(int $currentMonth, int $previousMonth, int $twoMonthsAgo): ?EnrollmentDeclineResult
     {
         if ($previousMonth === 0 || $twoMonthsAgo === 0) {
             return null;
@@ -41,11 +41,10 @@ class EnrollmentTrendAnalyzer
             return null;
         }
 
-        return [
-            'declining' => true,
-            'drop_pct_current' => round($dropCurrent, 1),
-            'drop_pct_previous' => round($dropPrevious, 1),
-        ];
+        return new EnrollmentDeclineResult(
+            dropPctCurrent: round($dropCurrent, 1),
+            dropPctPrevious: round($dropPrevious, 1),
+        );
     }
 
     /**

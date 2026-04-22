@@ -57,6 +57,25 @@ it('SSL returns null when metadata.days_remaining is missing', function () {
     expect($resolver->resolveSslTier(sslCheck(null)))->toBeNull();
 });
 
+it('SSL returns null when metadata.days_remaining is non-numeric (corrupted payload)', function () {
+    $resolver = new HealthCheckAlertResolver();
+
+    // The health-check command should always write an integer, but defensive
+    // guarding avoids a phantom Critical "expire dans 0 jour" if the payload
+    // ever ships "expired" / null / "N/A" as the value.
+    foreach (['expired', 'N/A', '', null] as $badValue) {
+        $check = new TenantHealthCheck();
+        $check->setRawAttributes([
+            'check_type' => 'ssl_certificate',
+            'status' => 'healthy',
+            'metadata' => json_encode(['days_remaining' => $badValue]),
+            'checked_at' => '2026-04-21 09:00:00',
+        ], true);
+
+        expect($resolver->resolveSslTier($check))->toBeNull();
+    }
+});
+
 it('SSL returns null when days_remaining is beyond the warning threshold', function () {
     $resolver = new HealthCheckAlertResolver();
 
