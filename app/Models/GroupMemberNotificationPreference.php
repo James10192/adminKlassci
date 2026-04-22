@@ -19,6 +19,11 @@ class GroupMemberNotificationPreference extends Model
         'dedup_hours',
         'last_digest_sent_at',
         'disabled_alert_types',
+        'bounce_count',
+        'last_bounce_at',
+        'last_bounce_smtp_code',
+        'last_bounce_type',
+        'disabled_due_to_bounces',
     ];
 
     protected $casts = [
@@ -28,6 +33,9 @@ class GroupMemberNotificationPreference extends Model
         'dedup_hours' => 'integer',
         'last_digest_sent_at' => 'datetime',
         'disabled_alert_types' => 'array',
+        'bounce_count' => 'integer',
+        'last_bounce_at' => 'datetime',
+        'disabled_due_to_bounces' => 'boolean',
     ];
 
     public function groupMember()
@@ -53,6 +61,8 @@ class GroupMemberNotificationPreference extends Model
                 'daily_digest_warnings' => true,
                 'digest_time' => '08:00',
                 'dedup_hours' => 24,
+                'bounce_count' => 0,
+                'disabled_due_to_bounces' => false,
             ],
         );
     }

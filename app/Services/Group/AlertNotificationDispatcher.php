@@ -74,6 +74,11 @@ class AlertNotificationDispatcher
                 continue;
             }
 
+            // Critical severity intentionally bypasses disabled_due_to_bounces:
+            // safer default that the founder hears about a Critical alert even
+            // if a previous mailbox went hard-bounce — one more attempt costs
+            // nothing, missing a Critical costs operations.
+
             foreach ($alerts as $alert) {
                 if (! $this->memberAcceptsAlert($member, $prefs, $alert)) {
                     continue;
@@ -149,6 +154,12 @@ class AlertNotificationDispatcher
                 continue;
             }
             if (empty($member->email)) {
+                continue;
+            }
+            // Non-Critical dispatch (this path handles Warning digests) stops
+            // for members flagged as hard-bouncing — safer than silently
+            // retrying dead mailboxes and risking provider reputation damage.
+            if ($prefs->disabled_due_to_bounces) {
                 continue;
             }
             if (! $this->isWithinDigestSlot($prefs)) {
