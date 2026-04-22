@@ -1692,6 +1692,25 @@
     min-width: 220px;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+/*
+ * Filament + @tailwindcss/forms both inject their own chevron, which layers
+ * on top of the browser's native <select> arrow. Reset appearance + draw a
+ * single SVG chevron so the three don't stack. !important wins over the
+ * Forms plugin's base style without needing a selector specificity war.
+ */
+.ga-select {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20' stroke='%2364748b' stroke-width='1.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='m6 8 4 4 4-4'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.6rem center !important;
+    background-size: 16px 16px !important;
+    padding-right: 2rem;
+}
+.ga-select::-ms-expand {
+    display: none;
+}
 .ga-select:focus,
 .ga-input:focus {
     outline: none;
