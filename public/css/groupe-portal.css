@@ -1796,3 +1796,17 @@
         margin-left: auto;
     }
 }
+
+/* =========================================================================
+   Notification preferences page (PR-C follow-up)
+   ========================================================================= */
+.gp-prefs-form {
+    margin-top: 1.25rem;
+}
+.gp-prefs-actions {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: flex-end;
+}
