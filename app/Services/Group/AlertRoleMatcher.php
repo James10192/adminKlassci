@@ -30,7 +30,9 @@ class AlertRoleMatcher
     public function isSubscribed(string $role, AlertType $type): bool
     {
         return match ($role) {
-            'fondateur', 'directeur_general' => true,
+            // DGA shares the founder/DG operational oversight scope — they
+            // act as the DG's proxy and must see every alert the DG would.
+            'fondateur', 'directeur_general', 'directeur_general_adjoint' => true,
             'directeur_financier' => in_array($type, self::FINANCIAL_ROLE_ALERTS, true),
             default => false,
         };
