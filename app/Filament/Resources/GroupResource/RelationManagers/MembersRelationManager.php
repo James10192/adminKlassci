@@ -40,9 +40,11 @@ class MembersRelationManager extends RelationManager
                 Forms\Components\TextInput::make('password')
                     ->label('Mot de passe')
                     ->password()
-                    ->required(fn ($livewire) => $livewire instanceof \Filament\Resources\RelationManagers\RelationManager && !$livewire->mountedTableActionRecord)
+                    ->revealable()
                     ->dehydrated(fn ($state) => filled($state))
-                    ->helperText('Laisser vide pour ne pas modifier'),
+                    ->helperText(fn () => config('group_portal.invite_flow_enabled')
+                        ? 'Laissez vide — un mot de passe temporaire sera généré et envoyé par email.'
+                        : 'Laisser vide pour ne pas modifier.'),
 
                 Forms\Components\Select::make('role')
                     ->label('Rôle')
@@ -111,6 +113,24 @@ class MembersRelationManager extends RelationManager
                     ->label('Ajouter un membre'),
             ])
             ->actions([
+                Tables\Actions\Action::make('resendInvitation')
+                    ->label('Renvoyer l\'invitation')
+                    ->icon('heroicon-o-envelope')
+                    ->color('info')
+                    ->requiresConfirmation()
+                    ->modalHeading('Renvoyer l\'invitation')
+                    ->modalDescription(fn ($record) => "Un nouveau mot de passe temporaire sera généré et envoyé à {$record->email}. L'ancien mot de passe sera invalidé.")
+                    ->visible(fn ($record) => config('group_portal.invite_flow_enabled')
+                        && ! empty($record->email))
+                    ->action(function ($record) {
+                        app(\App\Services\Group\GroupMemberInvitationService::class)->invite($record);
+
+                        \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title('Invitation envoyée')
+                            ->body("Nouveau lien d'activation envoyé à {$record->email}.")
+                            ->send();
+                    }),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()
                     ->requiresConfirmation(),

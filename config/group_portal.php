@@ -194,4 +194,27 @@ return [
     */
     'bounce_auto_disable_enabled' => env('GROUP_PORTAL_BOUNCE_AUTO_DISABLE_ENABLED', false),
     'bounce_threshold' => env('GROUP_PORTAL_BOUNCE_THRESHOLD', 3),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Member invitation flow (#54)
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, creating a group_member via the admin panel auto-generates
+    | a secure password, stores a hashed invitation token, and sends a signed
+    | activation URL (24h TTL) by email. On first login, the EnsurePasswordChanged
+    | middleware redirects to /groupe/set-password until the member rotates
+    | their password.
+    |
+    | Default OFF so an admin deploying this code doesn't trigger bulk emails
+    | on existing tenants. Flip per env:
+    |
+    |   GROUP_PORTAL_INVITE_FLOW_ENABLED=true
+    |
+    | Password generator: 16-char mix of letters/digits/symbols via Str::password.
+    | Invitation token: 64-char random string, stored as sha256 hash (raw only
+    | in the emailed URL — zero plaintext persistence).
+    */
+    'invite_flow_enabled' => env('GROUP_PORTAL_INVITE_FLOW_ENABLED', false),
+    'invitation_ttl_hours' => env('GROUP_PORTAL_INVITATION_TTL_HOURS', 24),
 ];
