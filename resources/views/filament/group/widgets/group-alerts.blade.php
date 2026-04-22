@@ -70,5 +70,14 @@
                 <p>Aucune alerte pour le moment. Tous les indicateurs sont dans le vert.</p>
             </div>
         @endif
+
+        @if($totalAlerts > count($alerts))
+            <div class="gp-alerts-footer">
+                <a href="{{ \App\Filament\Group\Pages\AlertsIndex::getUrl() }}" class="gp-alerts-footer-link">
+                    Voir les {{ $totalAlerts }} alertes
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:14px;height:14px;"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" /></svg>
+                </a>
+            </div>
+        @endif
     </div>
 </x-filament-widgets::widget>

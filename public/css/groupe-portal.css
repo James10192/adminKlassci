@@ -1604,3 +1604,195 @@
         justify-content: center;
     }
 }
+
+/* =========================================================================
+   Alerts index page (PR-B) — /groupe/alertes
+   Client-side filterable list complementing GroupAlertsWidget top-5 view.
+   ========================================================================= */
+.ga-panel {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
+    padding: 1.25rem;
+    margin-top: 1.25rem;
+    font-family: var(--gp-font-body, 'DM Sans', system-ui, sans-serif);
+}
+.ga-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem 1.5rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+.ga-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+.ga-filter-group--toggle {
+    margin-left: auto;
+    justify-content: flex-end;
+}
+.ga-filter-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+.ga-chip-row {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+.ga-chip {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.ga-chip:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+.ga-chip--active {
+    background: #0453cb;
+    border-color: #0453cb;
+    color: #ffffff;
+}
+.ga-chip--critical.ga-chip--active {
+    background: #dc2626;
+    border-color: #dc2626;
+}
+.ga-chip--warning.ga-chip--active {
+    background: #d97706;
+    border-color: #d97706;
+}
+.ga-chip--info.ga-chip--active {
+    background: #0ea5e9;
+    border-color: #0ea5e9;
+}
+.ga-select,
+.ga-input {
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.75rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    color: #0f172a;
+    min-width: 220px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ga-select:focus,
+.ga-input:focus {
+    outline: none;
+    border-color: #0453cb;
+    box-shadow: 0 0 0 3px rgba(4, 83, 203, 0.1);
+}
+.ga-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    color: #475569;
+    cursor: pointer;
+    user-select: none;
+}
+.ga-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #0453cb;
+    cursor: pointer;
+}
+.ga-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.ga-alert {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+}
+.ga-alert[data-acknowledged="true"] {
+    opacity: 0.55;
+}
+.ga-alert-type-tag {
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.45rem;
+    background: rgba(15, 23, 42, 0.05);
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #64748b;
+}
+.ga-alert-actions {
+    flex-shrink: 0;
+}
+.ga-alert-action-form {
+    margin: 0;
+}
+.ga-btn {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    border-radius: 8px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.ga-btn--ghost:hover {
+    background: #f8fafc;
+    border-color: #0453cb;
+    color: #0453cb;
+}
+.gp-alerts-footer {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #f1f5f9;
+    text-align: right;
+}
+.gp-alerts-footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #0453cb;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.gp-alerts-footer-link:hover {
+    color: #033a8e;
+    text-decoration: none;
+}
+@media (max-width: 768px) {
+    .ga-filters {
+        gap: 0.85rem;
+    }
+    .ga-filter-group--toggle {
+        margin-left: 0;
+    }
+    .ga-select,
+    .ga-input {
+        min-width: 0;
+        width: 100%;
+    }
+    .ga-alert {
+        flex-wrap: wrap;
+    }
+    .ga-alert-actions {
+        margin-left: auto;
+    }
+}
