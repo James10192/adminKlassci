@@ -169,4 +169,29 @@ return [
     'storage_ssh_user' => env('GROUP_PORTAL_STORAGE_SSH_USER', ''),
     'storage_tenant_base_path' => env('GROUP_PORTAL_STORAGE_TENANT_BASE_PATH', ''),
     'storage_ssh_timeout_sec' => env('GROUP_PORTAL_STORAGE_SSH_TIMEOUT_SEC', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bounce auto-disable (#47)
+    |--------------------------------------------------------------------------
+    |
+    | When an email-notification job exhausts its retries with a hard bounce
+    | (5xx SMTP code), BounceTracker increments `bounce_count` on the member's
+    | preferences and flips `disabled_due_to_bounces = true` once
+    | `bounce_threshold` is reached. The dispatcher then skips that member on
+    | future non-Critical sends — Critical severity ALWAYS bypasses the
+    | disable (safer default: founder must hear about Critical even at the
+    | risk of one more mail attempt).
+    |
+    | 4xx codes (soft bounces) are logged to `last_bounce_smtp_code` but do
+    | NOT increment the counter — they're transient provider issues, not
+    | permanent mailbox failures.
+    |
+    | Default OFF until a soak period confirms the SMTP-code heuristic has
+    | low false-positive rate. Flip per-env:
+    |
+    |   GROUP_PORTAL_BOUNCE_AUTO_DISABLE_ENABLED=true
+    */
+    'bounce_auto_disable_enabled' => env('GROUP_PORTAL_BOUNCE_AUTO_DISABLE_ENABLED', false),
+    'bounce_threshold' => env('GROUP_PORTAL_BOUNCE_THRESHOLD', 3),
 ];
