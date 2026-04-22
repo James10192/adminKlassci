@@ -45,6 +45,17 @@ class TenantUpdateStorage extends Command
 
         $this->info("Storage ingestion complete — {$updated} updated, {$skipped} skipped, {$tenants->count()} total.");
 
+        // Total failure (every tenant skipped, nothing updated) surfaces as a
+        // non-zero exit so cron job monitoring catches silent ingestion outages.
+        // Some skips are fine; ALL skips with zero successes = ops problem.
+        if ($tenants->count() > 0 && $updated === 0) {
+            \Log::error('[storage-ingestion] every tenant skipped — ingestion pipeline likely broken', [
+                'total' => $tenants->count(),
+                'skipped' => $skipped,
+            ]);
+            return self::FAILURE;
+        }
+
         return self::SUCCESS;
     }
 }

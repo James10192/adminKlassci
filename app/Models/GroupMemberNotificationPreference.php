@@ -61,15 +61,14 @@ class GroupMemberNotificationPreference extends Model
      * True when the member has opted in for emails AND this specific
      * AlertType isn't in their disabled list.
      */
-    public function acceptsAlertType(AlertType|string $type): bool
+    public function acceptsAlertType(AlertType $type): bool
     {
         if (! $this->email_enabled) {
             return false;
         }
 
-        $value = $type instanceof AlertType ? $type->value : (string) $type;
         $disabled = (array) ($this->disabled_alert_types ?? []);
 
-        return ! in_array($value, $disabled, true);
+        return ! in_array($type->value, $disabled, true);
     }
 }
