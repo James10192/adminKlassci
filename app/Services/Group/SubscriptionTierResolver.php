@@ -3,6 +3,7 @@
 namespace App\Services\Group;
 
 use App\Enums\AlertSeverity;
+use App\Enums\SubscriptionTier;
 use App\Models\Tenant;
 
 /**
@@ -10,6 +11,12 @@ use App\Models\Tenant;
  * configured in `config/group_portal.php`. Kept separate from the Tenant
  * model so it stays pure data and the resolver can be unit-tested without
  * hitting the database.
+ *
+ * String constants + enum cases live side by side intentionally:
+ * `TIER_*` strings keep backward compatibility with cached health arrays
+ * (Cache::remember on `$health['subscription_worst_tier']`) and Blade
+ * match expressions in the banner partial. New callers should prefer
+ * `resolveTierEnum()` / `SubscriptionTier` for type safety.
  */
 class SubscriptionTierResolver
 {
@@ -85,5 +92,17 @@ class SubscriptionTierResolver
             self::TIER_INFO => AlertSeverity::Info,
             default => AlertSeverity::Info,
         };
+    }
+
+    /**
+     * Typed alternative to `resolveTier()` — returns the backed enum case
+     * for callers that benefit from exhaustive `match` / IDE autocomplete.
+     * Internal implementation shares the same threshold logic.
+     */
+    public function resolveTierEnum(Tenant $tenant): ?SubscriptionTier
+    {
+        $tier = $this->resolveTier($tenant);
+
+        return $tier === null ? null : SubscriptionTier::from($tier);
     }
 }
