@@ -19,6 +19,14 @@ it('directeur_general receives every alert type (full operational oversight)', f
     }
 });
 
+it('directeur_general_adjoint receives every alert type (DG proxy)', function () {
+    $matcher = new AlertRoleMatcher();
+
+    foreach (AlertType::cases() as $type) {
+        expect($matcher->isSubscribed('directeur_general_adjoint', $type))->toBeTrue();
+    }
+});
+
 it('directeur_financier receives financial alerts only', function () {
     $matcher = new AlertRoleMatcher();
 

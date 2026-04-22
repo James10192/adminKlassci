@@ -61,6 +61,11 @@ class GroupMember extends Authenticatable implements FilamentUser, HasName
         return $this->role === 'directeur_general';
     }
 
+    public function isDirecteurGeneralAdjoint(): bool
+    {
+        return $this->role === 'directeur_general_adjoint';
+    }
+
     public function getGroupTenants()
     {
         return $this->group->tenants()->active()->get();

@@ -49,6 +49,7 @@ class MembersRelationManager extends RelationManager
                     ->options([
                         'fondateur' => 'Fondateur',
                         'directeur_general' => 'Directeur Général',
+                        'directeur_general_adjoint' => 'Directeur Général Adjoint',
                         'directeur_financier' => 'Directeur Financier',
                     ])
                     ->required()
@@ -84,12 +85,14 @@ class MembersRelationManager extends RelationManager
                     ->color(fn (string $state): string => match ($state) {
                         'fondateur' => 'success',
                         'directeur_general' => 'primary',
+                        'directeur_general_adjoint' => 'info',
                         'directeur_financier' => 'warning',
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
                         'fondateur' => 'Fondateur',
                         'directeur_general' => 'Directeur Général',
+                        'directeur_general_adjoint' => 'Directeur Général Adjoint',
                         'directeur_financier' => 'Directeur Financier',
                         default => $state,
                     }),
