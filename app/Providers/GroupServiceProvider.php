@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Contracts\Group\GroupFinancialsProviderInterface;
 use App\Contracts\Group\GroupKpiProviderInterface;
+use App\Models\GroupMember;
+use App\Observers\GroupMemberObserver;
 use App\Services\Group\BounceTracker;
 use App\Services\Group\GroupFinancialsProvider;
 use App\Services\Group\GroupKpiProvider;
@@ -29,6 +31,6 @@ class GroupServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        //
+        GroupMember::observe(GroupMemberObserver::class);
     }
 }

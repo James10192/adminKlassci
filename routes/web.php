@@ -58,6 +58,37 @@ Route::middleware(['web', 'auth:group', 'throttle:30,1'])
 // alert type to the member's `disabled_alert_types` so future notifications
 // of that type are skipped by AlertNotificationDispatcher. No auth: the
 // signature itself proves identity (signed route with member id in URL).
+// Signed activation landing after an invitation email — verifies the
+// temporary token then lets Filament's auth take over (the user still has
+// to enter the temp password + their new one on the set-password page).
+Route::middleware(['web', 'signed'])
+    ->get('/groupe/activer/{member}', function (int $member) {
+        $memberModel = \App\Models\GroupMember::findOrFail($member);
+        $token = (string) request('token', '');
+
+        if ($token === '' || $memberModel->invitation_token === null
+            || hash('sha256', $token) !== $memberModel->invitation_token) {
+            abort(403, 'Jeton invalide ou expiré.');
+        }
+
+        // Prime a session flag so the set-password page can short-circuit
+        // the mustChangePassword middleware exemption without re-checking
+        // the signed URL on every field keystroke.
+        session(['gp_invitation_member_id' => $memberModel->id]);
+
+        return redirect()->route('filament.group.auth.login')
+            ->with('status', 'Invitation validée. Connectez-vous avec votre mot de passe temporaire, vous serez invité à en définir un nouveau.');
+    })
+    ->name('groupe.invitation.activate');
+
+Route::middleware(['web', 'auth:group', 'throttle:6,1'])
+    ->get('/groupe/definir-mot-de-passe', [\App\Http\Controllers\Group\SetPasswordController::class, 'show'])
+    ->name('groupe.set-password.show');
+
+Route::middleware(['web', 'auth:group', 'throttle:6,1'])
+    ->post('/groupe/definir-mot-de-passe', [\App\Http\Controllers\Group\SetPasswordController::class, 'store'])
+    ->name('groupe.set-password.store');
+
 Route::middleware(['web', 'signed'])
     ->get('/groupe/notifications/desabonner/{member}/{type}', function (int $member, string $type) {
         $memberModel = \App\Models\GroupMember::findOrFail($member);

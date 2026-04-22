@@ -22,11 +22,15 @@ class GroupMember extends Authenticatable implements FilamentUser, HasName
         'avatar_path',
         'is_active',
         'last_login_at',
+        'password_changed_at',
+        'invitation_token',
+        'invitation_sent_at',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'invitation_token',
     ];
 
     protected $casts = [
@@ -34,7 +38,19 @@ class GroupMember extends Authenticatable implements FilamentUser, HasName
         'last_login_at' => 'datetime',
         'is_active' => 'boolean',
         'password' => 'hashed',
+        'password_changed_at' => 'datetime',
+        'invitation_sent_at' => 'datetime',
     ];
+
+    /**
+     * True when the member still needs to change their password before
+     * using the portal. New invitations land here until the user completes
+     * the set-password flow.
+     */
+    public function mustChangePassword(): bool
+    {
+        return $this->password_changed_at === null;
+    }
 
     public function group()
     {

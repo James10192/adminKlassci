@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Group\Pages\Auth\GroupLogin;
 use App\Filament\Group\Pages\EditProfile;
+use App\Http\Middleware\EnsurePasswordChanged;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -94,6 +95,7 @@ class GroupPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                EnsurePasswordChanged::class,
             ]);
     }
 }
