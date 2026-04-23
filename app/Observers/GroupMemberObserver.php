@@ -5,8 +5,6 @@ namespace App\Observers;
 use App\Models\GroupMember;
 use App\Services\Group\GroupMemberInvitationService;
 use App\Services\Group\UsernameGenerator;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 /**
  * Triggers the invitation flow for newly created members. Runs via the

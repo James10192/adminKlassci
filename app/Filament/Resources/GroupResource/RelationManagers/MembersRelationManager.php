@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\GroupResource\RelationManagers;
 
+use App\Enums\GroupMemberRole;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -55,14 +56,9 @@ class MembersRelationManager extends RelationManager
 
                 Forms\Components\Select::make('role')
                     ->label('Rôle')
-                    ->options([
-                        'fondateur' => 'Fondateur',
-                        'directeur_general' => 'Directeur Général',
-                        'directeur_general_adjoint' => 'Directeur Général Adjoint',
-                        'directeur_financier' => 'Directeur Financier',
-                    ])
+                    ->options(GroupMemberRole::options())
                     ->required()
-                    ->default('fondateur'),
+                    ->default(GroupMemberRole::Fondateur->value),
 
                 Forms\Components\TextInput::make('phone')
                     ->label('Téléphone')
@@ -93,20 +89,8 @@ class MembersRelationManager extends RelationManager
                 Tables\Columns\TextColumn::make('role')
                     ->label('Rôle')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'fondateur' => 'success',
-                        'directeur_general' => 'primary',
-                        'directeur_general_adjoint' => 'info',
-                        'directeur_financier' => 'warning',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'fondateur' => 'Fondateur',
-                        'directeur_general' => 'Directeur Général',
-                        'directeur_general_adjoint' => 'Directeur Général Adjoint',
-                        'directeur_financier' => 'Directeur Financier',
-                        default => $state,
-                    }),
+                    ->color(fn (string $state): string => GroupMemberRole::tryFrom($state)?->badgeColor() ?? 'gray')
+                    ->formatStateUsing(fn (string $state): string => GroupMemberRole::tryFrom($state)?->label() ?? $state),
 
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Actif')

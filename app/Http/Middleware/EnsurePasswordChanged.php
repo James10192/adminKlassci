@@ -15,11 +15,8 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsurePasswordChanged
 {
-    /**
-     * Routes allowed even when the user still has password_changed_at = null.
-     * Named routes resolved via `routeIs()` which supports wildcards — the
-     * Filament logout endpoint is registered as `filament.group.auth.logout`.
-     */
+    // Routes allowed even while password_changed_at is null — without these,
+    // the redirect loops and the user can't bail out via logout.
     private const EXEMPT_ROUTE_PATTERNS = [
         'filament.group.auth.logout',
         'groupe.set-password*',
@@ -29,18 +26,12 @@ class EnsurePasswordChanged
     {
         $user = auth('group')->user();
 
-        if ($user === null || ! method_exists($user, 'mustChangePassword')) {
+        if ($user === null || ! $user->mustChangePassword()) {
             return $next($request);
         }
 
-        if (! $user->mustChangePassword()) {
+        if ($request->routeIs(self::EXEMPT_ROUTE_PATTERNS)) {
             return $next($request);
-        }
-
-        foreach (self::EXEMPT_ROUTE_PATTERNS as $pattern) {
-            if ($request->routeIs($pattern)) {
-                return $next($request);
-            }
         }
 
         return redirect()->route('groupe.set-password.show');

@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use App\Models\GroupMember;
 use App\Services\Group\TemporaryPasswordGenerator;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Hash;
 
 /**
  * Fallback for members without email — the Filament password-reset link
@@ -24,7 +23,7 @@ class ResetGroupMemberPassword extends Command
 
     public function handle(TemporaryPasswordGenerator $generator): int
     {
-        $identifier = (string) $this->argument('identifier');
+        $identifier = $this->argument('identifier');
 
         $member = $this->resolveMember($identifier);
 
@@ -35,20 +34,15 @@ class ResetGroupMemberPassword extends Command
         }
 
         $tempPassword = $generator->generate();
+        $member->resetToTemporaryPassword($tempPassword);
 
-        $member->forceFill([
-            'password' => Hash::make($tempPassword),
-            'password_changed_at' => null,
-            'invitation_token' => null,
-        ])->save();
-
-        $this->line('');
+        $this->newLine();
         $this->info("Password reset for {$member->name} ({$member->email} / @{$member->username}).");
-        $this->line('');
+        $this->newLine();
         $this->line('  Mot de passe temporaire :');
-        $this->line('');
+        $this->newLine();
         $this->line("    <fg=yellow;options=bold>{$tempPassword}</>");
-        $this->line('');
+        $this->newLine();
         $this->warn('  Transmettez ce mot de passe au membre par un canal sécurisé.');
         $this->warn('  Il sera invité à le changer dès la première connexion.');
 

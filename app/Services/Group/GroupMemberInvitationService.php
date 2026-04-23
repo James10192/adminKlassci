@@ -4,7 +4,6 @@ namespace App\Services\Group;
 
 use App\Mail\Group\GroupMemberInvitationMail;
 use App\Models\GroupMember;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -50,12 +49,7 @@ class GroupMemberInvitationService
         $password = $this->passwordGenerator->generate();
         $rawToken = Str::random(64);
 
-        $member->forceFill([
-            'password' => Hash::make($password),
-            'password_changed_at' => null,
-            'invitation_token' => hash('sha256', $rawToken),
-            'invitation_sent_at' => now(),
-        ])->save();
+        $member->assignInvitationCredentials($password, hash('sha256', $rawToken));
 
         $activationUrl = $this->buildActivationUrl($member, $rawToken);
 

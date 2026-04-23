@@ -2,8 +2,8 @@
 
 namespace App\Mail\Group;
 
+use App\Mail\Concerns\TracksBounces;
 use App\Models\GroupMember;
-use App\Services\Group\BounceTracker;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -19,7 +19,7 @@ use Illuminate\Queue\SerializesModels;
  */
 class GroupMemberInvitationMail extends Mailable implements ShouldQueue
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, TracksBounces;
 
     public int $tries = 3;
 
@@ -44,8 +44,4 @@ class GroupMemberInvitationMail extends Mailable implements ShouldQueue
             ]);
     }
 
-    public function failed(\Throwable $exception): void
-    {
-        app(BounceTracker::class)->recordFailure($this->member, $exception);
-    }
 }

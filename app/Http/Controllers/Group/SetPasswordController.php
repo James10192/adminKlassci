@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Group;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 
@@ -46,13 +45,7 @@ class SetPasswordController extends Controller
             ],
         ]);
 
-        $member = auth('group')->user();
-
-        $member->forceFill([
-            'password' => Hash::make($validated['password']),
-            'password_changed_at' => now(),
-            'invitation_token' => null,
-        ])->save();
+        auth('group')->user()->recordPasswordRotation($validated['password']);
 
         session()->forget('gp_invitation_member_id');
 
