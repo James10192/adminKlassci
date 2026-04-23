@@ -10,7 +10,12 @@ class SubscriptionPlan extends Model
         'name',
         'slug',
         'description',
+        'target_segment',
         'monthly_fee',
+        'first_year_fee',
+        'annual_fee',
+        'whatsapp_types',
+        'sla_response_hours',
         'max_users',
         'max_staff',
         'max_students',
@@ -23,6 +28,10 @@ class SubscriptionPlan extends Model
 
     protected $casts = [
         'monthly_fee'               => 'integer',
+        'first_year_fee'            => 'integer',
+        'annual_fee'                => 'integer',
+        'whatsapp_types'            => 'integer',
+        'sla_response_hours'        => 'integer',
         'max_users'                 => 'integer',
         'max_staff'                 => 'integer',
         'max_students'              => 'integer',
@@ -51,6 +60,34 @@ class SubscriptionPlan extends Model
     public function getFormattedFeeAttribute(): string
     {
         return number_format($this->monthly_fee, 0, ',', ' ') . ' FCFA';
+    }
+
+    public function getFormattedFirstYearFeeAttribute(): string
+    {
+        return number_format($this->first_year_fee, 0, ',', ' ') . ' FCFA';
+    }
+
+    public function getFormattedAnnualFeeAttribute(): string
+    {
+        return number_format($this->annual_fee, 0, ',', ' ') . ' FCFA';
+    }
+
+    /**
+     * Libellé SLA pour affichage. Les paliers sont ceux de la grille
+     * Signature 2026 : 2h (ELITE), 4h (PRO), 24h = J+1 (Essentiel).
+     */
+    public function getSlaLabelAttribute(): string
+    {
+        if ($this->sla_response_hours === null) {
+            return 'Best effort';
+        }
+
+        return match (true) {
+            $this->sla_response_hours <= 2 => '2h (6j/7)',
+            $this->sla_response_hours <= 4 => '4h (5j/7)',
+            $this->sla_response_hours <= 24 => 'J+1 (jours ouvrables)',
+            default => "{$this->sla_response_hours}h",
+        };
     }
 
     public function getLimitsAttribute(): array

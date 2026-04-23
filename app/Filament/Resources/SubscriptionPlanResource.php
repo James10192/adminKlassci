@@ -37,15 +37,21 @@ class SubscriptionPlanResource extends Resource
                             ->label('Nom du plan')
                             ->required()
                             ->maxLength(100)
-                            ->placeholder('ex: Professional'),
+                            ->placeholder('ex: PRO'),
 
                         Forms\Components\TextInput::make('slug')
                             ->label('Identifiant unique')
                             ->required()
                             ->unique(ignoreRecord: true)
                             ->maxLength(50)
-                            ->placeholder('ex: professional')
+                            ->placeholder('ex: pro')
                             ->helperText('Utilisé en interne. Lettres minuscules, tirets uniquement.'),
+
+                        Forms\Components\TextInput::make('target_segment')
+                            ->label('Segment cible')
+                            ->maxLength(100)
+                            ->placeholder('ex: Supérieur émergent (500 élèves max)')
+                            ->helperText('À qui s\'adresse ce plan ? Utile pour la page pricing web.'),
 
                         Forms\Components\Textarea::make('description')
                             ->label('Description')
@@ -54,15 +60,35 @@ class SubscriptionPlanResource extends Resource
                             ->columnSpanFull(),
                     ])->columns(2),
 
-                Forms\Components\Section::make('Tarification')
+                Forms\Components\Section::make('Tarification — Formule Signature')
+                    ->description('Grille 2026 : 1ère année (setup + abonnement) / récurrent annuel / mensuel (+15% sur annuel).')
                     ->schema([
+                        Forms\Components\TextInput::make('first_year_fee')
+                            ->label('Prix 1ère année')
+                            ->required()
+                            ->numeric()
+                            ->prefix('FCFA')
+                            ->default(0)
+                            ->minValue(0)
+                            ->helperText('Setup + abonnement année 1 (ex: 988 000 pour Essentiel)'),
+
+                        Forms\Components\TextInput::make('annual_fee')
+                            ->label('Prix annuel récurrent')
+                            ->required()
+                            ->numeric()
+                            ->prefix('FCFA')
+                            ->default(0)
+                            ->minValue(0)
+                            ->helperText('À partir de la 2ème année (ex: 700 000 pour Essentiel)'),
+
                         Forms\Components\TextInput::make('monthly_fee')
                             ->label('Tarif mensuel')
                             ->required()
                             ->numeric()
                             ->prefix('FCFA')
                             ->default(0)
-                            ->minValue(0),
+                            ->minValue(0)
+                            ->helperText('Recommandé : annuel × 1.15 / 12 (+15% premium mensuel)'),
 
                         Forms\Components\TextInput::make('sort_order')
                             ->label('Ordre d\'affichage')
@@ -76,6 +102,27 @@ class SubscriptionPlanResource extends Resource
                             ->default(true)
                             ->helperText('Les plans inactifs ne peuvent pas être assignés à de nouveaux tenants.'),
                     ])->columns(3),
+
+                Forms\Components\Section::make('Service & SLA')
+                    ->schema([
+                        Forms\Components\TextInput::make('whatsapp_types')
+                            ->label('Types de notifications WhatsApp')
+                            ->numeric()
+                            ->default(0)
+                            ->minValue(0)
+                            ->maxValue(6)
+                            ->suffix('types')
+                            ->helperText('Essentiel=3, PRO=5, ELITE=6'),
+
+                        Forms\Components\TextInput::make('sla_response_hours')
+                            ->label('SLA réponse support (heures)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(72)
+                            ->suffix('heures')
+                            ->placeholder('24 = J+1')
+                            ->helperText('Essentiel=24 (J+1), PRO=4, ELITE=2'),
+                    ])->columns(2),
 
                 Forms\Components\Section::make('Limites & Quotas')
                     ->description('Définissez les limites incluses dans ce plan. Utilisez 999999 pour "illimité".')
@@ -127,16 +174,31 @@ class SubscriptionPlanResource extends Resource
                         Forms\Components\CheckboxList::make('features')
                             ->label('')
                             ->options([
-                                'inscriptions'       => 'Inscriptions',
-                                'notes'              => 'Notes & Évaluations',
-                                'bulletins'          => 'Bulletins PDF',
-                                'paiements'          => 'Gestion des paiements',
-                                'notifications'      => 'Notifications multi-canal',
-                                'api'                => 'Accès API REST',
-                                'exports'            => 'Exports Excel/PDF',
-                                'emploi_temps'       => 'Emploi du temps',
-                                'chatbot'            => 'Chatbot IA Gemini',
-                                'support_prioritaire'=> 'Support prioritaire',
+                                'inscriptions'                      => 'Inscriptions',
+                                'notes'                             => 'Notes & Évaluations',
+                                'bulletins'                         => 'Bulletins PDF',
+                                'paiements'                         => 'Gestion des paiements',
+                                'emploi_temps'                      => 'Emploi du temps',
+                                'presences'                         => 'Présences & assiduité',
+                                'notifications_mail'                => 'Notifications mail',
+                                'whatsapp_3_types'                  => 'WhatsApp 3 types',
+                                'whatsapp_5_types'                  => 'WhatsApp 5 types',
+                                'whatsapp_6_types'                  => 'WhatsApp 6 types',
+                                'whatsapp_5000_app'                 => 'WhatsApp 5000 app',
+                                'plateforme_cours_en_ligne'         => 'Plateforme cours en ligne',
+                                'chatbot'                           => 'Chatbot IA Gemini',
+                                'api'                               => 'Accès API REST',
+                                'exports'                           => 'Exports Excel/PDF',
+                                'personnalisation_design'           => 'Personnalisation du design',
+                                'personnalisation_avancee'          => 'Personnalisation avancée',
+                                'personnalisation_continue'         => 'Personnalisation continue',
+                                'maintenance_annuelle'              => 'Maintenance à l\'année',
+                                'mise_a_jour_ergonomie'             => 'Mise à jour de l\'ergonomie',
+                                'formation_prise_en_main'           => 'Formation prise en main',
+                                'nouvelles_features'                => 'Nouvelles fonctionnalités incluses',
+                                'acces_gratuit_nouvelles_features'  => 'Accès gratuit nouvelles fonctionnalités',
+                                'support_prioritaire'               => 'Support prioritaire',
+                                'csm_dedie'                         => 'CSM dédié',
                             ])
                             ->columns(3)
                             ->gridDirection('row'),
@@ -159,10 +221,33 @@ class SubscriptionPlanResource extends Resource
                     ->sortable()
                     ->weight('bold'),
 
-                Tables\Columns\TextColumn::make('monthly_fee')
-                    ->label('Tarif mensuel')
-                    ->formatStateUsing(fn ($state) => number_format($state, 0, ',', ' ') . ' FCFA')
+                Tables\Columns\TextColumn::make('first_year_fee')
+                    ->label('1ère année')
+                    ->formatStateUsing(fn ($state) => $state > 0 ? number_format($state, 0, ',', ' ') . ' FCFA' : '—')
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('annual_fee')
+                    ->label('Annuel')
+                    ->formatStateUsing(fn ($state) => $state > 0 ? number_format($state, 0, ',', ' ') . ' FCFA' : '—')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('monthly_fee')
+                    ->label('Mensuel')
+                    ->formatStateUsing(fn ($state) => number_format($state, 0, ',', ' ') . ' FCFA')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('sla_label')
+                    ->label('SLA')
+                    ->badge()
+                    ->color('info')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('whatsapp_types')
+                    ->label('WhatsApp')
+                    ->formatStateUsing(fn ($state) => $state > 0 ? "{$state} types" : '—')
+                    ->alignCenter()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('max_users')
                     ->label('Utilisateurs')
