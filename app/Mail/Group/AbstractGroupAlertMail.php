@@ -2,9 +2,9 @@
 
 namespace App\Mail\Group;
 
+use App\Mail\Concerns\TracksBounces;
 use App\Models\Group;
 use App\Models\GroupMember;
-use App\Services\Group\BounceTracker;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\URL;
  */
 abstract class AbstractGroupAlertMail extends Mailable implements ShouldQueue
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, TracksBounces;
 
     public int $tries = 3;
 
@@ -43,17 +43,5 @@ abstract class AbstractGroupAlertMail extends Mailable implements ShouldQueue
             'member' => $this->member->id,
             'type' => $type,
         ]);
-    }
-
-    /**
-     * Fires after the queue worker exhausts `$tries` retries. Delegates to
-     * BounceTracker which inspects the exception's SMTP code and decides
-     * whether to count it toward auto-disable (hard bounce) or just log it
-     * (soft bounce). Kept here (not on each subclass) so all alert Mailables
-     * honour the same bounce policy without repetition.
-     */
-    public function failed(\Throwable $exception): void
-    {
-        app(BounceTracker::class)->recordFailure($this->member, $exception);
     }
 }
