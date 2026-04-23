@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\GroupMember;
 use App\Services\Group\GroupMemberInvitationService;
+use App\Services\Group\UsernameGenerator;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -19,6 +20,18 @@ use Illuminate\Support\Str;
  */
 class GroupMemberObserver
 {
+    /**
+     * Auto-generate a username before insert when the admin didn't supply
+     * an email. Runs on `creating` (not `created`) so the username lands in
+     * the same INSERT instead of a follow-up UPDATE.
+     */
+    public function creating(GroupMember $member): void
+    {
+        if (empty($member->username) && empty($member->email)) {
+            $member->username = app(UsernameGenerator::class)->generate($member->name ?? '');
+        }
+    }
+
     public function created(GroupMember $member): void
     {
         if (! config('group_portal.invite_flow_enabled', false)) {
@@ -30,8 +43,9 @@ class GroupMemberObserver
             return;
         }
 
-        // If no email: defer — PR C will wire the username-only case via
-        // an artisan command that prints the activation URL on-screen.
+        // Username-only members skip the email invitation. Admin must share
+        // the temporary password via `php artisan group-portal:reset-password`
+        // which prints the credentials on-screen.
         if (empty($member->email)) {
             return;
         }
