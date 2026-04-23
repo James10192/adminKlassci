@@ -16,6 +16,7 @@ class GroupMember extends Authenticatable implements FilamentUser, HasName
         'group_id',
         'name',
         'email',
+        'username',
         'password',
         'role',
         'phone',

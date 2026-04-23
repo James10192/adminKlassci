@@ -33,9 +33,16 @@ class MembersRelationManager extends RelationManager
                 Forms\Components\TextInput::make('email')
                     ->label('Email')
                     ->email()
-                    ->required()
                     ->unique(ignoreRecord: true)
-                    ->maxLength(255),
+                    ->maxLength(255)
+                    ->helperText('Laissez vide si le membre n\'a pas d\'email — un nom d\'utilisateur sera généré automatiquement.'),
+
+                Forms\Components\TextInput::make('username')
+                    ->label('Nom d\'utilisateur')
+                    ->unique(ignoreRecord: true)
+                    ->maxLength(80)
+                    ->alphaDash()
+                    ->helperText('Généré automatiquement si vide et pas d\'email. Utilisé pour la connexion lorsqu\'il n\'y a pas d\'email.'),
 
                 Forms\Components\TextInput::make('password')
                     ->label('Mot de passe')
@@ -79,7 +86,9 @@ class MembersRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('email')
                     ->label('Email')
-                    ->searchable(),
+                    ->searchable()
+                    ->placeholder('—')
+                    ->description(fn ($record) => $record->username ? '@' . $record->username : null),
 
                 Tables\Columns\TextColumn::make('role')
                     ->label('Rôle')
