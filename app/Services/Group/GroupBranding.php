@@ -8,15 +8,29 @@ use Illuminate\Support\Facades\Storage;
 /**
  * Résout l'identité visuelle affichée dans le portail groupe.
  *
- * Trois étages, du plus spécifique au plus générique :
+ * Deux étages aujourd'hui, du plus spécifique au plus générique :
  *
- *   1. le groupe connecté        (groups.logo_path, groups.metadata->branding)
- *   2. — réservé à l'établissement, branché en L1 —
- *   3. la marque KLASSCI          (config/group_portal.branding)
+ *   1. le groupe connecté   (groups.logo_path, groups.metadata->branding)
+ *   2. la marque KLASSCI    (config/group_portal.branding)
  *
- * Le premier étage qui répond gagne. Aucune valeur n'est écrite en dur dans
- * le PanelProvider : un groupe qui dépose son logo doit voir son portail
- * changer sans redéploiement.
+ * Le premier qui répond gagne. Aucune valeur n'est écrite en dur dans le
+ * PanelProvider : un groupe qui dépose son logo doit voir son portail changer
+ * sans redéploiement.
+ *
+ * Un étage établissement viendra s'intercaler, mais pas encore, et pour deux
+ * raisons qu'il vaut mieux écrire que redécouvrir :
+ *
+ *  - Le logo d'une école vit dans SA base, sous le réglage `school_logo`, et
+ *    le chemin y est écrit de trois façons selon l'ancienneté du tenant —
+ *    avec le préfixe `storage/`, sans, ou réduit au seul nom de fichier.
+ *    Côté KLASSCIv2, SettingsHelper::candidatsLogo() tranche en essayant les
+ *    candidats contre son disque local. Depuis le master on ne peut pas
+ *    vérifier qu'un fichier existe sur la machine d'en face : construire
+ *    l'URL à l'aveugle mettrait une image cassée en haut de page.
+ *  - Le rabattre côté master (tenants.metadata->branding) supposerait
+ *    d'ajouter un champ imbriqué au formulaire établissement, où un Textarea
+ *    lié à `metadata` entier écrase déjà tout à l'enregistrement. Il faut
+ *    d'abord démêler ce champ.
  *
  * Toutes les méthodes sont sûres hors requête authentifiée (page de
  * connexion, console, tests) : elles retombent alors sur la marque KLASSCI.

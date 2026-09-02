@@ -111,3 +111,65 @@ it('n ecrit plus le nom ni le logo en dur dans le PanelProvider', function () {
         ->and($source)->not->toContain("->brandName('KLASSCI Groupe')")
         ->and($source)->not->toContain("->brandLogo(asset(");
 });
+
+it('injecte la couleur du groupe en variable CSS lisible par la feuille de style', function () {
+    $source = file_get_contents(app_path('Providers/Filament/GroupPanelProvider.php'));
+    $css = file_get_contents(public_path('css/groupe-portal.css'));
+
+    // La palette Filament est figée au démarrage du panel et ne peut pas
+    // varier par groupe ; --gp-primary, si.
+    expect($source)->toContain('--gp-primary:')
+        ->and($css)->toContain('var(--gp-primary');
+});
+
+it('offre au fondateur de quoi deposer un logo et choisir une couleur', function () {
+    $source = file_get_contents(app_path('Filament/Resources/GroupResource.php'));
+
+    expect($source)
+        ->toContain("FileUpload::make('logo_path')")
+        ->toContain("ColorPicker::make('metadata.branding.primary')")
+        // Sans disque public explicite, le fichier atterrit sur le disque
+        // local et n'est jamais servi par le web.
+        ->toContain("->disk('public')");
+});
+
+it('prefere le logo du groupe quand le fichier existe vraiment', function () {
+    Illuminate\Support\Facades\Storage::fake('public');
+    Illuminate\Support\Facades\Storage::disk('public')->put('group-logos/rostan.png', 'x');
+
+    $group = new App\Models\Group(['logo_path' => 'group-logos/rostan.png']);
+
+    expect((new GroupBranding)->logoUrl($group))->toContain('group-logos/rostan.png');
+});
+
+it('ignore un logo_path qui ne pointe sur aucun fichier', function () {
+    Illuminate\Support\Facades\Storage::fake('public');
+
+    $group = new App\Models\Group(['logo_path' => 'group-logos/disparu.png']);
+
+    expect((new GroupBranding)->logoUrl($group))
+        ->not->toContain('disparu')
+        ->toContain(config('group_portal.branding.logo'));
+});
+
+it('accepte une URL absolue de logo sans toucher au disque', function () {
+    $group = new App\Models\Group(['logo_path' => 'https://cdn.exemple.ci/rostan.svg']);
+
+    expect((new GroupBranding)->logoUrl($group))->toBe('https://cdn.exemple.ci/rostan.svg');
+});
+
+it('fait suivre le favicon au logo du groupe', function () {
+    Illuminate\Support\Facades\Storage::fake('public');
+    Illuminate\Support\Facades\Storage::disk('public')->put('group-logos/rostan.png', 'x');
+
+    $group = new App\Models\Group(['logo_path' => 'group-logos/rostan.png']);
+    $branding = new GroupBranding;
+
+    expect($branding->faviconUrl($group))->toBe($branding->logoUrl($group));
+});
+
+it('prend le nom du groupe comme nom du portail', function () {
+    $group = new App\Models\Group(['name' => 'GROUPE ROSTAN']);
+
+    expect((new GroupBranding)->name($group))->toBe('GROUPE ROSTAN');
+});
