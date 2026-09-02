@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Tenant;
+use App\Support\SubscriptionCountdown;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -92,13 +93,10 @@ class TenantsTableWidget extends BaseWidget
                     ->label('Expiration')
                     ->date('d/m/Y')
                     ->badge()
-                    ->color(fn ($state) => !$state ? 'gray' : (now()->diffInDays($state, false) < 0 ? 'danger' : (now()->diffInDays($state, false) <= 30 ? 'warning' : 'success')))
-                    ->formatStateUsing(function ($state) {
-                        if (!$state) return 'N/A';
-                        $daysUntil = now()->diffInDays($state, false);
-                        if ($daysUntil < 0) return 'Expiré';
-                        return $daysUntil <= 30 ? "Dans {$daysUntil}j" : $state->format('d/m/Y');
-                    }),
+                    ->color(fn (Tenant $record) => SubscriptionCountdown::tone($record->daysRemaining()))
+                    ->formatStateUsing(
+                        fn ($state, Tenant $record) => SubscriptionCountdown::label($record->daysRemaining(), $state)
+                    ),
             ])
             ->actions([
                 Tables\Actions\Action::make('view')

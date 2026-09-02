@@ -7,6 +7,7 @@ use App\Filament\Resources\TenantResource\RelationManagers;
 use App\Models\Group;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
+use App\Support\SubscriptionCountdown;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -499,19 +500,10 @@ class TenantResource extends Resource
                     ->date('d/m/Y')
                     ->sortable()
                     ->badge()
-                    ->color(fn ($record) => match(true) {
-                        !$record->subscription_end_date => 'gray',
-                        $record->subscription_end_date->isPast() => 'danger',
-                        now()->diffInDays($record->subscription_end_date, false) <= 30 => 'warning',
-                        default => 'success',
-                    })
-                    ->formatStateUsing(function ($state, $record) {
-                        if (!$state) return '—';
-                        $days = now()->diffInDays($state, false);
-                        if ($days < 0) return 'Expiré';
-                        if ($days <= 30) return "Dans {$days}j";
-                        return $state->format('d/m/Y');
-                    }),
+                    ->color(fn ($record) => SubscriptionCountdown::tone($record->daysRemaining()))
+                    ->formatStateUsing(
+                        fn ($state, $record) => SubscriptionCountdown::label($record->daysRemaining(), $state, '—')
+                    ),
 
                 Tables\Columns\TextColumn::make('last_deployed_at')
                     ->label('Déployé')
