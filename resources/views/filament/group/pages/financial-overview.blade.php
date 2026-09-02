@@ -70,7 +70,7 @@
             </thead>
             <tbody>
                 @foreach($financials as $code => $data)
-                    @php $rateClass = $data['collection_rate'] >= 70 ? 'success' : ($data['collection_rate'] >= 50 ? 'warning' : 'danger'); @endphp
+                    @php $rateClass = RateHealth::tone((float) $data['collection_rate']); @endphp
                     <tr>
                         <td>
                             <div class="cell-name">

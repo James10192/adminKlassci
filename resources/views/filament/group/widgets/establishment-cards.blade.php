@@ -3,7 +3,7 @@
         @forelse($this->getEstablishments() as $code => $data)
             @php
                 $rate = $data['collection_rate'] ?? 0;
-                $rateClass = $rate >= 70 ? 'success' : ($rate >= 50 ? 'warning' : 'danger');
+                $rateClass = \App\Support\RateHealth::tone((float) $rate);
             @endphp
             <div class="gp-card">
                 <div class="gp-card-accent"></div>

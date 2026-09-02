@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Pages;
 
+use App\Enums\GroupMemberRole;
 use App\Filament\Group\Concerns\HasCustomHero;
 use App\Filament\Group\Resources\EstablishmentResource;
 use App\Services\TenantAggregationService;
@@ -74,13 +75,17 @@ class GroupDashboard extends Dashboard
         );
     }
 
+    /**
+     * Reads the label from the enum rather than a local table.
+     *
+     * A hardcoded map silently degrades: a role added to GroupMemberRole but
+     * forgotten here falls through to `?? $role` and greets the member with a
+     * raw slug — which is exactly what a Directeur Général Adjoint saw. The
+     * enum is the single source of truth for every downstream label.
+     */
     private static function roleLabel(string $role): string
     {
-        return [
-            'fondateur' => 'Fondateur',
-            'directeur_general' => 'Directeur Général',
-            'directeur_financier' => 'Directeur Financier',
-        ][$role] ?? $role;
+        return GroupMemberRole::tryFrom($role)?->label() ?? $role;
     }
 
     /** @param array<string,mixed> $kpis @return list<string> */

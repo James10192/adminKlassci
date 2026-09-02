@@ -117,7 +117,7 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        @php $rateClass = ($data['collection_rate'] ?? 0) >= 70 ? 'success' : (($data['collection_rate'] ?? 0) >= 50 ? 'warning' : 'danger'); @endphp
+                        @php $rateClass = RateHealth::tone((float) ($data['collection_rate'] ?? 0)); @endphp
                         <td><span class="gp-rate-badge {{ $rateClass }}">{{ $data['collection_rate'] ?? 0 }}%</span></td>
                     @endforeach
                 </tr>

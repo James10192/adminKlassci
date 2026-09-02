@@ -217,4 +217,51 @@ return [
     */
     'invite_flow_enabled' => env('GROUP_PORTAL_INVITE_FLOW_ENABLED', false),
     'invitation_ttl_hours' => env('GROUP_PORTAL_INVITATION_TTL_HOURS', 24),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Seuils de santé d'un taux (recouvrement, assiduité)
+    |--------------------------------------------------------------------------
+    |
+    | Lus par App\Support\RateHealth, qui colore et qualifie tout taux affiché
+    | dans le portail. Un taux de recouvrement de 65 % n'a pas le même sens
+    | pour un groupe qui encaisse à l'inscription et pour un groupe qui étale
+    | sur trois tranches — d'où la configuration plutôt qu'une constante.
+    |
+    |   >= healthy  -> vert,   « sain »
+    |   >= at_risk  -> orange, « à surveiller »
+    |   sinon       -> rouge,  « critique »
+    |
+    | Surchargeables par environnement :
+    |   GROUP_PORTAL_RATE_HEALTHY=75
+    |   GROUP_PORTAL_RATE_AT_RISK=55
+    |
+    */
+    'rate_health' => [
+        'healthy' => env('GROUP_PORTAL_RATE_HEALTHY', 70),
+        'at_risk' => env('GROUP_PORTAL_RATE_AT_RISK', 50),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Identité visuelle du portail
+    |--------------------------------------------------------------------------
+    |
+    | Valeurs de repli, utilisées quand le groupe connecté n'a pas défini les
+    | siennes. La cascade complète (groupe -> établissement -> KLASSCI) est
+    | résolue par App\Services\Group\GroupBranding ; ce bloc n'en est que le
+    | dernier étage, celui de la marque KLASSCI elle-même.
+    |
+    | Aucune de ces valeurs n'est écrite en dur dans GroupPanelProvider : un
+    | groupe qui pose son logo et sa couleur doit voir son portail changer
+    | sans qu'on redéploie.
+    |
+    */
+    'branding' => [
+        'name' => env('GROUP_PORTAL_BRAND_NAME', 'KLASSCI Groupe'),
+        'logo' => env('GROUP_PORTAL_BRAND_LOGO', 'images/LOGO-KLASSCI-PNG.png'),
+        'logo_height' => env('GROUP_PORTAL_BRAND_LOGO_HEIGHT', '2.5rem'),
+        'favicon' => env('GROUP_PORTAL_BRAND_FAVICON', 'images/LOGO-KLASSCI-PNG.png'),
+        'primary' => env('GROUP_PORTAL_BRAND_PRIMARY', '#0453cb'),
+    ],
 ];
