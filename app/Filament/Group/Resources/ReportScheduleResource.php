@@ -181,8 +181,16 @@ class ReportScheduleResource extends Resource
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
+            // Filament pose une CROIX par defaut sur un etat vide. Sur cet
+            // ecran, le vide n'est pas une erreur : c'est l'etat de depart, et
+            // le texte juste en dessous invite a creer. Une croix rouge sous un
+            // appel a l'action se lit comme un echec.
+            ->emptyStateIcon('heroicon-o-clock')
             ->emptyStateHeading('Aucun envoi programmé')
             ->emptyStateDescription('Programmez un état pour le recevoir par e-mail sans avoir à ouvrir le portail.')
+            ->emptyStateActions([
+                Tables\Actions\CreateAction::make()->label('Programmer un envoi'),
+            ])
             ->defaultSort('created_at', 'desc');
     }
 
