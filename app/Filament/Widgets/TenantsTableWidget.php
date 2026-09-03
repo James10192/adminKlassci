@@ -17,7 +17,7 @@ class TenantsTableWidget extends BaseWidget
     public function table(Table $table): Table
     {
         return $table
-            ->heading('⚠️ Alertes Quotas & Abonnements')
+            ->heading('Ce qui demande une décision')
             ->query(
                 Tenant::query()
                     ->where('status', 'active')

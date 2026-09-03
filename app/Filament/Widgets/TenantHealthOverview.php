@@ -4,24 +4,29 @@ namespace App\Filament\Widgets;
 
 use App\Models\Tenant;
 use App\Models\TenantHealthCheck;
+use App\Services\Parc\EtatParcResolver;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
+use Illuminate\Support\Carbon;
 
 /**
  * État de santé des établissements, à l'instant présent.
  *
- * Les tuiles portaient elles aussi des sparklines inventées : une série codée
- * en dur (1, 0, 1, 2, 1, 0, valeur) ou de l'arithmétique sur le chiffre du
- * jour présentée comme un historique. Sur un écran de supervision, une courbe
- * qui ne vient pas des relevés est pire qu'inutile : elle rassure.
+ * Deux corrections y ont été faites, de la même famille.
+ *
+ * Les tuiles portaient des sparklines inventées : une série codée en dur
+ * (1, 0, 1, 2, 1, 0, valeur) ou de l'arithmétique sur le chiffre du jour
+ * présentée comme un historique. Sur un écran de supervision, une courbe qui
+ * ne vient pas des relevés est pire qu'inutile : elle rassure.
+ *
+ * Puis les établissements jamais vérifiés étaient comptés parmi les
+ * opérationnels. Le décompte disait « 4 opérationnels » sur un parc où la
+ * sonde n'était jamais passée. Voir App\Services\Parc\EtatParcResolver.
  *
  * `tenant_health_checks` garde bien des relevés horodatés, donc une vraie
  * tendance est calculable — mais elle demanderait un index de tête sur la
  * colonne de date, absent aujourd'hui, alors que ce widget se rafraîchit
  * toutes les 30 secondes. À faire quand l'index sera là.
- *
- * La ligne « Dernière vérif. il y a N minutes », elle, est réelle et suffit à
- * dire si le chiffre affiché est frais.
  */
 class TenantHealthOverview extends BaseWidget
 {
@@ -31,95 +36,71 @@ class TenantHealthOverview extends BaseWidget
 
     protected int | string | array $columnSpan = 'full';
 
+    protected function getColumns(): int
+    {
+        return 4;
+    }
+
     protected function getStats(): array
     {
-        $totalTenants = Tenant::where('status', 'active')->count();
+        $etablissements = Tenant::where('status', 'active')->pluck('name', 'id');
+        $fraicheur = (int) config('klassci.health_freshness_minutes', 15);
 
-        // No health checks yet — use tenant count as baseline
-        if (TenantHealthCheck::count() === 0) {
-            return [
-                Stat::make('Tenants Opérationnels', $totalTenants)
-                    ->description("Aucun health check exécuté pour l'instant")
-                    ->descriptionIcon('heroicon-o-information-circle')
-                    ->color('gray'),
-
-                Stat::make('Tenants en Alerte', 0)
-                    ->description('Nécessitent attention')
-                    ->descriptionIcon('heroicon-o-exclamation-triangle')
-                    ->color('warning'),
-
-                Stat::make('Tenants Critiques', 0)
-                    ->description('Lancez un health-check pour détecter les problèmes')
-                    ->descriptionIcon('heroicon-o-shield-check')
-                    ->color('success'),
-            ];
-        }
-
-        // Get latest check per tenant (subquery approach for performance)
-        $latestCheckIds = TenantHealthCheck::selectRaw('MAX(id) as id')
+        // Le dernier relevé de chaque établissement, en une requête : l'id le
+        // plus élevé par tenant, puis les lignes correspondantes.
+        $derniersIds = TenantHealthCheck::selectRaw('MAX(id) as id')
+            ->whereIn('tenant_id', $etablissements->keys())
             ->groupBy('tenant_id')
             ->pluck('id');
 
-        $latestChecks = TenantHealthCheck::whereIn('id', $latestCheckIds)
-            ->with('tenant')
-            ->get();
+        $derniers = TenantHealthCheck::whereIn('id', $derniersIds)
+            ->get(['tenant_id', 'status', 'created_at'])
+            ->keyBy('tenant_id');
 
-        $healthyCount = 0;
-        $warningCount = 0;
-        $criticalCount = 0;
-        $checkedTenantIds = [];
+        // Chaque établissement actif figure dans le tableau, même sans relevé :
+        // c'est justement le cas qu'on veut voir.
+        $releves = $etablissements->keys()->mapWithKeys(fn ($id) => [$id => [
+            'statut' => $derniers[$id]->status ?? null,
+            'releve_a' => $derniers[$id]->created_at ?? null,
+        ]])->all();
 
-        foreach ($latestChecks as $check) {
-            if (!$check->tenant) continue;
+        $r = app(EtatParcResolver::class)->repartir($releves, now(), $fraicheur);
 
-            $tenantId = $check->tenant_id;
-            if (in_array($tenantId, $checkedTenantIds)) continue;
-            $checkedTenantIds[] = $tenantId;
+        $dernierReleve = TenantHealthCheck::max('created_at');
+        $quand = $dernierReleve
+            ? 'Dernier relevé ' . Carbon::parse($dernierReleve)->diffForHumans()
+            : 'La sonde n\'est jamais passée';
 
-            // Look at recent checks for this tenant (last 15 min)
-            $recentStatuses = TenantHealthCheck::where('tenant_id', $tenantId)
-                ->where('created_at', '>=', now()->subMinutes(15))
-                ->pluck('status')
-                ->toArray();
-
-            if (empty($recentStatuses)) {
-                // Fall back to latest single check
-                $recentStatuses = [$check->status];
-            }
-
-            if (in_array('unhealthy', $recentStatuses)) {
-                $criticalCount++;
-            } elseif (in_array('degraded', $recentStatuses)) {
-                $warningCount++;
-            } else {
-                $healthyCount++;
-            }
-        }
-
-        // Tenants with no health check at all
-        $uncheckedCount = $totalTenants - count($checkedTenantIds);
-        $healthyCount = max(0, $healthyCount + $uncheckedCount);
-
-        $lastCheckTime = TenantHealthCheck::latest('created_at')->value('created_at');
-        $lastCheckLabel = $lastCheckTime
-            ? 'Dernière vérif. ' . \Carbon\Carbon::parse($lastCheckTime)->diffForHumans()
-            : 'Aucune vérification';
+        $sansReleve = $r[EtatParcResolver::SANS_RELEVE];
 
         return [
-            Stat::make('Opérationnels', $healthyCount)
-                ->description("Sur {$totalTenants} actifs · {$lastCheckLabel}")
+            Stat::make('Opérationnels', $r[EtatParcResolver::OPERATIONNEL])
+                ->description("Vérifiés et sains · {$quand}")
                 ->descriptionIcon('heroicon-o-check-circle')
-                ->color('success'),
+                ->color($r[EtatParcResolver::OPERATIONNEL] > 0 ? 'success' : 'gray'),
 
-            Stat::make('En Alerte', $warningCount)
-                ->description($warningCount > 0 ? 'Vérification recommandée' : 'Aucune dégradation détectée')
+            Stat::make('À surveiller', $r[EtatParcResolver::DEGRADE])
+                ->description($r[EtatParcResolver::DEGRADE] > 0
+                    ? 'Dégradation relevée, sans interruption'
+                    : 'Aucune dégradation relevée')
                 ->descriptionIcon('heroicon-o-exclamation-triangle')
-                ->color($warningCount > 0 ? 'warning' : 'gray'),
+                ->color($r[EtatParcResolver::DEGRADE] > 0 ? 'warning' : 'gray'),
 
-            Stat::make('Critiques', $criticalCount)
-                ->description($criticalCount > 0 ? 'Intervention immédiate requise !' : 'Aucun incident critique')
-                ->descriptionIcon($criticalCount > 0 ? 'heroicon-o-x-circle' : 'heroicon-o-shield-check')
-                ->color($criticalCount > 0 ? 'danger' : 'success'),
+            Stat::make('Critiques', $r[EtatParcResolver::CRITIQUE])
+                ->description($r[EtatParcResolver::CRITIQUE] > 0
+                    ? 'Intervention immédiate'
+                    : 'Aucun incident relevé')
+                ->descriptionIcon('heroicon-o-x-circle')
+                ->color($r[EtatParcResolver::CRITIQUE] > 0 ? 'danger' : 'gray'),
+
+            // Ni bon ni mauvais : l'aveu qu'on ne sait pas. Gris, jamais vert —
+            // c'est la case qui désigne les établissements à aller vérifier.
+            Stat::make('Sans relevé', $sansReleve)
+                ->description($sansReleve > 0
+                    ? "Rien de frais depuis {$fraicheur} min — php artisan tenant:health-check --all"
+                    : 'Tout le parc a un relevé frais')
+                ->descriptionIcon('heroicon-o-question-mark-circle')
+                ->color($sansReleve > 0 ? 'warning' : 'gray'),
         ];
     }
 }

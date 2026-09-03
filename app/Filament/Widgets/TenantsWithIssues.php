@@ -20,14 +20,25 @@ class TenantsWithIssues extends BaseWidget
 
     protected function getTableHeading(): ?string
     {
+        $fraicheur = (int) config('klassci.health_freshness_minutes', 15);
+
         $count = TenantHealthCheck::whereIn('status', ['degraded', 'unhealthy'])
-            ->where('created_at', '>=', now()->subMinutes(15))
+            ->where('created_at', '>=', now()->subMinutes($fraicheur))
             ->distinct('tenant_id')
             ->count('tenant_id');
 
-        return $count > 0
-            ? "⚠️ {$count} tenant(s) nécessitent attention"
-            : '✅ Tous les tenants sont opérationnels';
+        if ($count > 0) {
+            return $count . ' établissement' . ($count > 1 ? 's' : '') . ' à regarder';
+        }
+
+        // « Tous opérationnels » ne se dit que d'un parc qu'on a vraiment
+        // mesuré. Sans relevé frais, ce titre affirmait une santé jamais
+        // constatée — le compte des sans-relevé est dans la tuile voisine.
+        $releves = TenantHealthCheck::where('created_at', '>=', now()->subMinutes($fraicheur))->exists();
+
+        return $releves
+            ? 'Aucune anomalie sur les ' . $fraicheur . ' dernières minutes'
+            : 'Aucun relevé sur les ' . $fraicheur . ' dernières minutes';
     }
 
     public function table(Table $table): Table
@@ -131,8 +142,14 @@ class TenantsWithIssues extends BaseWidget
                     ->icon('heroicon-o-eye')
                     ->url(fn ($record) => route('filament.admin.resources.tenants.view', $record->tenant_id)),
             ])
-            ->emptyStateHeading('🎉 Aucun problème détecté')
-            ->emptyStateDescription('Tous les tenants sont en bonne santé')
+            ->emptyStateHeading('Rien à signaler')
+            ->emptyStateDescription(fn () => TenantHealthCheck::where(
+                'created_at', '>=', now()->subMinutes((int) config('klassci.health_freshness_minutes', 15))
+            )->exists()
+                ? 'Aucune dégradation dans les relevés de cette fenêtre.'
+                // Sans relevé, on ne dit pas que tout va bien : on dit qu'on
+                // ne sait pas, et comment savoir.
+                : 'La sonde n\'est pas passée récemment — lancez php artisan tenant:health-check --all')
             ->emptyStateIcon('heroicon-o-check-circle');
     }
 }

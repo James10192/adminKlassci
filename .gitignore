@@ -47,6 +47,11 @@ yarn.lock
 
 # Caches
 bootstrap/cache/*.php
+# Le cache de panel Filament vit dans un sous-dossier : la regle ci-dessus ne
+# l attrapait pas, et bootstrap/cache/filament/panels/admin.php s est retrouve
+# commite, fige sur les chemins d une machine disparue. Filament preferant ce
+# cache a la decouverte, cinq ecrans de l admin etaient absents en production.
+bootstrap/cache/filament/
 !bootstrap/cache/.gitkeep
 storage/framework/cache/*
 !storage/framework/cache/.gitkeep

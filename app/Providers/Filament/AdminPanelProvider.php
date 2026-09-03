@@ -132,9 +132,10 @@ HTML
                 Pages\Dashboard::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
-            ->widgets([
-                \App\Filament\Widgets\CustomAccountWidget::class,
-            ])
+            // Aucun widget de compte : le nom et la déconnexion sont déjà dans
+            // la barre du haut. La carte « Bonjour » occupait toute la largeur,
+            // en tête de l'écran le plus consulté, pour n'y rien apprendre.
+            ->widgets([])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

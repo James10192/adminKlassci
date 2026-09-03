@@ -12,7 +12,7 @@ class HealthDashboard extends Page
 {
     protected static ?string $navigationIcon = 'heroicon-o-heart';
 
-    protected static ?string $navigationLabel = 'Santé des tenants';
+    protected static ?string $navigationLabel = 'Santé du parc';
 
     protected static ?string $navigationGroup = 'Monitoring';
 
