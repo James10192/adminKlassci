@@ -3,11 +3,24 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Tenant;
-use App\Models\TenantHealthCheck;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Facades\DB;
 
+/**
+ * Les chiffres du groupe, sans courbe.
+ *
+ * Ces tuiles portaient des sparklines fabriquées : une série codée en dur
+ * (3, 4, 4, 5, 5, 6, valeur) ou reconstituée en partant de 70 % du chiffre du
+ * jour. Elles montaient toujours, quoi qu'il arrive dans les établissements.
+ * Un fondateur qui lit « Revenus annuels » sous une courbe ascendante en
+ * conclut que le revenu monte — c'est un graphique qui ment, pas une
+ * décoration.
+ *
+ * La base maîtresse ne garde aucun historique de ces valeurs : `tenants` ne
+ * stocke que l'état courant. Une vraie tendance demande un relevé quotidien,
+ * qui n'existe pas encore. En attendant, pas de courbe : un chiffre nu est
+ * moins beau et infiniment plus honnête.
+ */
 class StatsOverviewWidget extends BaseWidget
 {
     protected static ?int $sort = 0;
@@ -32,40 +45,23 @@ class StatsOverviewWidget extends BaseWidget
             ->where('subscription_end_date', '>=', now())
             ->count();
 
-        // Tenants inactifs depuis 7j (aucune update des stats)
-        $inactiveTenants = Tenant::where('status', 'active')
-            ->where(function ($q) {
-                $q->where('updated_at', '<', now()->subDays(7))
-                  ->orWhereNull('updated_at');
-            })
-            ->count();
-
         $totalAlerts = $tenantsOverQuota + $expiringTenants;
-
-        // Courbe MRR fictive basée sur la valeur actuelle (progression estimée)
-        $mrrChart = $this->buildProgressionChart((float) $mrr, 7);
-
-        // Courbe étudiants
-        $studentsChart = $this->buildProgressionChart($totalStudents, 7);
 
         return [
             Stat::make('Établissements Actifs', $activeTenantsCount)
                 ->description($activeTenantsCount . ' / ' . Tenant::count() . ' tenants au total')
                 ->descriptionIcon('heroicon-m-building-office-2')
-                ->color('success')
-                ->chart([3, 4, 4, 5, 5, 6, $activeTenantsCount]),
+                ->color('success'),
 
             Stat::make('Total Étudiants', number_format($totalStudents, 0, ',', ' '))
                 ->description('Inscrits sur tous les établissements')
                 ->descriptionIcon('heroicon-m-academic-cap')
-                ->color('primary')
-                ->chart($studentsChart),
+                ->color('primary'),
 
             Stat::make('Revenus Annuels', number_format($mrr, 0, ',', ' ') . ' FCFA')
                 ->description('Abonnements actifs en cours')
                 ->descriptionIcon('heroicon-m-banknotes')
-                ->color('warning')
-                ->chart($mrrChart),
+                ->color('warning'),
 
             Stat::make('Alertes', $totalAlerts)
                 ->description(
@@ -74,27 +70,7 @@ class StatsOverviewWidget extends BaseWidget
                     . ($expiringTenants > 0 ? "{$expiringTenants} expiration(s)" : 'Aucune expiration proche')
                 )
                 ->descriptionIcon($totalAlerts > 0 ? 'heroicon-m-exclamation-triangle' : 'heroicon-m-check-circle')
-                ->color($totalAlerts > 0 ? 'danger' : 'success')
-                ->chart([0, 0, 1, 0, 1, 1, $totalAlerts]),
+                ->color($totalAlerts > 0 ? 'danger' : 'success'),
         ];
-    }
-
-    /**
-     * Génère une courbe de progression plausible vers la valeur actuelle.
-     */
-    private function buildProgressionChart(float|int $currentValue, int $points): array
-    {
-        if ($currentValue <= 0) {
-            return array_fill(0, $points, 0);
-        }
-
-        $chart = [];
-        for ($i = $points; $i >= 1; $i--) {
-            // Régression linéaire simplifiée : valeur légèrement plus basse dans le passé
-            $factor = 1 - ($i - 1) * 0.04;
-            $chart[] = (int) round($currentValue * max($factor, 0.7));
-        }
-
-        return $chart;
     }
 }

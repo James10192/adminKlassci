@@ -7,6 +7,22 @@ use App\Models\TenantHealthCheck;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
+/**
+ * État de santé des établissements, à l'instant présent.
+ *
+ * Les tuiles portaient elles aussi des sparklines inventées : une série codée
+ * en dur (1, 0, 1, 2, 1, 0, valeur) ou de l'arithmétique sur le chiffre du
+ * jour présentée comme un historique. Sur un écran de supervision, une courbe
+ * qui ne vient pas des relevés est pire qu'inutile : elle rassure.
+ *
+ * `tenant_health_checks` garde bien des relevés horodatés, donc une vraie
+ * tendance est calculable — mais elle demanderait un index de tête sur la
+ * colonne de date, absent aujourd'hui, alors que ce widget se rafraîchit
+ * toutes les 30 secondes. À faire quand l'index sera là.
+ *
+ * La ligne « Dernière vérif. il y a N minutes », elle, est réelle et suffit à
+ * dire si le chiffre affiché est frais.
+ */
 class TenantHealthOverview extends BaseWidget
 {
     protected static ?int $sort = 1;
@@ -25,20 +41,17 @@ class TenantHealthOverview extends BaseWidget
                 Stat::make('Tenants Opérationnels', $totalTenants)
                     ->description("Aucun health check exécuté pour l'instant")
                     ->descriptionIcon('heroicon-o-information-circle')
-                    ->color('gray')
-                    ->chart(array_fill(0, 7, $totalTenants)),
+                    ->color('gray'),
 
                 Stat::make('Tenants en Alerte', 0)
                     ->description('Nécessitent attention')
                     ->descriptionIcon('heroicon-o-exclamation-triangle')
-                    ->color('warning')
-                    ->chart([0, 0, 0, 0, 0, 0, 0]),
+                    ->color('warning'),
 
                 Stat::make('Tenants Critiques', 0)
                     ->description('Lancez un health-check pour détecter les problèmes')
                     ->descriptionIcon('heroicon-o-shield-check')
-                    ->color('success')
-                    ->chart([0, 0, 0, 0, 0, 0, 0]),
+                    ->color('success'),
             ];
         }
 
@@ -96,20 +109,17 @@ class TenantHealthOverview extends BaseWidget
             Stat::make('Opérationnels', $healthyCount)
                 ->description("Sur {$totalTenants} actifs · {$lastCheckLabel}")
                 ->descriptionIcon('heroicon-o-check-circle')
-                ->color('success')
-                ->chart([max(0, $healthyCount - 2), $healthyCount - 1, $healthyCount, $healthyCount - 1, $healthyCount, $healthyCount, $healthyCount]),
+                ->color('success'),
 
             Stat::make('En Alerte', $warningCount)
                 ->description($warningCount > 0 ? 'Vérification recommandée' : 'Aucune dégradation détectée')
                 ->descriptionIcon('heroicon-o-exclamation-triangle')
-                ->color($warningCount > 0 ? 'warning' : 'gray')
-                ->chart([1, 0, 1, 2, 1, 0, $warningCount]),
+                ->color($warningCount > 0 ? 'warning' : 'gray'),
 
             Stat::make('Critiques', $criticalCount)
                 ->description($criticalCount > 0 ? 'Intervention immédiate requise !' : 'Aucun incident critique')
                 ->descriptionIcon($criticalCount > 0 ? 'heroicon-o-x-circle' : 'heroicon-o-shield-check')
-                ->color($criticalCount > 0 ? 'danger' : 'success')
-                ->chart([0, 0, 1, 0, 0, 0, $criticalCount]),
+                ->color($criticalCount > 0 ? 'danger' : 'success'),
         ];
     }
 }

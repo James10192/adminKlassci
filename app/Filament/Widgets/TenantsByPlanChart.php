@@ -97,6 +97,14 @@ class TenantsByPlanChart extends ChartWidget
                     ],
                 ],
             ],
+            // Filament pose des échelles par défaut, pensées pour les
+            // histogrammes. Sur un anneau elles s'affichent quand même : la
+            // capture de production montre un axe de 0 à 1 derrière le
+            // graphique, qui ne mesure rien.
+            'scales' => [
+                'x' => ['display' => false],
+                'y' => ['display' => false],
+            ],
             'cutout' => '68%',
             'maintainAspectRatio' => false,
             'responsive' => true,
