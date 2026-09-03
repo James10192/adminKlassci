@@ -264,4 +264,23 @@ return [
         'favicon' => env('GROUP_PORTAL_BRAND_FAVICON', 'images/LOGO-KLASSCI-PNG.png'),
         'primary' => env('GROUP_PORTAL_BRAND_PRIMARY', '#0453cb'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Garde-fous de volume sur les exports
+    |--------------------------------------------------------------------------
+    |
+    | DomPDF n'échoue pas franchement sur un gros tableau : il épuise la
+    | mémoire PHP et rend un document tronqué ou vide. Or un rapport vide
+    | ressemble à « rien à signaler », ce qu'un outil de direction ne doit
+    | jamais laisser croire. Au-delà du seuil, ReportRenderer refuse en
+    | disant combien de lignes la sélection compte et quoi faire.
+    |
+    | Le tableur encaisse bien davantage, d'où l'écart entre les deux.
+    |
+    */
+    'exports' => [
+        'max_pdf_rows' => env('GROUP_PORTAL_MAX_PDF_ROWS', 1000),
+        'max_excel_rows' => env('GROUP_PORTAL_MAX_EXCEL_ROWS', 50000),
+    ],
 ];

@@ -54,6 +54,8 @@ storage/framework/sessions/*
 !storage/framework/sessions/.gitkeep
 storage/framework/views/*
 !storage/framework/views/.gitkeep
+# Disques factices ecrits par Storage::fake() pendant la suite de tests
+storage/framework/testing/disks/*
 
 # Tenant-specific (for local development)
 /tenants/

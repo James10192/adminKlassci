@@ -3,9 +3,11 @@
     "description": "KlassCI SaaS Master Application",
     "type": "project",
     "require": {
+        "barryvdh/laravel-dompdf": "^3.0",
         "filament/filament": "^3.3",
         "laravel/framework": "^12.0",
-        "laravel/sanctum": "^4.2"
+        "laravel/sanctum": "^4.2",
+        "maatwebsite/excel": "^4.0"
     },
     "autoload": {
         "psr-4": {

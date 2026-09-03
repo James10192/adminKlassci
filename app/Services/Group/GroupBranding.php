@@ -84,6 +84,56 @@ class GroupBranding
         return asset((string) config('group_portal.branding.logo', 'images/LOGO-KLASSCI-PNG.png'));
     }
 
+    /**
+     * Logo encodé en data URI, pour les documents générés.
+     *
+     * DomPDF ne va pas chercher d'image distante sans qu'on lui ouvre le
+     * réseau, ce qu'on ne fait pas : un générateur de PDF qui suit des URL
+     * arbitraires est une porte ouverte. On lit donc le fichier sur le
+     * disque et on l'embarque dans le document.
+     *
+     * Retourne null si aucun fichier lisible : l'en-tête préfère se passer
+     * de logo plutôt que d'afficher un cadre vide.
+     */
+    public function logoDataUri(?Group $group = null): ?string
+    {
+        $group ??= $this->currentGroup();
+
+        $candidats = [];
+
+        if (filled($group?->logo_path) && ! str_starts_with((string) $group->logo_path, 'http')) {
+            $candidats[] = Storage::disk('public')->path($group->logo_path);
+        }
+
+        $candidats[] = public_path((string) config('group_portal.branding.logo', 'images/LOGO-KLASSCI-PNG.png'));
+
+        foreach ($candidats as $chemin) {
+            if (! is_file($chemin) || ! is_readable($chemin)) {
+                continue;
+            }
+
+            $type = match (strtolower(pathinfo($chemin, PATHINFO_EXTENSION))) {
+                'png' => 'image/png',
+                'jpg', 'jpeg' => 'image/jpeg',
+                'svg' => 'image/svg+xml',
+                'webp' => 'image/webp',
+                default => null,
+            };
+
+            if ($type === null) {
+                continue;
+            }
+
+            $octets = @file_get_contents($chemin);
+
+            if ($octets !== false && $octets !== '') {
+                return 'data:' . $type . ';base64,' . base64_encode($octets);
+            }
+        }
+
+        return null;
+    }
+
     /** Hauteur CSS du logo dans la barre latérale. */
     public function logoHeight(): string
     {
