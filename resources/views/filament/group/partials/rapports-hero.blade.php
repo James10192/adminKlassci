@@ -17,6 +17,7 @@
     $total = (int) ($context['total'] ?? 0);
     $destinataires = (int) ($context['destinataires'] ?? 0);
     $dernierEnvoi = $context['dernier_envoi'] ?? null;
+    $actions = $actions ?? [];
 @endphp
 
 <x-group-hero
@@ -31,17 +32,17 @@
     </x-slot:badges>
 
     {{-- `getHeader()` remplace TOUT l'en-tete, actions Filament comprises : sans
-         ce bouton, la page n'offrait plus aucun moyen de programmer un envoi,
-         juste sous un texte qui invite a le faire. --}}
-    <x-slot:actions>
-        <a href="{{ \App\Filament\Group\Resources\ReportScheduleResource::getUrl('create') }}"
-           class="gp-hero-action">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
-            </svg>
-            Programmer un envoi
-        </a>
-    </x-slot:actions>
+         cette reprise, la page n'offrait plus aucun moyen de programmer un
+         envoi, juste sous un texte qui invite a le faire. On rend les vraies
+         actions — comme le tableau de bord — plutot qu'un lien fait main, pour
+         qu'elles gardent leurs autorisations et leur routage. --}}
+    @if(! empty($actions))
+        <x-slot:actions>
+            @foreach($actions as $action)
+                {{ $action }}
+            @endforeach
+        </x-slot:actions>
+    @endif
 
     <x-slot:kpis>
         <div class="gp-hero-kpi" @if($actifs === 0) data-tone="inconnu" @endif>

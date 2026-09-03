@@ -33,6 +33,9 @@ class ListReportSchedules extends ListRecords
     {
         return view('filament.group.partials.rapports-hero', [
             'context' => $this->buildHeroContext(),
+            // Sans cette reprise, poser le hero effacerait « Programmer un
+            // envoi » : `getHeader()` remplace l'en-tete en entier.
+            'actions' => $this->getCachedHeaderActions(),
         ]);
     }
 

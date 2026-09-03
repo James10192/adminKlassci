@@ -7,6 +7,7 @@ use App\Models\GroupMember;
 use App\Models\GroupReportSchedule;
 use App\Services\Group\ScheduleDueResolver;
 use Filament\Facades\Filament;
+use Livewire\Livewire;
 use Illuminate\Support\Facades\Hash;
 
 /**
@@ -135,9 +136,13 @@ it('accorde les pluriels en français, sans passer par l\'inflecteur anglais', f
 
 it('garde le bouton de creation que le hero a evince', function () {
     // `getHeader()` remplace tout l'en-tete : sans reprise explicite, la page
-    // n'offre plus aucun moyen de programmer un envoi.
-    $html = (new ListReportSchedules())->getHeader()->render();
+    // n'offre plus aucun moyen de programmer un envoi. On monte la page comme
+    // Livewire le fait, sinon ses actions ne sont pas encore construites.
+    // On monte la page comme Livewire le fait : hors montage, ses actions ne
+    // sont pas encore construites et le hero les recevrait vides.
+    $html = Livewire::test(ListReportSchedules::class)->html();
 
+    expect($html)->toContain('gp-hero');
     expect($html)->toContain('Programmer un envoi');
     expect($html)->toContain(ReportScheduleResource::getUrl('create'));
 });
