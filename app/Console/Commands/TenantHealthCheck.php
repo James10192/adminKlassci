@@ -122,7 +122,9 @@ class TenantHealthCheck extends Command
 
     private function checkHttpStatus(Tenant $tenant): array
     {
-        $url = "https://{$tenant->subdomain}.klassci.com";
+        // La sonde vise le site que le portail ouvre : sinon on
+        // surveillerait une autre machine que celle qu'utilisent les ecoles.
+        $url = $tenant->full_url;
         $startTime = microtime(true);
 
         try {
@@ -235,7 +237,9 @@ class TenantHealthCheck extends Command
 
     private function checkSslCertificate(Tenant $tenant): array
     {
-        $url = "https://{$tenant->subdomain}.klassci.com";
+        // La sonde vise le site que le portail ouvre : sinon on
+        // surveillerait une autre machine que celle qu'utilisent les ecoles.
+        $url = $tenant->full_url;
         $context = stream_context_create([
             'ssl' => [
                 'capture_peer_cert' => true,
@@ -246,7 +250,7 @@ class TenantHealthCheck extends Command
 
         try {
             $stream = @stream_socket_client(
-                "ssl://{$tenant->subdomain}.klassci.com:443",
+                "ssl://{$tenant->hote}:443",
                 $errno,
                 $errstr,
                 30,

@@ -139,7 +139,7 @@ class TenantProvision extends Command
             $this->executeRemoteCommand($tenantPath, 'php artisan route:cache');
 
             // Étape 15: Créer le sous-domaine via cPanel UAPI (simulé)
-            $this->step("Création du sous-domaine '{$subdomain}.klassci.com'");
+            $this->step("Création du sous-domaine '{$subdomain}.{$this->domaineTenant()}'");
             $this->createSubdomain($subdomain, $tenantPath);
 
             // Étape 16: Installer le certificat SSL (simulé)
@@ -284,12 +284,13 @@ class TenantProvision extends Command
 
     private function createEnvFile(string $path, string $code, string $name, string $database, string $password): void
     {
+        $domaine = $this->domaineTenant();
         $envContent = <<<ENV
 APP_NAME="{$name}"
 APP_ENV=production
 APP_KEY=
 APP_DEBUG=false
-APP_URL=https://{$code}.klassci.com
+APP_URL=https://{$code}.{$domaine}
 
 LOG_CHANNEL=stack
 LOG_LEVEL=error
@@ -323,6 +324,18 @@ MAIL_FROM_NAME="\${APP_NAME}"
 ENV;
 
         file_put_contents("{$path}/.env", $envContent);
+    }
+
+    /**
+     * Le domaine sous lequel vivent les sites d'etablissement.
+     *
+     * Il etait ecrit en dur a six endroits de cette commande, dont le fichier
+     * `.env` genere pour la nouvelle ecole : une plateforme qui change de nom y
+     * inscrirait une `APP_URL` fausse, en production, sans une seule erreur.
+     */
+    private function domaineTenant(): string
+    {
+        return trim((string) config('group_portal.tenant_domain', 'klassci.com'), '/');
     }
 
     private function createSubdomain(string $subdomain, string $path): void
@@ -425,7 +438,7 @@ ENV;
             [
                 ['Code', $code],
                 ['Nom', $name],
-                ['Sous-domaine', "{$subdomain}.klassci.com"],
+                ['Sous-domaine', "{$subdomain}.{$this->domaineTenant()}"],
                 ['Branche Git', $branch],
                 ['Plan', $plan],
                 ['Admin Email', $adminEmail],
@@ -446,7 +459,7 @@ ENV;
                 ['ID Tenant', $tenant->id],
                 ['Code', $tenant->code],
                 ['Nom', $tenant->name],
-                ['URL', "https://{$subdomain}.klassci.com"],
+                ['URL', "https://{$subdomain}.{$this->domaineTenant()}"],
                 ['Base de données', $tenant->database_name],
                 ['Plan', $tenant->plan],
                 ['Statut', $tenant->status],
@@ -459,7 +472,7 @@ ENV;
         $this->line("  1. Créer le compte administrateur principal ({$adminEmail})");
         $this->line("  2. Configurer les paramètres de l'établissement");
         $this->line("  3. Importer les données initiales (si nécessaire)");
-        $this->line("  4. Tester l'accès à https://{$subdomain}.klassci.com");
+        $this->line("  4. Tester l'accès à https://{$subdomain}.{$this->domaineTenant()}");
         $this->newLine();
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Filament\Group\Widgets\EstablishmentCardsWidget;
+use App\Services\Group\GroupSsoUrlBuilder;
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Models\Tenant;
@@ -87,13 +88,14 @@ it('refuse une destination qui sort du site du tenant', function () {
 });
 
 it('refuse une barre oblique encodée, un saut de ligne, et un membre sans groupe', function () {
-    $widget = new EstablishmentCardsWidget();
-    $autorisee = new ReflectionMethod($widget, 'destinationAutorisee');
-    $autorisee->setAccessible(true);
+    // Le garde a quitte le widget pour le service : les deux surfaces qui
+    // ouvrent un etablissement le partagent maintenant, au lieu que la seconde
+    // l'oublie.
+    $autorisee = fn (string $d): bool => GroupSsoUrlBuilder::destinationAutorisee($d);
 
     // Ce qui doit passer.
     foreach (['/', '/esbtp/etudiants', '/esbtp/paiements?statut=valide'] as $ok) {
-        expect($autorisee->invoke(null, $ok))->toBeTrue("destination refusée à tort : {$ok}");
+        expect($autorisee($ok))->toBeTrue("destination refusée à tort : {$ok}");
     }
 
     // Ce qui ne doit pas passer. Les deux premières étaient déjà bloquées ; les
@@ -107,7 +109,7 @@ it('refuse une barre oblique encodée, un saut de ligne, et un membre sans group
         'https://evil.com',
         '',
     ] as $ko) {
-        expect($autorisee->invoke(null, $ko))->toBeFalse('destination acceptée à tort : ' . json_encode($ko));
+        expect($autorisee($ko))->toBeFalse('destination acceptée à tort : ' . json_encode($ko));
     }
 });
 
@@ -124,4 +126,38 @@ it('ne signe pas de jeton vers un établissement suspendu', function () {
 
     // Contre-épreuve : une école active du même groupe s'ouvre toujours.
     expect((new EstablishmentCardsWidget())->getSsoUrl($this->mien->code))->not->toBeNull();
+});
+
+it('la fiche d\'un établissement connecte, comme les cartes du tableau de bord', function () {
+    // Les deux boutons portent le MEME libelle. Celui de la fiche n'etait qu'un
+    // lien vers le site : le directeur arrivait sur un ecran de connexion depuis
+    // un endroit, et connecte depuis l'autre.
+    $html = view('filament.group.partials.establishment-view-hero', [
+        'tenant' => $this->mien,
+        'kpis' => [],
+    ])->render();
+
+    expect($html)->toContain("Ouvrir l'établissement");
+    expect($html)->toContain('/auth/sso-from-group?token=');
+    expect($html)->not->toContain('https://rostan-yopougon.klassci.com"');
+});
+
+it('n\'offre pas d\'ouvrir une école suspendue depuis sa fiche', function () {
+    $this->mien->update(['status' => 'suspended']);
+
+    $html = view('filament.group.partials.establishment-view-hero', [
+        'tenant' => $this->mien->fresh(),
+        'kpis' => [],
+    ])->render();
+
+    expect($html)->not->toContain("Ouvrir l'établissement");
+});
+
+it('lit le domaine des établissements dans la configuration', function () {
+    // Il etait ecrit en dur. KLASSCI est multi-instance : une seule valeur
+    // fausse servirait une adresse fausse a tout le monde, sans une erreur.
+    config(['group_portal.tenant_domain' => 'exemple.ci']);
+
+    expect(app(GroupSsoUrlBuilder::class)->urlDeBase($this->mien))
+        ->toBe('https://rostan-yopougon.exemple.ci');
 });

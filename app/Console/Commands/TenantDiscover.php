@@ -89,7 +89,8 @@ class TenantDiscover extends Command
 
             // Extraire les informations depuis le .env
             $name      = $env['APP_NAME'] ?? $code;
-            $appUrl    = $env['APP_URL'] ?? "https://{$code}.klassci.com";
+            $domaine   = trim((string) config('group_portal.tenant_domain', 'klassci.com'), '/');
+            $appUrl    = $env['APP_URL'] ?? "https://{$code}.{$domaine}";
             $subdomain = $this->extractSubdomain($appUrl, $code);
             $dbName    = $env['DB_DATABASE'] ?? "c2569688c_{$code}";
             $gitBranch = $env['GIT_BRANCH'] ?? $env['APP_BRANCH'] ?? 'presentation';
@@ -104,7 +105,7 @@ class TenantDiscover extends Command
             }
 
             if ($isDryRun) {
-                $this->line("  <fg=green>+ Serait importé : {$code}</> → {$name} ({$subdomain}.klassci.com)");
+                $this->line("  <fg=green>+ Serait importé : {$code}</> → {$name} ({$subdomain}.{$domaine})");
                 $imported++;
                 continue;
             }
@@ -238,9 +239,12 @@ class TenantDiscover extends Command
     {
         $host = parse_url($appUrl, PHP_URL_HOST) ?? '';
 
-        // Strip .klassci.com suffix
-        if (str_ends_with($host, '.klassci.com')) {
-            return substr($host, 0, -strlen('.klassci.com'));
+        // Retire le suffixe du domaine des etablissements — configurable, sinon
+        // un changement de domaine ferait rentrer l'hote entier comme
+        // sous-domaine, et le tenant importe pointerait vers nulle part.
+        $suffixe = '.' . trim((string) config('group_portal.tenant_domain', 'klassci.com'), '/');
+        if (str_ends_with($host, $suffixe)) {
+            return substr($host, 0, -strlen($suffixe));
         }
 
         // If no recognizable pattern, use the folder code

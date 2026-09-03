@@ -53,9 +53,16 @@
         @endif
     </x-slot:badges>
 
+    {{-- Ce bouton portait le MEME libelle que celui des cartes du tableau de
+         bord, mais n'etait qu'un lien vers le site : le directeur y arrivait sur
+         un ecran de connexion, alors que le meme bouton ailleurs le connectait.
+         Il passe desormais par le meme service signe — dont les gardes
+         (appartenance au groupe, etablissement actif) rendent aussi la
+         condition d'affichage inutile a repeter ici. --}}
+    @php $ssoUrl = app(\App\Services\Group\GroupSsoUrlBuilder::class)->pour((string) ($tenant->code ?? '')); @endphp
     <x-slot:actions>
-        @if(($tenant->status ?? '') === 'active' && ! empty($tenant->subdomain))
-            <a href="https://{{ $tenant->subdomain }}.klassci.com"
+        @if($ssoUrl)
+            <a href="{{ $ssoUrl }}"
                target="_blank"
                rel="noopener"
                class="gp-hero-action">

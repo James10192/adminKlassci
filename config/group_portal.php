@@ -164,6 +164,17 @@ return [
     'scheduled_reports_enabled' => env('GROUP_PORTAL_SCHEDULED_REPORTS_ENABLED', false),
 
     /*
+     * Le domaine sous lequel vivent les sites des établissements.
+     *
+     * Il était écrit en dur dans le constructeur d'URL SSO. KLASSCI est
+     * multi-instance : le jour où une école est hébergée ailleurs — ou où la
+     * plateforme change de nom — cette valeur unique évite de servir une
+     * adresse fausse à tout le monde sans une seule erreur. La dérogation par
+     * établissement reste `tenants.metadata.base_url`.
+     */
+    'tenant_domain' => env('GROUP_PORTAL_TENANT_DOMAIN', 'klassci.com'),
+
+    /*
     |--------------------------------------------------------------------------
     | Storage ingestion (PR7e)
     |--------------------------------------------------------------------------

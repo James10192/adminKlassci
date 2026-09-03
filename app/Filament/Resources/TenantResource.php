@@ -79,7 +79,7 @@ class TenantResource extends Resource
                                             ->unique(ignoreRecord: true)
                                             ->maxLength(100)
                                             ->prefix('https://')
-                                            ->suffix('.klassci.com')
+                                            ->suffix('.' . trim((string) config('group_portal.tenant_domain', 'klassci.com'), '/'))
                                             ->placeholder('lycee-yop')
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
                                         Forms\Components\Select::make('group_id')
@@ -441,7 +441,7 @@ class TenantResource extends Resource
                 Tables\Columns\TextColumn::make('subdomain')
                     ->label('URL')
                     ->searchable()
-                    ->url(fn ($record) => "https://{$record->subdomain}.klassci.com", true)
+                    ->url(fn ($record) => $record->full_url, true)
                     ->color('primary')
                     ->icon('heroicon-o-link'),
 

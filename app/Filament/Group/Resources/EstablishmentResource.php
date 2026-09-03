@@ -298,8 +298,8 @@ class EstablishmentResource extends Resource
                 // repliee : le tableau tient enfin dans la largeur.
                 Tables\Columns\TextColumn::make('subdomain')
                     ->label('URL')
-                    ->formatStateUsing(fn (string $state) => "{$state}.klassci.com")
-                    ->url(fn (Tenant $record) => "https://{$record->subdomain}.klassci.com", shouldOpenInNewTab: true)
+                    ->formatStateUsing(fn (string $state, Tenant $record) => $record->hote)
+                    ->url(fn (Tenant $record) => $record->full_url, shouldOpenInNewTab: true)
                     ->color('primary')
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
@@ -309,7 +309,7 @@ class EstablishmentResource extends Resource
                 Tables\Actions\Action::make('open')
                     ->label('Ouvrir')
                     ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->url(fn (Tenant $record) => "https://{$record->subdomain}.klassci.com", shouldOpenInNewTab: true)
+                    ->url(fn (Tenant $record) => $record->full_url, shouldOpenInNewTab: true)
                     ->color('primary'),
             ]);
     }
