@@ -3,6 +3,7 @@
 namespace App\Domain\Exports\Reports;
 
 use App\Domain\Exports\TableauReport;
+use App\Enums\TenantPlan;
 use App\Support\EtatMesure;
 
 /**
@@ -76,6 +77,14 @@ class EtatEtablissementsReport extends TableauReport
             $finances = $etablissement['etat_finances'] ?? EtatMesure::MESURE;
             $assiduite = $etablissement['etat_assiduite'] ?? EtatMesure::MESURE;
 
+            // L'offre vient de `tenants.plan` : « elite », « professional ».
+            // Elle s'imprimait telle quelle, en minuscules et sans accent, dans
+            // une colonne posée juste a cote d'un statut correctement traduit.
+            // TenantPlan porte les noms commerciaux — et l'accent d'« Élite ».
+            // Une offre absente reste un tiret : `libelleDe(null)` affirmerait
+            // « Sans offre », alors qu'on ne sait pas laquelle est souscrite.
+            $offre = ($etablissement['plan'] ?? '') !== '' ? $etablissement['plan'] : null;
+
             $nom = $etablissement['tenant_name'] ?? EtatMesure::TIRET;
             if (! EtatMesure::estMesure($finances) || ! EtatMesure::estMesure($effectifs)) {
                 $nom .= ' (' . mb_strtolower(EtatMesure::badge(
@@ -94,7 +103,7 @@ class EtatEtablissementsReport extends TableauReport
                     : null,
                 EtatMesure::estMesure($assiduite) ? (float) ($etablissement['attendance_rate'] ?? 0) : null,
                 EtatMesure::estMesure($finances) ? (float) ($etablissement['collection_rate'] ?? 0) : null,
-                $etablissement['plan'] ?? EtatMesure::TIRET,
+                $offre !== null ? TenantPlan::libelleDe($offre) : EtatMesure::TIRET,
             ];
         }
 
@@ -123,7 +132,10 @@ class EtatEtablissementsReport extends TableauReport
         // et l'assiduite manquait a cette boucle — le seul chiffre du tableau
         // dont le perimetre ampute n'etait jamais dit.
         $mentions = [];
+        $repondus = 0;
         foreach (['effectifs', 'personnel', 'finances', 'assiduite'] as $famille) {
+            $repondus = max($repondus, (int) ($perimetre[$famille]['repondu'] ?? 0));
+
             $m = EtatMesure::mentionPerimetre(
                 $perimetre[$famille]['repondu'] ?? 0,
                 $perimetre[$famille]['total'] ?? 0,
@@ -132,7 +144,16 @@ class EtatEtablissementsReport extends TableauReport
                 $mentions[$m] = $m;
             }
         }
-        $mention = $mentions === [] ? null : implode(' · ', $mentions);
+
+        // Rien de mesure nulle part. `mentionPerimetre()` rendait alors
+        // « sur 0 des 4 etablissements » — une tournure qui suppose un
+        // sous-ensemble non vide, et surtout une SECONDE formulation de la
+        // meme absence : les deux autres etats du meme envoi disent
+        // « aucun etablissement mesure ». Trois documents cote a cote qui
+        // nomment differemment la meme chose se lisent comme trois situations.
+        $mention = $repondus === 0
+            ? EtatMesure::absenceGroupe()
+            : ($mentions === [] ? null : implode(' · ', $mentions));
 
         // Les lignes par etablissement renvoient `null` quand rien n'est mesure
         // — le formateur PDF en fait un tiret, le tableur une case vide. Le

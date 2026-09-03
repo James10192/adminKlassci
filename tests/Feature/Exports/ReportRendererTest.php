@@ -7,6 +7,46 @@ use Maatwebsite\Excel\Concerns\WithHeadings;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
+ * Le texte réellement dessiné dans un PDF.
+ *
+ * Écrit ici plutôt que tiré d'une bibliothèque : la seule chose qu'on veut
+ * lire est le pied de page, et ajouter une dépendance d'extraction PDF au
+ * projet pour deux lignes serait payer cher une vérification simple.
+ *
+ * DomPDF écrit le texte dans des blocs `BT … ET`, en chaînes UTF-16BE, à
+ * l'intérieur d'un flux compressé.
+ */
+function texteDuPdf(string $octets): string
+{
+    $texte = '';
+
+    if (preg_match_all('/stream\r?\n(.*?)endstream/s', $octets, $flux) === false) {
+        return '';
+    }
+
+    foreach ($flux[1] as $brut) {
+        $clair = @gzuncompress($brut);
+
+        if ($clair === false || ! str_contains($clair, 'BT')) {
+            continue;
+        }
+
+        preg_match_all('/BT(.*?)ET/s', $clair, $blocs);
+
+        foreach ($blocs[1] as $bloc) {
+            preg_match_all('/\((?:\\\\.|[^()\\\\])*\)/', $bloc, $chaines);
+
+            foreach ($chaines[0] as $chaine) {
+                $valeur = preg_replace('/\\\\([()\\\\])/', '$1', substr($chaine, 1, -1));
+                $texte .= mb_convert_encoding((string) $valeur, 'UTF-8', 'UTF-16BE');
+            }
+        }
+    }
+
+    return $texte;
+}
+
+/**
  * Le moteur de documents est vérifié en produisant vraiment un PDF et un
  * classeur, pas en observant qu'on a bien appelé DomPDF. Un test qui se
  * contente de compter les appels laisse passer exactement ce qui casse en
@@ -218,9 +258,42 @@ it('porte le titre, le sous-titre et les filtres dans le document', function () 
         ->toContain('Année universitaire 2025-2026')
         ->toContain('Périmètre')
         ->toContain('Groupe entier')
-        // Pied paginé et identité du groupe
-        ->toContain('page-num')
+        ->toContain('Édité le')
         ->toContain(config('group_portal.branding.name'));
+});
+
+it('numérote les pages dans le PDF, pas seulement dans le gabarit', function () {
+    // Ce test lit le PDF, pas le HTML. C'est la seule facon de voir ce que le
+    // lecteur voit : le gabarit demandait `counter(pages)`, DomPDF 3.1.6 le
+    // resolvait a ZERO, et les trois etats du portail sortaient « Page 1 / 0 »
+    // — un tirage incomplet que personne ne pouvait detecter. La pagination
+    // est desormais dessinee par ReportRenderer apres le rendu.
+    $rapport = new class extends ExportableReport
+    {
+        public function title(): string
+        {
+            return 'Pagination';
+        }
+
+        public function pdfView(): string
+        {
+            return 'tests.rapport-demo';
+        }
+
+        public function viewData(): array
+        {
+            return ['lignes' => [['École 1', 100, 10.5]]];
+        }
+
+        public function rowCount(): int
+        {
+            return 1;
+        }
+    };
+
+    $octets = app(ReportRenderer::class)->pdfBytes($rapport);
+
+    expect(texteDuPdf($octets))->toContain('Page 1 / 1');
 });
 
 it('embarque le logo dans le document plutot que d y mettre une URL', function () {
