@@ -3,6 +3,7 @@
 namespace App\Services\Group;
 
 use App\Contracts\Group\GroupKpiProviderInterface;
+use App\Enums\TenantStatus;
 use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\TenantConnectionManager;
@@ -73,11 +74,23 @@ class GroupKpiProvider implements GroupKpiProviderInterface
         $totals['nb_non_mesures'] = count($nonMesures);
         $totals['complet'] = $nonMesures === [];
 
-        $totals['collection_rate'] = $totals['total_revenue_expected'] > 0
+        // Pas d'attendu, pas de taux — et surtout pas un « 0 % » rouge.
+        //
+        // Ce garde vivait dans quatre vues et un rapport, chacune avec sa
+        // propre version : le Benchmarking retournait le tiret, le tableau de
+        // bord, le hero Etablissements, la Vue financiere et l'etat de
+        // consolidation affichaient « 0,0 % — critique » en ROUGE. Deux ecoles
+        // qui repondent mais dont aucun frais n'est encore configure suffisent
+        // a declencher le cas : le directeur lisait l'effondrement de son
+        // recouvrement le jour ou il ouvrait son annee.
+        //
+        // La regle appartient au producteur du chiffre, pas a chacun de ses
+        // cinq lecteurs. `collection_rate` est nul quand il n'existe pas, et
+        // `finances_mesurables` le dit sans forcer chaque vue a le redecouvrir.
+        $totals['finances_mesurables'] = $totals['total_revenue_expected'] > 0;
+        $totals['collection_rate'] = $totals['finances_mesurables']
             ? min(100, round(($totals['total_revenue_collected'] / $totals['total_revenue_expected']) * 100, 1))
-            : 0;
-
-        $totals['has_surplus'] = $totals['total_revenue_collected'] > $totals['total_revenue_expected'];
+            : null;
 
         $totals['establishment_count'] = count($totals['establishments']);
 
@@ -93,12 +106,32 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                 $studentsForAttendance += $est['students'];
             }
         }
-        $totals['avg_attendance_rate'] = $studentsForAttendance > 0
+        // Meme regle que pour le recouvrement : sans effectif pesant, il n'y a
+        // pas de moyenne. Le zero retourne ici passait pour une mesure et
+        // s'affichait en ROUGE (barème d'assiduite : 85/70), alors qu'il ne
+        // signifiait que « aucune ecole mesuree ne compte d'etudiant ». Le cas
+        // survient reellement en debut d'annee civile : les lignes d'appel de
+        // l'annee precedente tombent dans la fenetre calendaire pendant
+        // qu'aucune inscription de la nouvelle annee n'est encore validee.
+        $totals['assiduite_mesurable'] = $studentsForAttendance > 0;
+        $totals['avg_attendance_rate'] = $totals['assiduite_mesurable']
             ? round($weightedAttendanceSum / $studentsForAttendance, 1)
-            : 0;
+            : null;
 
         return $totals;
     }
+
+    /**
+     * Les familles dont l'indicateur de tete est un TAUX, pas un compte.
+     *
+     * Un groupe sans etablissement a bien zero etudiant et zero membre du
+     * personnel — ce sont des mesures. Il n'a pas « 0 % de recouvrement » :
+     * un taux sans denominateur n'existe pas, et l'afficher en rouge accuse
+     * d'un effondrement un groupe qui n'a simplement pas encore d'ecole.
+     *
+     * @var list<string>
+     */
+    private const FAMILLES_A_TAUX = ['finances', 'assiduite'];
 
     /**
      * Le perimetre de chaque total : combien d'etablissements ont repondu,
@@ -113,18 +146,6 @@ class GroupKpiProvider implements GroupKpiProviderInterface
      * @param  array<string,array<string,mixed>>  $establishments
      * @return array<string,array<string,mixed>>
      */
-    /**
-     * Les familles dont l'indicateur de tete est un TAUX, pas un compte.
-     *
-     * Un groupe sans etablissement a bien zero etudiant et zero membre du
-     * personnel — ce sont des mesures. Il n'a pas « 0 % de recouvrement » :
-     * un taux sans denominateur n'existe pas, et l'afficher en rouge accuse
-     * d'un effondrement un groupe qui n'a simplement pas encore d'ecole.
-     *
-     * @var list<string>
-     */
-    private const FAMILLES_A_TAUX = ['finances', 'assiduite'];
-
     private function perimetre(array $establishments): array
     {
         $familles = [
@@ -155,11 +176,20 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                     // base a justement repondu : sans ce cas, une ecole qui ne
                     // fait pas l'appel se serait vu reprocher « la base n'a pas
                     // repondu », et le fondateur aurait appele son hebergeur.
+                    // Un motif propre a la famille prime sur le motif global :
+                    // une ecole dont la base a repondu mais qui n'a configure
+                    // aucun frais n'a pas « une base qui n'a pas repondu », et
+                    // elle n'a pas non plus « pas ce module » — elle n'a pas
+                    // encore de frais. Sans cette precedence, le graphique de
+                    // groupe aurait envoye le fondateur appeler son hebergeur.
+                    $motifFamille = $est['motif_' . $famille] ?? null;
+
                     $manquants[$code] = [
                         'nom' => $est['tenant_name'] ?? $code,
-                        'motif' => $etat === EtatMesure::NON_APPLICABLE
-                            ? EtatMesure::MOTIF_SANS_MODULE
-                            : ($est['motif'] ?? EtatMesure::MOTIF_INJOIGNABLE),
+                        'motif' => $motifFamille
+                            ?? ($etat === EtatMesure::NON_APPLICABLE
+                                ? EtatMesure::MOTIF_SANS_MODULE
+                                : ($est['motif'] ?? EtatMesure::MOTIF_INJOIGNABLE)),
                     ];
                 }
             }
@@ -209,19 +239,27 @@ class GroupKpiProvider implements GroupKpiProviderInterface
     {
         $period ??= PeriodFactory::default();
 
-        // Une ecole suspendue ou archivee n'est pas une ecole en panne.
+        // Une ecole suspendue ou resiliee n'est pas une ecole en panne.
         //
         // `getEloquentQuery()` de EstablishmentResource ne filtre que sur
-        // `group_id` : la liste montre donc AUSSI les etablissements suspendus,
-        // et on allait interroger leur base. Celle-ci ne repond generalement
-        // plus — on affichait alors « la base de l'etablissement n'a pas
-        // repondu » pour une ecole que le groupe a lui-meme suspendue, en
-        // designant une panne technique la ou il y a une decision
-        // administrative. On s'arrete avant la connexion, et on le dit.
+        // `group_id` : la liste montre donc AUSSI ces etablissements, et on
+        // allait interroger leur base. Celle-ci ne repond generalement plus —
+        // on affichait alors « la base de l'etablissement n'a pas repondu »
+        // pour une ecole que le groupe a lui-meme suspendue, en designant une
+        // panne technique la ou il y a une decision administrative. On s'arrete
+        // avant la connexion, et on le dit.
+        //
+        // C'est `TenantStatus::mesurable()` qui tranche, PAS « tout sauf
+        // actif » : une premiere version testait `!== 'active'` et coupait donc
+        // aussi la MAINTENANCE. Or la maintenance dure le temps d'un
+        // deploiement, la base repond parfaitement, et le directeur voyait ses
+        // deux mille etudiants disparaitre derriere un badge « Hors service »
+        // — l'exact miroir du defaut que ce chantier corrige : presenter une
+        // mesure disponible comme une absence.
         //
         // Les totaux de groupe ne bougent pas : `getGroupKpis()` n'itere que
         // `activeTenants`.
-        if (($tenant->status ?? '') !== 'active') {
+        if (! TenantStatus::mesurableDe($tenant->status)) {
             return $this->emptyKpis($tenant, EtatMesure::MOTIF_INACTIF);
         }
 
@@ -277,7 +315,11 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                 ->distinct()
                 ->count('users.id');
 
-            // Attendance windowed by Period when explicit, else pre-PR4d 30-day behaviour.
+            // L'assiduite est bornee par la Periode — toujours, sans repli.
+            // Deux commentaires annonçaient ici un « repli 30 jours » qui
+            // n'existe dans aucune branche du code : le scorecard en avait
+            // tire une colonne « Presences (30j) » posee sur un taux calcule
+            // sur l'annee entiere.
             $attendanceRate = $this->computeAttendanceRate($conn, $period);
 
             return [
@@ -289,21 +331,38 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                 'inscriptions' => $inscriptions,
                 'revenue_expected' => $revenueExpected,
                 'revenue_collected' => $revenueCollected,
+                // Un taux sans attendu n'existe pas. Il valait `0` ici, ce
+                // qui passait pour une mesure et s'affichait en ROUGE avec la
+                // mention « critique » — sur une ecole qui vient simplement
+                // d'ouvrir son annee sans avoir encore configure ses frais.
                 'collection_rate' => $revenueExpected > 0
                     ? min(100, round(($revenueCollected / $revenueExpected) * 100, 1))
-                    : 0,
-                'has_surplus' => $revenueCollected > $revenueExpected,
+                    : null,
                 'staff' => $staff,
                 'attendance_rate' => $attendanceRate ?? 0,
                 'status' => $tenant->status,
                 'plan' => $tenant->plan,
                 'error' => false,
+                // La base a repondu : il n'y a pas de motif d'absence GLOBAL.
+                // Le motif propre aux finances sans attendu est porte par
+                // `motif_finances`, que `perimetre()` lit pour ne pas accuser
+                // une panne de base.
                 'motif' => null,
+                'motif_finances' => $revenueExpected > 0
+                    ? null
+                    : EtatMesure::MOTIF_SANS_FRAIS,
                 // La base a repondu : les quatre familles sont mesurees, et
                 // un `0` y veut enfin dire zero.
                 'etat_effectifs' => EtatMesure::MESURE,
                 'etat_personnel' => EtatMesure::MESURE,
-                'etat_finances' => EtatMesure::MESURE,
+                // Les finances font exception a « la base a repondu, donc
+                // c'est mesure » : sans montant attendu, il n'y a pas de taux
+                // a mesurer. NON_APPLICABLE, comme l'assiduite d'une ecole qui
+                // ne fait pas l'appel — ce n'est pas une panne, et ca ne doit
+                // rien alerter.
+                'etat_finances' => $revenueExpected > 0
+                    ? EtatMesure::MESURE
+                    : EtatMesure::NON_APPLICABLE,
                 // L'assiduite est la seule famille qui peut manquer alors meme
                 // que la base a repondu : une ecole qui ne fait pas l'appel n'a
                 // pas de taux, et ce n'est pas une panne.
@@ -410,9 +469,18 @@ class GroupKpiProvider implements GroupKpiProviderInterface
      * simplement pas d'annee universitaire courante. Les deux cas donnaient le
      * meme zero ; ils ne se disent pas de la meme facon a l'ecran.
      *
-     * Cette methode est publique : on n'y ajoute que des cles, on n'en retire
-     * jamais — EtatEtablissementsReport, FinancialOverview::resultat() et
-     * GroupAlertCheck lisent tous `error`.
+     * Cette methode est publique : sa forme est lue par les rapports exportes,
+     * la Vue financiere et la verification d'alertes. On n'y retire une cle
+     * qu'apres avoir verifie qu'aucun appelant ne la lit.
+     *
+     * `error` est ce cas limite : le docblock affirmait que trois consommateurs
+     * la lisaient, et c'etait FAUX — aucun `grep` ne trouve un seul lecteur de
+     * `$kpis['error']` (MasseSalarialeReport, le dernier, est passe a l'etat de
+     * mesure). Elle survit comme forme publique de payload, pas parce qu'elle
+     * sert : l'etat par famille dit desormais tout ce qu'elle disait, en plus
+     * precis. `has_surplus`, elle, a ete retiree — trois ecritures, zero
+     * lecteur, et je l'avais moi-meme etendue « par symetrie » plutot que de
+     * constater qu'elle etait morte.
      */
     public function emptyKpis(Tenant $tenant, string $motif = EtatMesure::MOTIF_INJOIGNABLE): array
     {
@@ -436,9 +504,6 @@ class GroupKpiProvider implements GroupKpiProviderInterface
             'etat_personnel' => EtatMesure::NON_MESURE,
             'etat_finances' => EtatMesure::NON_MESURE,
             'etat_assiduite' => EtatMesure::NON_MESURE,
-            // Presente sur le chemin nominal : « on n'ajoute que des cles, on
-            // n'en retire jamais » vaut dans les deux sens.
-            'has_surplus' => false,
             // Date du dernier passage de `tenant:update-stats`. Elle ne date
             // AUCUN chiffre affiche ici (voir ci-dessus) ; elle dit seulement
             // depuis quand la maitresse a eu des nouvelles de cette ecole.

@@ -34,7 +34,8 @@ class ListEstablishments extends ListRecords
      * même défaut que la tuile verte des impayés, dans sa version alarmiste.
      *
      * @return array{
-     *     total_students: int, total_staff: int, establishment_count: int, avg_rate: float,
+     *     total_students: int, total_staff: int, establishment_count: int,
+     *     establishment_actifs: int, avg_rate: float,
      *     etat_effectifs: string, etat_personnel: string, etat_finances: string,
      *     mention_effectifs: ?string, mention_personnel: ?string, mention_finances: ?string
      * }
@@ -71,7 +72,14 @@ class ListEstablishments extends ListRecords
         return [
             'total_students' => (int) ($kpis['total_students'] ?? 0),
             'total_staff' => (int) ($kpis['total_staff'] ?? 0),
-            'establishment_count' => (int) ($kpis['establishment_count'] ?? 0),
+            // Le hero comptait les etablissements ACTIFS pendant que le
+            // tableau juste en dessous en listait quatre — `getEloquentQuery()`
+            // ne filtre que sur `group_id`. Un groupe dont une ecole est
+            // suspendue lisait « 3 etablissements » au-dessus d'une liste de
+            // quatre lignes. Le hero compte desormais ce que la page montre, et
+            // dit combien sont actifs quand les deux different.
+            'establishment_count' => $group ? $group->tenants()->count() : 0,
+            'establishment_actifs' => (int) ($kpis['establishment_count'] ?? 0),
             'avg_rate' => (float) ($kpis['collection_rate'] ?? 0),
             'etat_effectifs' => $etat('effectifs'),
             'etat_personnel' => $etat('personnel'),

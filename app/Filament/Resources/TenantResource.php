@@ -200,11 +200,16 @@ class TenantResource extends Resource
                                         Forms\Components\Select::make('status')
                                             ->label('Statut')
                                             ->required()
-                                            ->options([
-                                                'active' => 'Actif',
-                                                'suspended' => 'Suspendu',
-                                                'inactive' => 'Inactif',
-                                            ])
+                                            // Ce select proposait « inactive »,
+                                            // qui n'existe dans AUCUNE
+                                            // enumeration : la colonne accepte
+                                            // active|suspended|maintenance|
+                                            // cancelled. L'enregistrer etait
+                                            // refuse par MySQL en mode strict,
+                                            // et silencieusement accepte
+                                            // ailleurs — un statut que plus
+                                            // aucun ecran ne savait nommer.
+                                            ->options(\App\Enums\TenantStatus::options())
                                             ->default('active')
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 

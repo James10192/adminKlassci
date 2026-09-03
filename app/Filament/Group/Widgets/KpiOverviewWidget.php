@@ -186,8 +186,12 @@ class KpiOverviewWidget extends StatsOverviewWidget
                 'Taux de présence',
                 $attendanceMesure ? $attendance . '%' : $tiret,
             )
+                // Les cinq autres tuiles CONCATENENT leur mention (« · ») ;
+                // celle-ci la substituait au libelle. Le directeur perdait la
+                // nature du chiffre — une moyenne ponderee — exactement quand
+                // le perimetre ampute la rend la plus delicate a lire.
                 ->description($attendanceMesure
-                    ? ($mAssiduite ?? 'moyenne pondérée groupe')
+                    ? 'moyenne pondérée groupe' . ($mAssiduite ? ' · ' . $mAssiduite : '')
                     : EtatMesure::absenceGroupe())
                 ->descriptionIcon($attendanceMesure ? 'heroicon-o-check-circle' : 'heroicon-o-question-mark-circle')
                 ->color($attendanceColor),

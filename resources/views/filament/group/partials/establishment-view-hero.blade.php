@@ -32,18 +32,13 @@
     // manque quand aucune annee n'est ouverte, et le motif le dit.
     $anneeConnue = $academicYear !== null && $academicYear !== '' && $academicYear !== 'N/A';
 
-    $statusLabel = match ($tenant->status ?? '') {
-        'active' => 'Actif',
-        'suspended' => 'Suspendu',
-        'maintenance' => 'Maintenance',
-        default => ucfirst((string) ($tenant->status ?? 'inconnu')),
-    };
-    $statusTone = match ($tenant->status ?? '') {
-        'active' => 'success',
-        'suspended' => 'warning',
-        'maintenance' => 'warning',
-        default => 'danger',
-    };
+    // Le `match` recopie ici ignorait « cancelled », pourtant legal dans le
+    // schema : le hero d'une interface entierement francaise affichait alors
+    // « Cancelled » sur une pastille ROUGE. Un fondateur qui a lui-meme resilie
+    // y lisait une alarme. Un statut qu'on ne sait pas nommer n'est pas une
+    // alarme non plus : le defaut est gris.
+    $statusLabel = \App\Enums\TenantStatus::libelleDe($tenant->status ?? null);
+    $statusTone = \App\Enums\TenantStatus::tonDe($tenant->status ?? null);
 @endphp
 
 <x-group-hero

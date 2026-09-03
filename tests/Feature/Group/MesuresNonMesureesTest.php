@@ -115,7 +115,11 @@ it('ne prête aucune assiduité à un établissement dont on n a que les effecti
 
     $kpis = app(TenantAggregationService::class)->getGroupKpis($this->group->fresh());
 
-    expect($kpis['avg_attendance_rate'])->toBe(0);
+    // Le taux est NUL, pas zéro : un `0` se serait affiché en rouge (barème
+    // d'assiduité : sain à 85, à risque à 70), accusant d'un effondrement de
+    // la présence une école dont on n'a justement pas relevé la présence.
+    expect($kpis['avg_attendance_rate'])->toBeNull();
+    expect($kpis['assiduite_mesurable'])->toBeFalse();
     expect($kpis['perimetre']['assiduite']['repondu'])->toBe(0);
 });
 
@@ -278,19 +282,32 @@ it('sur un groupe sans établissement, compte un zéro mais refuse d\'inventer u
 
 it('ne peint pas en rouge le recouvrement d\'un groupe qui n\'a aucune école', function () {
     // Le bout de la chaîne : ce que le fondateur voit réellement.
-    $kpis = app(TenantAggregationService::class)->getGroupKpis($this->group->fresh());
+    //
+    // Ce test construisait son `context` À LA MAIN, contournant exactement la
+    // méthode qui le produit en vrai (`ListEstablishments::buildHeroContext()`)
+    // — une régression de cette méthode l'aurait laissé vert. On passe par
+    // elle.
+    $membre = \App\Models\GroupMember::create([
+        'group_id' => $this->group->id,
+        'email' => 'dg@test.local',
+        'name' => 'Directeur',
+        'role' => 'directeur_general',
+        'password' => \Illuminate\Support\Facades\Hash::make('demo1234'),
+        'is_active' => true,
+    ]);
+    $this->actingAs($membre, 'group');
+
+    $page = new \App\Filament\Group\Resources\EstablishmentResource\Pages\ListEstablishments();
+    $construire = new ReflectionMethod($page, 'buildHeroContext');
+    $construire->setAccessible(true);
 
     $html = view('filament.group.partials.establishments-hero', [
-        'context' => [
-            'total_students' => 0, 'total_staff' => 0, 'establishment_count' => 0,
-            'avg_rate' => (float) ($kpis['collection_rate'] ?? 0),
-            'etat_effectifs' => $kpis['perimetre']['effectifs']['etat'],
-            'etat_personnel' => $kpis['perimetre']['personnel']['etat'],
-            'etat_finances' => $kpis['perimetre']['finances']['etat'],
-            'mention_effectifs' => null, 'mention_personnel' => null, 'mention_finances' => null,
-        ],
+        'context' => $construire->invoke($page),
     ])->render();
 
     expect($html)->not->toContain('data-tone="danger"');
     expect($html)->not->toContain('critique');
+
+    // Et il dit l'absence plutôt que de la taire.
+    expect($html)->toContain(\App\Support\EtatMesure::TIRET);
 });

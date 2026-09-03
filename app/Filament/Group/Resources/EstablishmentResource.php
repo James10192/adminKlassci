@@ -6,6 +6,7 @@ use App\Enums\AlertSeverity;
 use App\Filament\Group\Resources\EstablishmentResource\Pages;
 use App\Models\Tenant;
 use App\Services\TenantAggregationService;
+use App\Enums\TenantStatus;
 use App\Support\EtatMesure;
 use App\Support\FcfaFormatter;
 use App\Support\QuotaHealth;
@@ -224,15 +225,15 @@ class EstablishmentResource extends Resource
                     ->badge()
                     ->color('gray'),
 
+                // La colonne affichait la valeur brute de la base — « active »,
+                // « cancelled » — dans une interface entierement francaise, et
+                // peignait en ROUGE tout statut absent du `match`, resiliation
+                // comprise.
                 Tables\Columns\TextColumn::make('status')
                     ->label('Statut')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'active' => 'success',
-                        'suspended' => 'warning',
-                        'maintenance' => 'info',
-                        default => 'danger',
-                    }),
+                    ->formatStateUsing(fn (?string $state): string => TenantStatus::libelleDe($state))
+                    ->color(fn (?string $state): string => TenantStatus::tonDe($state)),
 
                 Tables\Columns\TextColumn::make('plan')
                     ->label('Plan')
@@ -334,18 +335,8 @@ class EstablishmentResource extends Resource
                         Infolists\Components\TextEntry::make('status')
                             ->label('Statut')
                             ->badge()
-                            ->formatStateUsing(fn (?string $state): string => match ($state) {
-                                'active' => 'Actif',
-                                'suspended' => 'Suspendu',
-                                'maintenance' => 'Maintenance',
-                                'archived' => 'Archivé',
-                                default => ucfirst((string) ($state ?: 'inconnu')),
-                            })
-                            ->color(fn (?string $state): string => match ($state) {
-                                'active' => 'success',
-                                'suspended', 'maintenance' => 'warning',
-                                default => 'danger',
-                            }),
+                            ->formatStateUsing(fn (?string $state): string => TenantStatus::libelleDe($state))
+                            ->color(fn (?string $state): string => TenantStatus::tonDe($state)),
                         Infolists\Components\TextEntry::make('plan')
                             ->label('Plan')
                             ->formatStateUsing(fn (?string $state): string => $state

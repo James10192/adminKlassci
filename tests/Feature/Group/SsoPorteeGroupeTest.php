@@ -85,3 +85,43 @@ it('refuse une destination qui sort du site du tenant', function () {
     // Un chemin interne reste accepté.
     expect($widget->getSsoUrl('rostan-yopougon', '/esbtp/etudiants'))->not->toBeNull();
 });
+
+it('refuse une barre oblique encodée, un saut de ligne, et un membre sans groupe', function () {
+    $widget = new EstablishmentCardsWidget();
+    $autorisee = new ReflectionMethod($widget, 'destinationAutorisee');
+    $autorisee->setAccessible(true);
+
+    // Ce qui doit passer.
+    foreach (['/', '/esbtp/etudiants', '/esbtp/paiements?statut=valide'] as $ok) {
+        expect($autorisee->invoke(null, $ok))->toBeTrue("destination refusée à tort : {$ok}");
+    }
+
+    // Ce qui ne doit pas passer. Les deux premières étaient déjà bloquées ; les
+    // deux suivantes passaient : « % » laissait encoder une barre oblique, et
+    // « $ » accepte un saut de ligne final.
+    foreach ([
+        '//evil.com',
+        '/\\evil.com',
+        '/%2f%2fevil.com',
+        "/a\n",
+        'https://evil.com',
+        '',
+    ] as $ko) {
+        expect($autorisee->invoke(null, $ko))->toBeFalse('destination acceptée à tort : ' . json_encode($ko));
+    }
+});
+
+it('ne signe pas de jeton vers un établissement suspendu', function () {
+    // Les cartes n'affichent que les écoles actives, mais la méthode est
+    // publique : `$wire.getSsoUrl('ecole-suspendue')` rendait un jeton valide
+    // vers une école que le groupe a suspendue — typiquement pour impayé.
+    $suspendu = tenantDuGroupe($this->groupe, 'rostan-suspendu');
+    $suspendu->update(['status' => 'suspended']);
+
+    $this->actingAs($this->membre, 'group');
+
+    expect((new EstablishmentCardsWidget())->getSsoUrl('rostan-suspendu'))->toBeNull();
+
+    // Contre-épreuve : une école active du même groupe s'ouvre toujours.
+    expect((new EstablishmentCardsWidget())->getSsoUrl($this->mien->code))->not->toBeNull();
+});

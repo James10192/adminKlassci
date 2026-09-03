@@ -78,13 +78,25 @@ class FinancialOverview extends Page
             'collected' => $totalCollected,
             'outstanding' => max(0, $totalExpected - $totalCollected),
             'surplus' => max(0, $totalCollected - $totalExpected),
-            'rate' => $totalExpected > 0 ? min(100, round(($totalCollected / $totalExpected) * 100, 1)) : 0,
+            // Pas d'attendu, pas de taux — la meme regle que dans
+            // GroupKpiProvider, et pour la meme raison : un `0` s'affiche en
+            // ROUGE avec la mention « critique ».
+            'rate' => $totalExpected > 0
+                ? min(100, round(($totalCollected / $totalExpected) * 100, 1))
+                : null,
             'perimetre' => [
                 'total' => count($financials),
                 'repondu' => $mesures,
                 'manquants' => $manquants,
                 'complet' => $manquants === [],
-                'etat' => $mesures === 0 && $financials !== []
+                // Le `&& $financials !== []` faisait basculer un groupe SANS
+                // etablissement du cote MESURE : cette page annoncait alors
+                // « Recouvrement 0,0 % — critique » en rouge, pendant que le
+                // tableau de bord, le hero Etablissements et le Benchmarking
+                // disaient « aucun etablissement mesure » pour le meme groupe,
+                // le meme jour. Un taux sans denominateur n'existe pas, quel
+                // que soit le nombre d'etablissements.
+                'etat' => $mesures === 0 || $totalExpected <= 0
                     ? EtatMesure::NON_MESURE
                     : EtatMesure::MESURE,
             ],

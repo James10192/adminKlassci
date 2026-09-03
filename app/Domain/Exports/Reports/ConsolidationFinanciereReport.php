@@ -102,7 +102,12 @@ class ConsolidationFinanciereReport extends TableauReport
                 $mesure ? (float) ($donnees['revenue_expected'] ?? 0) : null,
                 $mesure ? (float) ($donnees['revenue_collected'] ?? 0) : null,
                 $mesure ? (float) ($donnees['outstanding'] ?? 0) : null,
-                $mesure ? (float) ($donnees['collection_rate'] ?? 0) : null,
+                // `collection_rate` peut être nul sur une école mesurée dont
+                // aucun frais n'est configuré : la cellule reste vide plutôt
+                // que d'imprimer un zéro qui se lirait comme un recouvrement.
+                $mesure && $donnees['collection_rate'] !== null
+                    ? (float) $donnees['collection_rate']
+                    : null,
             ];
         }
 
@@ -143,7 +148,12 @@ class ConsolidationFinanciereReport extends TableauReport
         // Le taux du groupe se recalcule sur les totaux : faire la moyenne des
         // taux par établissement donnerait le même poids à une école de trente
         // élèves qu'à une de deux mille.
-        $taux = $attendu > 0 ? min(100, round(($encaisse / $attendu) * 100, 1)) : 0.0;
+        //
+        // Et sans attendu, il n'y a pas de taux : la cellule reste vide. Un
+        // « 0,0 % » imprimé sous un total consolidé se lit, chez un banquier,
+        // comme un recouvrement nul — alors qu'il ne dit que l'absence de
+        // frais configurés.
+        $taux = $attendu > 0 ? min(100, round(($encaisse / $attendu) * 100, 1)) : null;
 
         $mention = EtatMesure::mentionPerimetre($mesures, $total);
 

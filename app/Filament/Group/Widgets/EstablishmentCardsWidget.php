@@ -2,6 +2,7 @@
 
 namespace App\Filament\Group\Widgets;
 
+use App\Enums\TenantStatus;
 use App\Models\Tenant;
 use App\Services\SsoTokenSigner;
 use App\Services\TenantAggregationService;
@@ -39,6 +40,19 @@ class EstablishmentCardsWidget extends Widget
             return null;
         }
 
+        // Un membre sans groupe ne peut ouvrir aucun etablissement.
+        //
+        // Sans ce garde, `where('group_id', null)` devient `group_id IS NULL` :
+        // le scope se retournerait et signerait un jeton pour tout tenant NON
+        // rattache — c'est-a-dire presque tous. La colonne est aujourd'hui NOT
+        // NULL, mais la securite de ce garde reposerait alors sur une
+        // contrainte situee dans une autre table, que rien ici ne rappelle.
+        if (! $member->group_id) {
+            Log::warning('[sso] Jeton refuse : membre sans groupe', ['membre' => $member->id]);
+
+            return null;
+        }
+
         // LE GROUPE DU MEMBRE, PAS LA PLATEFORME ENTIERE.
         //
         // Cette methode est PUBLIQUE sur un composant Livewire : elle est donc
@@ -50,12 +64,17 @@ class EstablishmentCardsWidget extends Widget
         // Le maitre est la SEULE autorite sur l'appartenance a un groupe : le
         // tenant ne verifie que la signature HMAC, l'expiration, le rate-limit
         // et l'open-redirect. Il n'a aucun moyen de rattraper ce controle.
+        // ...ET une ecole que le groupe exploite encore. Les cartes n'affichent
+        // que les actifs, mais la methode est publique : `$wire.getSsoUrl(...)`
+        // avec le code d'une ecole suspendue — typiquement pour impaye —
+        // rendait un jeton signe parfaitement valide.
         $tenant = Tenant::where('code', $tenantCode)
             ->where('group_id', $member->group_id)
+            ->where('status', TenantStatus::Active->value)
             ->first();
 
         if (! $tenant) {
-            Log::warning('[sso] Jeton refuse : etablissement hors du groupe du membre', [
+            Log::warning('[sso] Jeton refuse : etablissement hors du groupe du membre, ou inactif', [
                 'membre' => $member->id,
                 'groupe' => $member->group_id,
                 'tenant_demande' => $tenantCode,
@@ -109,7 +128,15 @@ class EstablishmentCardsWidget extends Widget
 
         // Un chemin absolu du site, et rien d'autre : ni schema, ni hote, ni
         // « // » qui ferait une URL protocol-relative.
-        return (bool) preg_match('#^/(?!/)[A-Za-z0-9/_\-.~%?&=]*$#', $redirectTo);
+        //
+        // Deux details qui n'en sont pas :
+        //   — `%` est EXCLU. Il y figurait, et laissait donc passer une barre
+        //     oblique encodee : `/%2f%2fevil.com`, decode par le tenant, devient
+        //     `///evil.com`. Le refus de « // » ne servait plus a rien.
+        //   — `\z` et non `$`, qui accepte un saut de ligne final : `"/a\n"`
+        //     passait, et un saut de ligne dans une valeur qu'on signe est le
+        //     debut d'une injection d'en-tete.
+        return (bool) preg_match('#^/(?!/)[A-Za-z0-9/_\-.~?&=]*\z#', $redirectTo);
     }
 
     private function tenantBaseUrl(Tenant $tenant): string

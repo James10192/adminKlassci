@@ -15,7 +15,6 @@
         $totalInscriptions = 0;   $nbEffectifs = 0;
         $totalStaff = 0;          $nbPersonnel = 0;
         $totalRevenueCollected = 0.0;
-        $totalRevenueExpected = 0.0;
         $nbFinances = 0;
         $total = count($establishments);
 
@@ -34,28 +33,22 @@
             }
             if (EtatMesure::aUneValeur($d['etat_finances'] ?? null)) {
                 $totalRevenueCollected += (float) ($d['revenue_collected'] ?? 0);
-                $totalRevenueExpected += (float) ($d['revenue_expected'] ?? 0);
                 $nbFinances++;
             }
         }
 
-        // Le taux du groupe se pondere par les MONTANTS, il ne se moyenne pas.
+        // Le taux du groupe n'est PAS recalcule ici.
         //
-        // Cet ecran faisait la moyenne arithmetique des taux de chaque ecole,
-        // la ou le tableau de bord (GroupKpiProvider) divise l'encaisse du
-        // groupe par son attendu. Les deux nombres divergent des que les ecoles
-        // n'ont pas le meme poids : une ecole qui encaisse 100 000 sur 100 000
-        // et une qui encaisse 100 000 sur 1 000 000 donnent 55 % en moyenne
-        // simple, contre 18 % en realite. Le fondateur lisait 55 % ici et 18 %
-        // sur son tableau de bord, pour le meme groupe et le meme jour.
-        //
-        // Sans attendu, il n'y a pas de taux — c'est la meme regle que pour un
-        // groupe sans etablissement mesure, et elle rend `$tauxMesurable` faux
-        // plutot que d'afficher un 0 % qui accuserait a tort.
-        $tauxMesurable = $nbFinances > 0 && $totalRevenueExpected > 0;
-        $avgRate = $tauxMesurable
-            ? min(100, round(($totalRevenueCollected / $totalRevenueExpected) * 100, 1))
-            : 0.0;
+        // Cet ecran en faisait la moyenne arithmetique des taux par ecole, la
+        // ou le tableau de bord divise l'encaisse du groupe par son attendu.
+        // Les deux divergent des que les ecoles n'ont pas le meme poids — 55 %
+        // contre 18 % sur deux ecoles de tailles opposees — et c'est l'ecran de
+        // COMPARAISON, celui qu'on ouvre pour arbitrer, qui donnait le chiffre
+        // flatteur. Il lit desormais le meme producteur que le tableau de bord,
+        // qui porte aussi la regle « pas d'attendu, pas de taux ».
+        $kpisGroupe = $this->kpisGroupe();
+        $avgRate = (float) ($kpisGroupe['collection_rate'] ?? 0);
+        $tauxMesurable = $nbFinances > 0 && ($kpisGroupe['finances_mesurables'] ?? false);
 
         // Le ratio croise deux familles : il n'a de sens que si les DEUX sont
         // mesurées sur le même périmètre. Sinon on divise des étudiants connus
@@ -254,7 +247,7 @@
                     <td>
                         <div class="gp-scorecard-indicator">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" /></svg>
-                            Présences (30j)
+                            Présences ({{ mb_strtolower($this->periodeMesure()->label()) }})
                         </div>
                     </td>
                     @foreach($establishments as $data)

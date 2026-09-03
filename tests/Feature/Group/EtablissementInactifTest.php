@@ -45,10 +45,57 @@ it('nomme la suspension plutôt que d\'accuser la base de l\'établissement', fu
     expect(EtatMesure::badge($kpis['etat_finances'], $kpis['motif']))->toBe('Hors service');
 });
 
-it('vaut pour toute école non active, pas seulement pour les suspendues', function () {
-    $kpis = app(GroupKpiProvider::class)->computeTenantKpis(tenantAvecStatut('archive', 'archived'));
+it('vaut aussi pour une école résiliée', function () {
+    // Le test utilisait « archived », un mot qui n'appartient à AUCUN
+    // vocabulaire du dépôt : l'énumération SQL est
+    // active|suspended|maintenance|cancelled. Il ne passait que parce que la
+    // suite tourne sur SQLite, qui n'applique pas les énumérations — et il
+    // laissait donc les deux seuls autres statuts réels sans couverture. C'est
+    // exactement ce trou qui a laissé passer la régression ci-dessous.
+    $kpis = app(GroupKpiProvider::class)->computeTenantKpis(tenantAvecStatut('resilie', 'cancelled'));
 
     expect($kpis['motif'])->toBe(EtatMesure::MOTIF_INACTIF);
+});
+
+it('MESURE une école en maintenance — la maintenance n\'est pas une suspension', function () {
+    // La maintenance est un état d'exploitation TRANSITOIRE : le temps d'un
+    // déploiement, deux à cinq minutes. La base MySQL de l'école répond
+    // parfaitement pendant ce temps.
+    //
+    // Une première version du court-circuit testait « tout sauf actif » et
+    // coupait donc aussi la maintenance : pendant chaque déploiement, la ligne
+    // de l'école passait en tirets gris avec le badge « Hors service », et ses
+    // deux mille étudiants disparaissaient de l'écran de leur directeur. C'est
+    // le miroir exact du défaut que tout ce chantier corrige — présenter une
+    // mesure disponible comme une absence, et l'attribuer à une décision
+    // administrative qui n'a pas été prise.
+    //
+    // La base est injoignable (port 1) : le motif de PANNE prouve qu'on a bien
+    // TENTÉ la connexion au lieu de court-circuiter.
+    $kpis = app(GroupKpiProvider::class)->computeTenantKpis(tenantAvecStatut('en-maintenance', 'maintenance'));
+
+    expect($kpis['motif'])->toBe(EtatMesure::MOTIF_INJOIGNABLE);
+    expect($kpis['motif'])->not->toBe(EtatMesure::MOTIF_INACTIF);
+});
+
+it('couvre les quatre statuts réels du schéma, et eux seuls', function () {
+    // Le garde-fou contre la régression precedente : si un statut apparait ou
+    // disparait de l'enumeration SQL, ce test le dit avant qu'un ecran ne
+    // l'apprenne au directeur.
+    $statuts = array_map(fn ($c) => $c->value, \App\Enums\TenantStatus::cases());
+
+    expect($statuts)->toEqualCanonicalizing(['active', 'suspended', 'maintenance', 'cancelled']);
+
+    // Et la seule question qui compte pour le portail : qui se mesure ?
+    expect(\App\Enums\TenantStatus::Active->mesurable())->toBeTrue();
+    expect(\App\Enums\TenantStatus::Maintenance->mesurable())->toBeTrue();
+    expect(\App\Enums\TenantStatus::Suspended->mesurable())->toBeFalse();
+    expect(\App\Enums\TenantStatus::Cancelled->mesurable())->toBeFalse();
+
+    // Un statut inconnu ne s'interroge pas : on n'ouvre pas de connexion vers
+    // une base dont on ignore l'etat de l'etablissement.
+    expect(\App\Enums\TenantStatus::mesurableDe('mot-inconnu'))->toBeFalse();
+    expect(\App\Enums\TenantStatus::mesurableDe(null))->toBeFalse();
 });
 
 it('ne présente aucune de ses grandeurs comme mesurée', function () {

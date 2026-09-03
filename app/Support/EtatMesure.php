@@ -63,8 +63,18 @@ final class EtatMesure
     /** L'école n'utilise pas ce module — aucune paie, aucun bulletin, jamais. */
     public const MOTIF_SANS_MODULE = 'sans_module';
 
-    /** L'établissement n'est pas actif : suspendu ou archivé. */
+    /** L'établissement n'est pas actif : suspendu ou résilié. */
     public const MOTIF_INACTIF = 'inactif';
+
+    /**
+     * La base a répondu, mais aucun montant n'est attendu sur la période.
+     *
+     * Ce n'est ni une panne ni un module absent : l'école n'a simplement pas
+     * encore configuré ses frais. Sans ce motif, son taux de recouvrement
+     * valait `0 %` — affiché en ROUGE avec la mention « critique » — le jour
+     * même où elle ouvrait son année.
+     */
+    public const MOTIF_SANS_FRAIS = 'sans_frais';
 
     /** Un chiffre est-il le résultat d'une mesure présente ? */
     public static function estMesure(?string $etat): bool
@@ -99,6 +109,10 @@ final class EtatMesure
             return 'Hors service';
         }
 
+        if ($motif === self::MOTIF_SANS_FRAIS) {
+            return 'Frais non configurés';
+        }
+
         return match ($etat) {
             self::RELEVE => 'Dernier relevé',
             self::NON_MESURE => 'Non mesuré',
@@ -125,6 +139,7 @@ final class EtatMesure
         return match ($motif) {
             self::MOTIF_SANS_ANNEE => "aucune année universitaire n'est en cours",
             self::MOTIF_SANS_MODULE => "l'établissement n'utilise pas ce module",
+            self::MOTIF_SANS_FRAIS => "aucun frais n'est configuré pour cette période",
             self::MOTIF_INACTIF => "l'établissement n'est pas actif",
             default => "la base de l'établissement n'a pas répondu",
         };
