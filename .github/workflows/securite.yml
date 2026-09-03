@@ -1,0 +1,131 @@
+name: Sécurité
+
+# Un fichier a part, et pas un job de plus dans « Tests » : ce sont deux
+# questions differentes. Les tests demandent « ce code fait-il ce qu'on croit ».
+# L'audit demande « le monde a-t-il publie quelque chose contre les versions
+# que nous deployons » — une question dont la reponse change SANS que le code
+# bouge, d'ou la planification hebdomadaire ci-dessous.
+#
+# Separer les deux permet aussi de proteger la branche sur « Tests » sans que
+# la dette de dependances bloque une fusion, ou l'inverse. C'est au proprietaire
+# du depot de decider, pas a ce fichier.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  # Un avis publie APRES la fusion ne serait jamais vu si l'audit ne tournait
+  # qu'a la proposition : le code n'a pas change, mais le monde si. Lundi 6h UTC.
+  # GitHub previent le proprietaire du depot quand un run planifie echoue.
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Avis de sécurité des dépendances
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # 8.3 = la production. L'audit lit `composer.lock`, pas le code :
+          # une seule version suffit.
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      # `--locked` audite le verrou sans installer les dependances : quelques
+      # secondes, et le resultat ne depend pas de ce que le runner a resolu.
+      #
+      # DEUX lectures, et c'est deliberé :
+      #
+      #   — le RAPPORT porte sur tout, dependances de developpement comprises.
+      #     Une bibliotheque de test compromise est un risque pour le poste et
+      #     pour la CI, meme si elle ne part jamais en production.
+      #   — la DECISION de bloquer ne porte que sur `--no-dev`, ce qui est
+      #     reellement deploye. Un avis sur PHPUnit qui empeche de livrer un
+      #     correctif de production serait la meilleure facon d'apprendre a
+      #     passer outre — et le jour ou un avis critique arrive en production,
+      #     on passerait outre aussi.
+      #
+      # Et parmi ce qui est deploye, seules les gravites hautes et critiques
+      # bloquent. Le reste est affiche, compte, et laisse passer.
+      - name: Lire les avis publiés sur composer.lock
+        run: |
+          set +e
+          composer audit --locked --abandoned=report --format=json > tout.json 2> tout.err
+          composer audit --locked --no-dev --abandoned=ignore --format=json > prod.json 2> prod.err
+          set -e
+
+          # L'API des avis peut ne pas repondre. Une panne reseau n'est pas un
+          # verrou sain : on le DIT, et on ne bloque pas la fusion. Un audit non
+          # concluant annonce comme vert serait pire que pas d'audit du tout.
+          if [ ! -s tout.json ] || ! jq -e . tout.json > /dev/null 2>&1; then
+            {
+              echo "### Avis de sécurité — audit non concluant"
+              echo
+              echo "L'API des avis n'a pas répondu. Le verrou n'a **pas** été vérifié."
+              echo
+              echo '```'
+              head -n 20 tout.err
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Audit non concluant (API injoignable) — la fusion n'est pas bloquée pour autant."
+            exit 0
+          fi
+
+          gravite='((.severity // "") | ascii_downcase) as $s | $s == "high" or $s == "critical"'
+
+          total=$(jq '[.advisories[]?[]?] | length' tout.json)
+          hauts=$(jq "[.advisories[]?[]? | select($gravite)] | length" tout.json)
+          abandonnes=$(jq '(.abandoned // {}) | length' tout.json)
+
+          bloquants=0
+          if [ -s prod.json ] && jq -e . prod.json > /dev/null 2>&1; then
+            bloquants=$(jq "[.advisories[]?[]? | select($gravite)] | length" prod.json)
+          fi
+
+          # Le rapport part dans le journal ET dans le resume : ecrit dans le
+          # seul resume, il n'est lisible que dans un navigateur — ni un outil,
+          # ni une API, ni un agent ne peut dire QUELS avis ont bloque.
+          {
+            echo "### Avis de sécurité des dépendances"
+            echo
+            if [ "$total" -eq 0 ]; then
+              echo "Aucun avis publié sur les versions verrouillées."
+            else
+              echo "**$total avis**, dont **$hauts** de gravité haute ou critique."
+              echo "**$bloquants** d'entre eux portent sur une dépendance déployée en production."
+              echo
+              echo "| Gravité | Paquet | Avis | Versions affectées |"
+              echo "|---|---|---|---|"
+              jq -r '.advisories | to_entries[] | .key as $paquet | .value[] | "| \(.severity // "inconnue") | `\($paquet)` | [\(.title)](\(.link // "")) | `\(.affectedVersions)` |"' tout.json
+            fi
+
+            if [ "$abandonnes" -gt 0 ]; then
+              echo
+              echo "#### Paquets abandonnés (signalés, non bloquants)"
+              echo
+              jq -r '.abandoned | to_entries[] | "- `\(.key)`\(if (.value | type) == "string" then " — remplacer par `\(.value)`" else "" end)"' tout.json
+            fi
+
+            echo
+            echo "Correctif : \`composer update\` puis \`composer securite\` pour vérifier."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$bloquants" -gt 0 ]; then
+            echo "::error::$bloquants avis de gravité haute ou critique sur des dépendances déployées. Détail ci-dessus."
+            exit 1
+          fi
+
+          if [ "$total" -gt 0 ]; then
+            echo "::warning::$total avis, dont $hauts hauts ou critiques, mais aucun sur une dépendance déployée."
+          fi

@@ -1,0 +1,54 @@
+# Qui applique les correctifs que l'audit signale.
+#
+# L'audit dit qu'un avis existe ; il ne repare rien. Sans ce fichier, la
+# reparation dependait de quelqu'un qui pense a lancer `composer update` — et
+# c'est precisement ce qui n'est pas arrive : le verrou portait 48 avis, dont
+# 14 de gravite haute ou critique, sur des versions vieilles de plusieurs mois.
+#
+# Les mises a jour arrivent groupees et hebdomadaires, pas au fil de l'eau :
+# une proposition par semaine se relit, dix par jour se ferment sans lire.
+
+version: 2
+
+updates:
+  - package-ecosystem: composer
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Abidjan
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+      include: scope
+    labels:
+      - dépendances
+    groups:
+      # Tous les correctifs de securite dans UNE proposition : ils se relisent
+      # ensemble, se testent ensemble, et se deploient ensemble.
+      securite:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      # Les montees de version ordinaires, groupees elles aussi. Une majeure
+      # arrive seule : elle demande une relecture, pas un clic.
+      mineures:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Les actions du workflow vieillissent aussi — le journal de la CI signale
+  # deja que `actions/checkout@v4` tourne sur un Node dépriorisé.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dépendances

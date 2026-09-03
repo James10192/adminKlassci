@@ -7,20 +7,10 @@ on:
   pull_request:
     branches:
       - main
-  # Un avis de securite publie APRES la fusion ne serait jamais vu si l'audit
-  # ne tournait qu'a la PR : le code n'a pas change, mais le monde si. Passage
-  # hebdomadaire, lundi 6h UTC. GitHub previent le proprietaire du depot quand
-  # un run planifie echoue.
-  schedule:
-    - cron: '0 6 * * 1'
-
 jobs:
   pest:
     name: Pest on PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
-    # Le passage hebdomadaire ne sert qu'a l'audit : rejouer la suite sur un
-    # code inchange n'apprendrait rien et ferait du bruit.
-    if: github.event_name != 'schedule'
 
     strategy:
       fail-fast: false
@@ -65,92 +55,3 @@ jobs:
       # Les jouer ici est le seul endroit ou ils sont verifies avant la fusion.
       - name: Run the full Pest suite
         run: ./vendor/bin/pest --colors=always
-
-  securite:
-    name: Avis de sécurité des dépendances
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          # 8.3 = la production. L'audit lit `composer.lock`, pas le code :
-          # une seule version suffit.
-          php-version: '8.3'
-          coverage: none
-          tools: composer:v2
-
-      # `--locked` audite le verrou sans installer les dependances : quelques
-      # secondes, et le resultat ne depend pas de ce qui a ete resolu ici.
-      #
-      # Le job ECHOUE sur une gravite haute ou critique, et seulement sur
-      # celles-la. Un avis moyen dans une dependance transitive bloquerait
-      # chaque PR, correctif de production compris, jusqu'a ce que quelqu'un
-      # prenne l'habitude de passer outre — et le jour ou un avis critique
-      # arrive, il passerait outre aussi. Tous les avis restent affiches dans
-      # le resume du job, quelle que soit leur gravite.
-      #
-      # Un paquet abandonne n'est pas une vulnerabilite : il est signale, il
-      # ne bloque pas.
-      - name: Lire les avis publies sur composer.lock
-        run: |
-          set +e
-          composer audit --locked --abandoned=report --format=json > audit.json 2> audit.err
-          set -e
-
-          # L'API des avis peut etre injoignable. Une panne reseau n'est pas
-          # une vulnerabilite : on le dit, on ne bloque pas la fusion.
-          if [ ! -s audit.json ] || ! jq -e . audit.json > /dev/null 2>&1; then
-            {
-              echo "### Avis de sécurité — audit non concluant"
-              echo
-              echo "L'API des avis de sécurité n'a pas répondu. Le verrou n'a **pas** été vérifié."
-              echo
-              echo '```'
-              head -n 20 audit.err
-              echo '```'
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "::warning::Audit non concluant (API injoignable) — la fusion n'est pas bloquée pour autant."
-            exit 0
-          fi
-
-          total=$(jq '[.advisories[]?[]?] | length' audit.json)
-          bloquants=$(jq '[.advisories[]?[]? | select(((.severity // "") | ascii_downcase) as $s | $s == "high" or $s == "critical")] | length' audit.json)
-          abandonnes=$(jq '(.abandoned // {}) | length' audit.json)
-
-          # Le rapport part dans le journal ET dans le resume. Ecrit dans le
-          # seul resume, il n'etait lisible que dans un navigateur : ni un
-          # outil, ni une API, ni un agent ne pouvait dire QUELS avis avaient
-          # bloque la fusion — seulement qu'il y en avait.
-          {
-            echo "### Avis de sécurité des dépendances"
-            echo
-            if [ "$total" -eq 0 ]; then
-              echo "Aucun avis publié sur les versions verrouillées."
-            else
-              echo "**$total avis**, dont **$bloquants** de gravité haute ou critique."
-              echo
-              echo "| Gravité | Paquet | Avis | Versions affectées |"
-              echo "|---|---|---|---|"
-              jq -r '.advisories | to_entries[] | .key as $paquet | .value[] | "| \(.severity // "inconnue") | `\($paquet)` | [\(.title)](\(.link // "")) | `\(.affectedVersions)` |"' audit.json
-            fi
-
-            if [ "$abandonnes" -gt 0 ]; then
-              echo
-              echo "#### Paquets abandonnés (signalés, non bloquants)"
-              echo
-              jq -r '.abandoned | to_entries[] | "- `\(.key)`\(if (.value | type) == "string" then " — remplacer par `\(.value)`" else "" end)"' audit.json
-            fi
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-
-          if [ "$bloquants" -gt 0 ]; then
-            echo "::error::$bloquants avis de gravité haute ou critique sur composer.lock. Détail dans le résumé du job."
-            exit 1
-          fi
-
-          if [ "$total" -gt 0 ]; then
-            echo "::warning::$total avis de gravité basse ou moyenne. Détail dans le résumé du job."
-          fi
