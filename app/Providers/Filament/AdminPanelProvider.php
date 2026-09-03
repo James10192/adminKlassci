@@ -52,6 +52,10 @@ class AdminPanelProvider extends PanelProvider
                 'gray' => Color::Slate,
             ])
             // Fonts + Thème CSS Slate Pro
+            // Les initiales sont dessinees en local : le fournisseur par defaut
+            // de Filament envoie le nom de la personne a ui-avatars.com a chaque
+            // affichage, et casse l avatar des que ce tiers est injoignable.
+            ->defaultAvatarProvider(\App\Support\Avatar\InitialesAvatarProvider::class)
             ->renderHook(
                 'panels::styles.after',
                 fn () => '<link rel="preconnect" href="https://fonts.googleapis.com">'
@@ -132,9 +136,10 @@ HTML
                 Pages\Dashboard::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
-            ->widgets([
-                \App\Filament\Widgets\CustomAccountWidget::class,
-            ])
+            // Aucun widget de compte : le nom et la déconnexion sont déjà dans
+            // la barre du haut. La carte « Bonjour » occupait toute la largeur,
+            // en tête de l'écran le plus consulté, pour n'y rien apprendre.
+            ->widgets([])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

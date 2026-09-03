@@ -11,8 +11,8 @@ class MatriculeConfigPage extends Page
     use TenantConfigTrait;
 
     protected static ?string $navigationIcon = 'heroicon-o-identification';
-    protected static ?string $navigationLabel = 'Config Matricule';
-    protected static ?string $navigationGroup = 'Configuration Tenants';
+    protected static ?string $navigationLabel = 'Format des matricules';
+    protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 2;
     protected static string $view = 'filament.pages.tenant-config.matricule-config';
     protected static ?string $title = 'Configuration des Matricules';

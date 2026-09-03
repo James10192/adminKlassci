@@ -6,6 +6,7 @@ use App\Contracts\Group\GroupFinancialsProviderInterface;
 use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\TenantConnectionManager;
+use App\Support\EtatMesure;
 use App\Support\Period\PeriodFactory;
 use App\Support\Period\PeriodInterface;
 use Illuminate\Support\Facades\DB;
@@ -41,7 +42,10 @@ class GroupFinancialsProvider implements GroupFinancialsProviderInterface
         try {
             $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
             if (! $currentYear) {
-                return $this->emptyFinancials($tenant);
+                // La base a repondu : ce n'est pas une panne, c'est une ecole
+                // sans annee universitaire courante. Les deux cas donnaient le
+                // meme zero ; ils ne se disent pas de la meme facon a l'ecran.
+                return $this->emptyFinancials($tenant, EtatMesure::MOTIF_SANS_ANNEE);
             }
 
             // Windowed: monthlyRevenue filtered by Period, still grouped by month.
@@ -84,11 +88,22 @@ class GroupFinancialsProvider implements GroupFinancialsProviderInterface
                 'revenue_collected' => $totalCollected,
                 'outstanding' => max(0, $totalExpected - $totalCollected),
                 'surplus' => max(0, $totalCollected - $totalExpected),
+                // Sans attendu, il n'y a pas de taux — et le `0` qui tenait
+                // sa place s'affichait en ROUGE, mention « critique », sur une
+                // ecole qui venait d'ouvrir son annee sans frais configures.
                 'collection_rate' => $totalExpected > 0
                     ? min(100, round(($totalCollected / $totalExpected) * 100, 1))
-                    : 0,
+                    : null,
                 'monthly_revenue' => $monthlyRevenue,
                 'by_type' => $byType,
+                'error' => false,
+                'motif' => $totalExpected > 0 ? null : EtatMesure::MOTIF_SANS_FRAIS,
+                // NON_APPLICABLE plutot que MESURE : la base a bien repondu,
+                // mais il n'y a rien a mesurer. La ligne passe au tiret gris,
+                // avec sa raison, au lieu d'un « 0 % critique » rouge.
+                'etat' => $totalExpected > 0
+                    ? EtatMesure::MESURE
+                    : EtatMesure::NON_APPLICABLE,
             ];
         } catch (\Exception $e) {
             Log::error("[group-refactor] computeTenantFinancials failed for {$tenant->code}: {$e->getMessage()}");
@@ -98,10 +113,24 @@ class GroupFinancialsProvider implements GroupFinancialsProviderInterface
         }
     }
 
-    public function emptyFinancials(Tenant $tenant): array
+    /**
+     * Les finances d'un établissement dont la base n'a pas répondu.
+     *
+     * Aucun repli possible : `klassci_master` ne détient aucun chiffre
+     * financier, et en fabriquer un exigerait de le stocker. Un taux de
+     * recouvrement vieux d'un jour, affiché comme un relevé, serait d'ailleurs
+     * plus dangereux qu'un tiret — il ne bouge pas alors que la trésorerie
+     * bouge. L'état est donc `NON_MESURE`, et les zéros de ce tableau ne sont
+     * plus lus comme des valeurs : les vues interrogent l'état avant de
+     * formater.
+     */
+    public function emptyFinancials(Tenant $tenant, string $motif = EtatMesure::MOTIF_INJOIGNABLE): array
     {
         return [
             'tenant_name' => $tenant->name,
+            'error' => true,
+            'motif' => $motif,
+            'etat' => EtatMesure::NON_MESURE,
             'revenue_expected' => 0,
             'revenue_collected' => 0,
             'outstanding' => 0,

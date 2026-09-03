@@ -22,7 +22,7 @@ return [
     | Debounce applied client-side (Alpine) before the Livewire state is updated.
     | Tuned for quick clicks without triggering one HTTP roundtrip per keystroke.
     */
-    'period_selector_debounce_ms' => env('GROUP_PORTAL_PERIOD_DEBOUNCE_MS', 300),
+    'period_selector_debounce_ms' => (int) env('GROUP_PORTAL_PERIOD_DEBOUNCE_MS', 300),
 
     /*
     |--------------------------------------------------------------------------
@@ -68,9 +68,9 @@ return [
     | they have no expiry to worry about.
     */
     'alerts_banner_enabled' => env('GROUP_PORTAL_ALERTS_BANNER_ENABLED', true),
-    'subscription_urgent_days' => env('GROUP_PORTAL_SUBSCRIPTION_URGENT_DAYS', 7),
-    'subscription_warning_days' => env('GROUP_PORTAL_SUBSCRIPTION_WARNING_DAYS', 14),
-    'subscription_info_days' => env('GROUP_PORTAL_SUBSCRIPTION_INFO_DAYS', 30),
+    'subscription_urgent_days' => (int) env('GROUP_PORTAL_SUBSCRIPTION_URGENT_DAYS', 7),
+    'subscription_warning_days' => (int) env('GROUP_PORTAL_SUBSCRIPTION_WARNING_DAYS', 14),
+    'subscription_info_days' => (int) env('GROUP_PORTAL_SUBSCRIPTION_INFO_DAYS', 30),
 
     /*
     |--------------------------------------------------------------------------
@@ -91,34 +91,34 @@ return [
     */
     'health_alerts_enabled' => env('GROUP_PORTAL_HEALTH_ALERTS_ENABLED', true),
 
-    'plan_overage_warning_pct' => env('GROUP_PORTAL_PLAN_OVERAGE_WARNING_PCT', 100),
-    'plan_overage_critical_pct' => env('GROUP_PORTAL_PLAN_OVERAGE_CRITICAL_PCT', 110),
+    'plan_overage_warning_pct' => (int) env('GROUP_PORTAL_PLAN_OVERAGE_WARNING_PCT', 100),
+    'plan_overage_critical_pct' => (int) env('GROUP_PORTAL_PLAN_OVERAGE_CRITICAL_PCT', 110),
 
-    'stale_tenant_days' => env('GROUP_PORTAL_STALE_TENANT_DAYS', 30),
+    'stale_tenant_days' => (int) env('GROUP_PORTAL_STALE_TENANT_DAYS', 30),
 
     // Group-level SSL thresholds are intentionally more conservative than the
     // per-tenant TenantHealthCheck thresholds (30/7) so the founder is alerted
     // before any single tenant flips to degraded/unhealthy status.
-    'ssl_expiry_warning_days' => env('GROUP_PORTAL_SSL_EXPIRY_WARNING_DAYS', 15),
-    'ssl_expiry_critical_days' => env('GROUP_PORTAL_SSL_EXPIRY_CRITICAL_DAYS', 7),
+    'ssl_expiry_warning_days' => (int) env('GROUP_PORTAL_SSL_EXPIRY_WARNING_DAYS', 15),
+    'ssl_expiry_critical_days' => (int) env('GROUP_PORTAL_SSL_EXPIRY_CRITICAL_DAYS', 7),
 
     // Single-month dips are noise; the two-consecutive-months requirement in
     // EnrollmentTrendAnalyzer filters for genuine trends.
-    'enrollment_decline_threshold_pct' => env('GROUP_PORTAL_ENROLLMENT_DECLINE_THRESHOLD_PCT', 10),
+    'enrollment_decline_threshold_pct' => (int) env('GROUP_PORTAL_ENROLLMENT_DECLINE_THRESHOLD_PCT', 10),
 
     // Unpaid invoices (PR7c): per-tenant balance_due threshold in FCFA.
     // Pre-aggregated from the master-DB `invoices` table (status sent|overdue)
     // so a group with 20 tenants incurs a single grouped SELECT, not 20 per-
     // tenant queries. Thresholds match the general KLASSCI spending bands.
-    'unpaid_invoices_warning_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_WARNING_FCFA', 200000),
-    'unpaid_invoices_critical_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_CRITICAL_FCFA', 500000),
+    'unpaid_invoices_warning_fcfa' => (int) env('GROUP_PORTAL_UNPAID_INVOICES_WARNING_FCFA', 200000),
+    'unpaid_invoices_critical_fcfa' => (int) env('GROUP_PORTAL_UNPAID_INVOICES_CRITICAL_FCFA', 500000),
 
     // Teacher workload (PR7d): weekly hours per teacher thresholds.
     // Computed from `esbtp_seance_cours` (current academic year) per tenant,
     // fanned out via the aggregator pattern. CI labor convention is 40h/week;
     // warning at 30h gives a 10h cushion before the hard ceiling.
-    'teacher_workload_warning_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_WARNING_HOURS', 30),
-    'teacher_workload_critical_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_CRITICAL_HOURS', 40),
+    'teacher_workload_warning_hours' => (int) env('GROUP_PORTAL_TEACHER_WORKLOAD_WARNING_HOURS', 30),
+    'teacher_workload_critical_hours' => (int) env('GROUP_PORTAL_TEACHER_WORKLOAD_CRITICAL_HOURS', 40),
 
     /*
     |--------------------------------------------------------------------------
@@ -146,6 +146,36 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rapports programmés
+    |--------------------------------------------------------------------------
+    |
+    | Envoi automatique des états du portail par e-mail, selon les
+    | programmations créées par les membres du groupe.
+    |
+    | Éteint par défaut, comme les notifications : la mécanique est branchée
+    | mais ne part pas tant qu'on ne l'allume pas sur l'environnement.
+    |
+    |   GROUP_PORTAL_SCHEDULED_REPORTS_ENABLED=true
+    |
+    | Le balayage est horaire ; c'est la commande qui décide de l'échéance,
+    | par semaine ou par mois, pour rattraper un passage manqué sans jamais
+    | envoyer deux fois dans la même période.
+    */
+    'scheduled_reports_enabled' => env('GROUP_PORTAL_SCHEDULED_REPORTS_ENABLED', false),
+
+    /*
+     * Le domaine sous lequel vivent les sites des établissements.
+     *
+     * Il était écrit en dur dans le constructeur d'URL SSO. KLASSCI est
+     * multi-instance : le jour où une école est hébergée ailleurs — ou où la
+     * plateforme change de nom — cette valeur unique évite de servir une
+     * adresse fausse à tout le monde sans une seule erreur. La dérogation par
+     * établissement reste `tenants.metadata.base_url`.
+     */
+    'tenant_domain' => env('GROUP_PORTAL_TENANT_DOMAIN', 'klassci.com'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Storage ingestion (PR7e)
     |--------------------------------------------------------------------------
     |
@@ -168,7 +198,7 @@ return [
     'storage_ssh_host' => env('GROUP_PORTAL_STORAGE_SSH_HOST', ''),
     'storage_ssh_user' => env('GROUP_PORTAL_STORAGE_SSH_USER', ''),
     'storage_tenant_base_path' => env('GROUP_PORTAL_STORAGE_TENANT_BASE_PATH', ''),
-    'storage_ssh_timeout_sec' => env('GROUP_PORTAL_STORAGE_SSH_TIMEOUT_SEC', 30),
+    'storage_ssh_timeout_sec' => (int) env('GROUP_PORTAL_STORAGE_SSH_TIMEOUT_SEC', 30),
 
     /*
     |--------------------------------------------------------------------------
@@ -193,7 +223,7 @@ return [
     |   GROUP_PORTAL_BOUNCE_AUTO_DISABLE_ENABLED=true
     */
     'bounce_auto_disable_enabled' => env('GROUP_PORTAL_BOUNCE_AUTO_DISABLE_ENABLED', false),
-    'bounce_threshold' => env('GROUP_PORTAL_BOUNCE_THRESHOLD', 3),
+    'bounce_threshold' => (int) env('GROUP_PORTAL_BOUNCE_THRESHOLD', 3),
 
     /*
     |--------------------------------------------------------------------------
@@ -216,5 +246,105 @@ return [
     | in the emailed URL — zero plaintext persistence).
     */
     'invite_flow_enabled' => env('GROUP_PORTAL_INVITE_FLOW_ENABLED', false),
-    'invitation_ttl_hours' => env('GROUP_PORTAL_INVITATION_TTL_HOURS', 24),
+    'invitation_ttl_hours' => (int) env('GROUP_PORTAL_INVITATION_TTL_HOURS', 24),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Seuils de santé d'un taux (recouvrement, assiduité)
+    |--------------------------------------------------------------------------
+    |
+    | Lus par App\Support\RateHealth, qui colore et qualifie tout taux affiché
+    | dans le portail. Un taux de recouvrement de 65 % n'a pas le même sens
+    | pour un groupe qui encaisse à l'inscription et pour un groupe qui étale
+    | sur trois tranches — d'où la configuration plutôt qu'une constante.
+    |
+    |   >= healthy  -> vert,   « sain »
+    |   >= at_risk  -> orange, « à surveiller »
+    |   sinon       -> rouge,  « critique »
+    |
+    | Surchargeables par environnement :
+    |   GROUP_PORTAL_RATE_HEALTHY=75
+    |   GROUP_PORTAL_RATE_AT_RISK=55
+    |
+    */
+    'rate_health' => [
+        'healthy' => (int) env('GROUP_PORTAL_RATE_HEALTHY', 70),
+        'at_risk' => (int) env('GROUP_PORTAL_RATE_AT_RISK', 50),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Seuils d'occupation des quotas d'abonnement
+    |--------------------------------------------------------------------------
+    |
+    | Lus par App\Support\QuotaHealth, qui sert A LA FOIS le moteur d'alertes
+    | et la couleur de la colonne « Inscriptions ». Les deux les lisaient
+    | séparément — le tableau ne testait que le dépassement — et se
+    | contredisaient sur le même écran.
+    |
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | Seuils de sante de l'assiduite
+    |--------------------------------------------------------------------------
+    |
+    | Distincts de `rate_health`, qui est calibre pour le RECOUVREMENT. Un taux
+    | d'encaissement de 72 % est confortable ; une assiduite de 72 % ne l'est
+    | pas. Faire lire a l'assiduite les seuils du recouvrement faisait basculer
+    | une tuile de « a surveiller » a « sain » sans decision.
+    |
+    */
+
+    'attendance_health' => [
+        'healthy' => (int) env('GROUP_PORTAL_ATTENDANCE_HEALTHY', 85),
+        'at_risk' => (int) env('GROUP_PORTAL_ATTENDANCE_AT_RISK', 70),
+    ],
+
+    'quota_health' => [
+        'exceeded' => (int) env('GROUP_PORTAL_QUOTA_EXCEEDED', 100),
+        'critical' => (int) env('GROUP_PORTAL_QUOTA_CRITICAL', 90),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Identité visuelle du portail
+    |--------------------------------------------------------------------------
+    |
+    | Valeurs de repli, utilisées quand le groupe connecté n'a pas défini les
+    | siennes. La cascade complète (groupe -> établissement -> KLASSCI) est
+    | résolue par App\Services\Group\GroupBranding ; ce bloc n'en est que le
+    | dernier étage, celui de la marque KLASSCI elle-même.
+    |
+    | Aucune de ces valeurs n'est écrite en dur dans GroupPanelProvider : un
+    | groupe qui pose son logo et sa couleur doit voir son portail changer
+    | sans qu'on redéploie.
+    |
+    */
+    'branding' => [
+        'name' => env('GROUP_PORTAL_BRAND_NAME', 'KLASSCI Groupe'),
+        'logo' => env('GROUP_PORTAL_BRAND_LOGO', 'images/LOGO-KLASSCI-PNG.png'),
+        'logo_height' => env('GROUP_PORTAL_BRAND_LOGO_HEIGHT', '2.5rem'),
+        'favicon' => env('GROUP_PORTAL_BRAND_FAVICON', 'images/LOGO-KLASSCI-PNG.png'),
+        'primary' => env('GROUP_PORTAL_BRAND_PRIMARY', '#0453cb'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Garde-fous de volume sur les exports
+    |--------------------------------------------------------------------------
+    |
+    | DomPDF n'échoue pas franchement sur un gros tableau : il épuise la
+    | mémoire PHP et rend un document tronqué ou vide. Or un rapport vide
+    | ressemble à « rien à signaler », ce qu'un outil de direction ne doit
+    | jamais laisser croire. Au-delà du seuil, ReportRenderer refuse en
+    | disant combien de lignes la sélection compte et quoi faire.
+    |
+    | Le tableur encaisse bien davantage, d'où l'écart entre les deux.
+    |
+    */
+    'exports' => [
+        'max_pdf_rows' => (int) env('GROUP_PORTAL_MAX_PDF_ROWS', 1000),
+        'max_excel_rows' => (int) env('GROUP_PORTAL_MAX_EXCEL_ROWS', 50000),
+    ],
 ];

@@ -104,6 +104,13 @@ class TenantUpdateStats extends Command
             // Utiliser le service TenantConnectionManager
             $stats = $this->connectionManager->getTenantStats($tenant);
 
+            // Horodater le releve lui-meme. `updated_at` ne peut pas en tenir
+            // lieu : un changement de plan ou d'adresse depuis Filament le
+            // rafraichit sans qu'aucun effectif n'ait ete remesure, et le
+            // portail groupe afficherait alors un chiffre ancien en le datant
+            // d'aujourd'hui.
+            $stats['stats_measured_at'] = now();
+
             // Mettre à jour le tenant
             $tenant->update($stats);
 

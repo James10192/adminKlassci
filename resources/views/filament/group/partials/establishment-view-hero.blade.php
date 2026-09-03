@@ -1,30 +1,49 @@
-@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
+@php use App\Support\EtatMesure; use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
 
 @php
     /** @var \App\Models\Tenant $tenant */
     /** @var array<string,mixed> $kpis */
-    $students = (int) ($kpis['students'] ?? $kpis['inscriptions'] ?? 0);
+    // `students` (personnes distinctes) et `inscriptions` (lignes) sont deux
+    // grandeurs differentes, et les deux chemins de GroupKpiProvider emettent
+    // TOUJOURS `students` — la seconde branche n'a jamais pu s'executer. Elle
+    // laissait croire que la tuile pouvait basculer d'une grandeur a l'autre
+    // sans que son libelle change.
+    $students = (int) ($kpis['students'] ?? 0);
     $staff = (int) ($kpis['staff'] ?? 0);
     $rate = (float) ($kpis['collection_rate'] ?? 0);
-    $academicYear = $kpis['academic_year'] ?? 'N/A';
+    $academicYear = $kpis['academic_year'] ?? null;
 
-    $statusLabel = match ($tenant->status ?? '') {
-        'active' => 'Actif',
-        'suspended' => 'Suspendu',
-        'maintenance' => 'Maintenance',
-        default => ucfirst((string) ($tenant->status ?? 'inconnu')),
-    };
-    $statusTone = match ($tenant->status ?? '') {
-        'active' => 'success',
-        'suspended' => 'warning',
-        'maintenance' => 'warning',
-        default => 'danger',
-    };
+    // Ce hero etait le dernier a afficher la ligne de zeros telle quelle :
+    // « 0 etudiant », « 0 personnel », « 0,0 % — critique » en ROUGE, et
+    // « Annee universitaire N/A — synchro temps reel ». Un fondateur ouvrant la
+    // fiche d'une ecole injoignable y lisait une ecole vide et en faillite de
+    // recouvrement, sous une mention qui affirmait la fraicheur du chiffre.
+    //
+    // Un etat absent vaut MESURE : le partial est aussi rendu avec un tableau
+    // de KPI nu par les tests et par les appels historiques.
+    $etat = static fn (string $cle): string => $kpis[$cle] ?? EtatMesure::MESURE;
+    $motif = $kpis['motif'] ?? null;
+
+    $effectifsMesure = EtatMesure::aUneValeur($etat('etat_effectifs'));
+    $personnelMesure = EtatMesure::aUneValeur($etat('etat_personnel'));
+    $financesMesure = EtatMesure::aUneValeur($etat('etat_finances'));
+
+    // L'annee est connue des que la base a repondu : c'est justement elle qui
+    // manque quand aucune annee n'est ouverte, et le motif le dit.
+    $anneeConnue = $academicYear !== null && $academicYear !== '' && $academicYear !== 'N/A';
+
+    // Le `match` recopie ici ignorait « cancelled », pourtant legal dans le
+    // schema : le hero d'une interface entierement francaise affichait alors
+    // « Cancelled » sur une pastille ROUGE. Un fondateur qui a lui-meme resilie
+    // y lisait une alarme. Un statut qu'on ne sait pas nommer n'est pas une
+    // alarme non plus : le defaut est gris.
+    $statusLabel = \App\Enums\TenantStatus::libelleDe($tenant->status ?? null);
+    $statusTone = \App\Enums\TenantStatus::tonDe($tenant->status ?? null);
 @endphp
 
 <x-group-hero
     :title="$tenant->name"
-    :subtitle="($tenant->code ?? '') . ' · Plan ' . ucfirst((string) ($tenant->plan ?? 'n/a'))"
+    :subtitle="($tenant->code ?? '') . ' · Plan ' . \App\Enums\TenantPlan::libelleDe($tenant->plan ?? null)"
     icon-path="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
 >
     <x-slot:badges>
@@ -34,9 +53,16 @@
         @endif
     </x-slot:badges>
 
+    {{-- Ce bouton portait le MEME libelle que celui des cartes du tableau de
+         bord, mais n'etait qu'un lien vers le site : le directeur y arrivait sur
+         un ecran de connexion, alors que le meme bouton ailleurs le connectait.
+         Il passe desormais par le meme service signe — dont les gardes
+         (appartenance au groupe, etablissement actif) rendent aussi la
+         condition d'affichage inutile a repeter ici. --}}
+    @php $ssoUrl = app(\App\Services\Group\GroupSsoUrlBuilder::class)->pour((string) ($tenant->code ?? '')); @endphp
     <x-slot:actions>
-        @if(($tenant->status ?? '') === 'active' && ! empty($tenant->subdomain))
-            <a href="https://{{ $tenant->subdomain }}.klassci.com"
+        @if($ssoUrl)
+            <a href="{{ $ssoUrl }}"
                target="_blank"
                rel="noopener"
                class="gp-hero-action">
@@ -49,28 +75,55 @@
     </x-slot:actions>
 
     <x-slot:kpis>
-        <div class="gp-hero-kpi">
+        <div class="gp-hero-kpi" @unless($effectifsMesure) data-tone="inconnu" @endunless>
             <span class="gp-hero-kpi-label">Étudiants inscrits</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($students) }}</span>
-            <span class="gp-hero-kpi-meta">année en cours</span>
+            <span class="gp-hero-kpi-value">
+                {{ $effectifsMesure ? FcfaFormatter::integer($students) : EtatMesure::TIRET }}
+            </span>
+            <span class="gp-hero-kpi-meta">
+                {{ $effectifsMesure ? 'année en cours' : EtatMesure::libelleMotif($motif) }}
+            </span>
         </div>
 
-        <div class="gp-hero-kpi">
+        <div class="gp-hero-kpi" @unless($personnelMesure) data-tone="inconnu" @endunless>
             <span class="gp-hero-kpi-label">Personnel</span>
-            <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($staff) }}</span>
-            <span class="gp-hero-kpi-meta">membres actifs</span>
+            <span class="gp-hero-kpi-value">
+                {{ $personnelMesure ? FcfaFormatter::integer($staff) : EtatMesure::TIRET }}
+            </span>
+            <span class="gp-hero-kpi-meta">
+                {{ $personnelMesure ? 'membres actifs' : EtatMesure::libelleMotif($motif) }}
+            </span>
         </div>
 
-        <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($rate) }}">
+        {{-- « 0,0 % — critique » en rouge sur une ecole dont on ne sait rien
+             accusait l'ecole d'un effondrement qui n'etait qu'une panne. --}}
+        <div class="gp-hero-kpi" data-tone="{{ $financesMesure ? RateHealth::tone($rate) : 'inconnu' }}">
             <span class="gp-hero-kpi-label">Recouvrement</span>
-            <span class="gp-hero-kpi-value">{{ number_format($rate, 1, ',', ' ') }}&nbsp;%</span>
-            <span class="gp-hero-kpi-meta">{{ RateHealth::label($rate) }}</span>
+            <span class="gp-hero-kpi-value">
+                {{ $financesMesure ? number_format($rate, 1, ',', ' ') . ' %' : EtatMesure::TIRET }}
+            </span>
+            <span class="gp-hero-kpi-meta">
+                {{ $financesMesure ? RateHealth::label($rate) : EtatMesure::libelleMotif($motif) }}
+            </span>
         </div>
 
-        <div class="gp-hero-kpi">
+        {{-- « synchro temps reel » se calculait sur le STATUT de l'abonnement,
+             jamais sur la fraicheur du chiffre : la mention affirmait donc la
+             fraicheur d'un « N/A ». --}}
+        <div class="gp-hero-kpi" @unless($anneeConnue) data-tone="inconnu" @endunless>
             <span class="gp-hero-kpi-label">Année universitaire</span>
-            <span class="gp-hero-kpi-value" style="font-size: 1.15rem;">{{ $academicYear }}</span>
-            <span class="gp-hero-kpi-meta">synchro {{ $statusTone === 'success' ? 'temps réel' : 'différée' }}</span>
+            <span class="gp-hero-kpi-value" style="font-size: 1.15rem;">
+                {{ $anneeConnue ? $academicYear : EtatMesure::TIRET }}
+            </span>
+            <span class="gp-hero-kpi-meta">
+                @if ($anneeConnue)
+                    mesuré à l'instant
+                @elseif ($motif === EtatMesure::MOTIF_SANS_ANNEE)
+                    {{ EtatMesure::libelleMotif(EtatMesure::MOTIF_SANS_ANNEE) }}
+                @else
+                    {{ EtatMesure::libelleMotif($motif) }}
+                @endif
+            </span>
         </div>
     </x-slot:kpis>
 </x-group-hero>

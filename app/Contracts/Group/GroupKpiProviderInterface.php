@@ -21,7 +21,8 @@ interface GroupKpiProviderInterface
      *   - Windowed metrics (revenue_collected) : filtered by [Period::startDate,
      *     Period::endDate].
      *   - Attendance rate : computed over [Period::startDate, Period::endDate] when
-     *     fourni, else the last 30 days (pre-PR4d behaviour).
+     *     fourni. Il n'existe aucun repli « 30 derniers jours » : la
+     *     periode par defaut est l'annee civile en cours.
      *
      * @return array<string,mixed>
      */

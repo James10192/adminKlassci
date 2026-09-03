@@ -11,8 +11,8 @@ class BulletinStylePage extends Page
     use TenantConfigTrait;
 
     protected static ?string $navigationIcon = 'heroicon-o-document-text';
-    protected static ?string $navigationLabel = 'Style Bulletin';
-    protected static ?string $navigationGroup = 'Configuration Tenants';
+    protected static ?string $navigationLabel = 'Style des bulletins';
+    protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 3;
     protected static string $view = 'filament.pages.tenant-config.bulletin-style';
     protected static ?string $title = 'Style du Bulletin PDF';

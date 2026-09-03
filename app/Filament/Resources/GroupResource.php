@@ -87,6 +87,34 @@ class GroupResource extends Resource
                             ->rows(2)
                             ->columnSpanFull(),
                     ]),
+
+                Forms\Components\Section::make('Identité visuelle du portail')
+                    ->description('Ce que voient les membres du groupe en se connectant. Laissé vide, le portail porte la marque KLASSCI.')
+                    ->columns(2)
+                    ->schema([
+                        Forms\Components\FileUpload::make('logo_path')
+                            ->label('Logo du groupe')
+                            ->helperText('PNG ou SVG sur fond transparent, hauteur utile 80 px minimum. Remplace le logo KLASSCI dans la barre latérale et sur les documents exportés.')
+                            ->image()
+                            ->disk('public')
+                            ->directory('group-logos')
+                            ->visibility('public')
+                            ->maxSize(2048)
+                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'])
+                            ->imageEditor(),
+
+                        Forms\Components\ColorPicker::make('metadata.branding.primary')
+                            ->label('Couleur principale')
+                            ->helperText('Teinte des bandeaux, des boutons et des accents du portail. Par défaut, le bleu KLASSCI #0453cb.')
+                            // Le format hexadécimal est imposé ici parce que la
+                            // couleur est injectée telle quelle en variable CSS :
+                            // une valeur libre casserait la feuille de style de
+                            // toutes les pages du portail.
+                            ->regex('/^#[0-9a-fA-F]{6}$/')
+                            ->validationMessages([
+                                'regex' => 'Attendu : un code hexadécimal à six chiffres, par exemple #0453cb.',
+                            ]),
+                    ]),
             ]);
     }
 

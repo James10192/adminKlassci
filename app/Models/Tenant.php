@@ -35,6 +35,7 @@ class Tenant extends Model
         'current_students',
         'current_inscriptions_per_year',
         'current_storage_mb',
+        'stats_measured_at',
         'admin_name',
         'admin_email',
         'support_email',
@@ -64,6 +65,7 @@ class Tenant extends Model
         'current_students' => 'integer',
         'current_inscriptions_per_year' => 'integer',
         'current_storage_mb' => 'integer',
+        'stats_measured_at' => 'datetime',
     ];
 
     /**
@@ -154,9 +156,35 @@ class Tenant extends Model
     /**
      * Accessors & Mutators
      */
+    /**
+     * L'adresse du site de l'établissement.
+     *
+     * Le domaine était écrit en dur, ici et dans neuf autres endroits. KLASSCI
+     * est multi-instance : le jour où la plateforme change de nom, ou une école
+     * est hébergée ailleurs, ces dix lignes servent une adresse fausse à tout le
+     * monde sans lever une seule erreur. La dérogation par établissement reste
+     * `metadata.base_url`, que respecte le constructeur d'URL SSO.
+     */
     public function getFullUrlAttribute(): string
     {
-        return "https://{$this->subdomain}.klassci.com";
+        return 'https://' . $this->hote;
+    }
+
+    /** L'hôte seul — ce qu'on affiche à côté d'un code d'établissement. */
+    public function getHoteAttribute(): string
+    {
+        $sousDomaine = $this->subdomain ?: $this->code;
+
+        // Le troisieme argument de `config()` ne sert QUE si la cle est absente.
+        // Une variable d'environnement vide — `GROUP_PORTAL_TENANT_DOMAIN=` —
+        // la rend presente et nulle : sans ce repli explicite, toutes les
+        // adresses devenaient « https://rostan-bouake. », en silence.
+        $domaine = trim((string) config('group_portal.tenant_domain'), '/');
+        if ($domaine === '') {
+            $domaine = 'klassci.com';
+        }
+
+        return "{$sousDomaine}.{$domaine}";
     }
 
     public function getIsActiveAttribute(): bool

@@ -2,12 +2,9 @@
 
 namespace App\Filament\Group\Widgets;
 
-use App\Models\Tenant;
-use App\Services\SsoTokenSigner;
+use App\Services\Group\GroupSsoUrlBuilder;
 use App\Services\TenantAggregationService;
-use App\Support\SsoClaim;
 use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\Log;
 
 class EstablishmentCardsWidget extends Widget
 {
@@ -28,48 +25,14 @@ class EstablishmentCardsWidget extends Widget
     }
 
     /**
-     * Generate a fresh SSO URL for each tenant card. Token lifetime is 2min
-     * (see SsoTokenSigner); widget polls every 300s so a click >2min after the
-     * last render requires a refresh — acceptable tradeoff for security.
+     * L'URL signée d'un établissement — les gardes vivent dans le service.
+     *
+     * Cette méthode reste PUBLIQUE parce que Livewire la rend appelable depuis
+     * la console du navigateur : c'est justement pour ça que le contrôle
+     * d'appartenance au groupe est dans le service, et non ici.
      */
     public function getSsoUrl(string $tenantCode, string $redirectTo = '/'): ?string
     {
-        $member = auth('group')->user();
-        if (! $member) {
-            return null;
-        }
-
-        $tenant = Tenant::where('code', $tenantCode)->first();
-        if (! $tenant) {
-            return null;
-        }
-
-        try {
-            $token = app(SsoTokenSigner::class)->sign([
-                SsoClaim::TENANT_CODE => $tenantCode,
-                SsoClaim::USER_EMAIL => $member->email,
-                SsoClaim::REDIRECT_TO => $redirectTo,
-                SsoClaim::ISSUED_BY => $member->email,
-                SsoClaim::GROUP_MEMBER_ID => $member->id,
-            ]);
-        } catch (\Exception $e) {
-            Log::warning("SSO URL generation failed for {$tenantCode}: {$e->getMessage()}");
-            return null;
-        }
-
-        $baseUrl = $this->tenantBaseUrl($tenant);
-
-        return $baseUrl . '/auth/sso-from-group?token=' . urlencode($token);
-    }
-
-    private function tenantBaseUrl(Tenant $tenant): string
-    {
-        $metadata = $tenant->metadata ?? [];
-        if (isset($metadata['base_url']) && is_string($metadata['base_url'])) {
-            return rtrim($metadata['base_url'], '/');
-        }
-
-        $subdomain = $tenant->subdomain ?? $tenant->code;
-        return "https://{$subdomain}.klassci.com";
+        return app(GroupSsoUrlBuilder::class)->pour($tenantCode, $redirectTo);
     }
 }

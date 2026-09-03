@@ -14,9 +14,9 @@
     --k-primary-soft: rgba(4,83,203,.1);
     --k-secondary:    #1b64d4;
     --k-accent:       #06b6d4;
-    --k-success:      #10b981;
-    --k-warning:      #f59e0b;
-    --k-danger:       #ef4444;
+    --k-success:      #0f9d6e;
+    --k-warning:      #b45309;
+    --k-danger:       #be123c;
 
     /* ── Sidebar (fond blanc, style Sequence) ── */
     --s-bg:       #ffffff;
@@ -29,7 +29,12 @@
     --s-active-t:  #ffffff;
 
     /* ── Content ── */
-    --bg:          #f0f0f0;
+    /* Un gris pur lit comme une absence de choix ; une pointe de bleu le
+       rattache a l accent sans jamais entrer en concurrence avec lui. */
+    --bg:          #f2f4f8;
+    --k-ink:       #0f172a;
+    /* Le neutre de l inconnu : ni bon, ni mauvais. « Sans releve » le porte. */
+    --k-unknown:   #94a3b8;
     --card:        #ffffff;
     --border:      #e0e0e0;
     --shadow:      0 1px 4px rgba(0,0,0,.06);
@@ -319,126 +324,128 @@ a.fi-sidebar-item-button.bg-primary-50 {
 .fi-breadcrumbs-item-separator { color: #cccccc !important; }
 
 /* ================================================================
-   ████  STAT CARDS  ████
-   Inspiré dashboard-moderne.json : border-none, shadow légère,
-   valeur 36px, label 12px normal-case
+   ████  BANDEAUX D'INDICATEURS  ████
+
+   Huit tuiles blanches au meme rayon, a la meme ombre, avec le meme
+   soulevement au survol : l'oeil n'avait aucune raison de s'arreter sur
+   celle qui demandait une decision. Le rayon, la bordure et l'ombre disent
+   « objet separe » — les depenser sur chaque cellule aplatit la hierarchie.
+
+   Un bandeau d'indicateurs est UN objet : une surface, une bordure, une
+   ombre, et des filets entre les cellules. Ce qui reste pour distinguer une
+   cellule, c'est la couleur — et elle ne sert plus qu'a ca.
+
+   Le soulevement au survol est retire : ces tuiles ne sont pas cliquables,
+   il promettait une interaction qui n'existe pas.
    ================================================================ */
-.fi-wi-stats-overview-stat {
-    background: var(--card) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,.06) !important;
-    border: none !important;
-    transition: transform var(--dur) var(--ease),
-                box-shadow var(--dur) var(--ease) !important;
-    position: relative;
+.fi-wi-stats-overview-stats-ctn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 20px -12px rgba(15,23,42,.14);
     overflow: hidden;
+    gap: 0 !important;
+}
+
+.fi-wi-stats-overview-stat {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
+    padding: 1.15rem 1.35rem 1.25rem !important;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    /* Filets entre cellules — dessines en ombre pour ne pas doubler la
+       bordure du bandeau sur les bords. */
+    box-shadow: inset -1px 0 0 var(--border), inset 0 -1px 0 var(--border) !important;
 }
 
 .fi-wi-stats-overview-stat:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,.10) !important;
-    transform: translateY(-2px);
+    background: rgba(4,83,203,.022) !important;
+    box-shadow: inset -1px 0 0 var(--border), inset 0 -1px 0 var(--border) !important;
+    transform: none !important;
 }
 
-/* Valeur principale — 36px bold comme dans le JSON */
+/* Le libelle passe AU-DESSUS de la valeur : on lit ce que c'est, puis
+   combien. L'inverse obligeait a revenir en arriere. */
+.fi-wi-stats-overview-stat-label {
+    order: -1;
+    font-family: var(--f-body) !important;
+    font-size: .7rem !important;
+    font-weight: 600 !important;
+    letter-spacing: .07em !important;
+    text-transform: uppercase !important;
+    color: var(--s-muted) !important;
+}
+
 .fi-wi-stats-overview-stat-value {
     font-family: var(--f-head) !important;
-    font-size: 2.25rem !important;
+    font-size: 1.9rem !important;
     font-weight: 700 !important;
-    letter-spacing: -.03em !important;
-    line-height: 1.1 !important;
-    color: #111111 !important;
+    letter-spacing: -.025em !important;
+    line-height: 1.05 !important;
+    color: var(--k-ink, #0f172a) !important;
+    /* Des chiffres qui s'alignent en colonne d'un bandeau a l'autre. */
+    font-variant-numeric: tabular-nums;
+    text-wrap: balance;
 }
 
-/* Label — 12px medium, normal-case, gris moyen (JSON: 12px, weight 500, #666666) */
-.fi-wi-stats-overview-stat-label {
-    font-family: var(--f-body) !important;
-    font-size: .75rem !important;
-    font-weight: 500 !important;
-    color: #666666 !important;
-    letter-spacing: normal !important;
-    text-transform: none !important;
-}
-
-/* Description — 12px, gris clair (JSON: color #999999) */
 .fi-wi-stats-overview-stat-description {
     font-family: var(--f-body) !important;
-    font-size: .72rem !important;
-    color: #999999 !important;
-    line-height: 1.45 !important;
+    font-size: .74rem !important;
+    line-height: 1.4 !important;
+    color: var(--s-text) !important;
+    display: flex;
+    align-items: flex-start;
+    gap: .35rem;
 }
 
-/* Mini chart — légèrement visible */
+.fi-wi-stats-overview-stat-description-icon { flex: none; margin-top: .12rem; }
+
+/* ── Le rail d'etat ──────────────────────────────────────────────
+   Une seule chose distingue une cellule : le filet de tete. Il ne se pose
+   que quand la valeur porte un sens — danger, alerte. Le gris, lui, n'en
+   pose aucun : « sans releve » n'est ni une bonne ni une mauvaise
+   nouvelle, et un rail le ferait lire comme un verdict. */
+.fi-wi-stats-overview-stat::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: transparent;
+}
+.fi-wi-stats-overview-stat:has(.fi-color-danger)::before  { background: var(--k-danger); }
+.fi-wi-stats-overview-stat:has(.fi-color-warning)::before { background: var(--k-warning); }
+.fi-wi-stats-overview-stat:has(.fi-color-success)::before { background: var(--k-success); }
+
+.fi-wi-stats-overview-stat:has(.fi-color-danger)  .fi-wi-stats-overview-stat-value { color: var(--k-danger) !important; }
+.fi-wi-stats-overview-stat:has(.fi-color-warning) .fi-wi-stats-overview-stat-value { color: #92400e !important; }
+
 .fi-wi-stats-overview-stat-chart { opacity: .65; }
 
-/* ── Animations entrée ──────────────────────────────── */
+/* ── Entree ──────────────────────────────────────────────────────
+   Une seule animation, sur le bandeau entier : huit cellules qui montent
+   l'une apres l'autre attirent l'oeil sur l'ordre du DOM, pas sur le
+   contenu. */
 .fi-wi-container { gap: 1.25rem !important; }
 
 @keyframes k-up {
-    from { opacity: 0; transform: translateY(10px); }
+    from { opacity: 0; transform: translateY(8px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.fi-wi-stats-overview-stat { animation: k-up .24s var(--ease) both; }
-.fi-wi-stats-overview .fi-wi-stats-overview-stat:nth-child(1) { animation-delay: .04s; }
-.fi-wi-stats-overview .fi-wi-stats-overview-stat:nth-child(2) { animation-delay: .08s; }
-.fi-wi-stats-overview .fi-wi-stats-overview-stat:nth-child(3) { animation-delay: .12s; }
-.fi-wi-stats-overview .fi-wi-stats-overview-stat:nth-child(4) { animation-delay: .16s; }
+@media (prefers-reduced-motion: reduce) {
+    .fi-wi-stats-overview-stats-ctn,
+    .fi-wi-table, .fi-wi-chart, .fi-section { animation: none !important; }
+}
+
+.fi-wi-stats-overview-stats-ctn { animation: k-up .24s var(--ease) both; }
 .fi-wi-table   { animation: k-up .28s .06s var(--ease) both; }
 .fi-wi-chart   { animation: k-up .28s .10s var(--ease) both; }
 .fi-section    { animation: k-up .24s .02s var(--ease) both; }
-
-/* ================================================================
-   ████  ACCOUNT WIDGET  ████
-   ================================================================ */
-.fi-wi-account {
-    background: linear-gradient(135deg, var(--k-primary) 0%, var(--k-secondary) 100%) !important;
-    border-radius: var(--r) !important;
-    box-shadow: 0 4px 20px rgba(4,83,203,.2) !important;
-    border: none !important;
-    color: white !important;
-    position: relative;
-    overflow: hidden;
-}
-
-/* Halo subtil en haut à droite */
-.fi-wi-account::after {
-    content: '';
-    position: absolute;
-    top: -40px; right: -40px;
-    width: 180px; height: 180px;
-    background: radial-gradient(circle, rgba(255,255,255,.1) 0%, transparent 65%);
-    pointer-events: none;
-}
-
-.fi-wi-account .fi-wi-account-name {
-    font-family: var(--f-head) !important;
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    font-size: 1.05rem !important;
-    letter-spacing: -.02em !important;
-    position: relative; z-index: 1;
-}
-.fi-wi-account .fi-wi-account-email {
-    color: rgba(255,255,255,.65) !important;
-    font-size: .8rem !important;
-    position: relative; z-index: 1;
-}
-.fi-wi-account .fi-btn {
-    background: rgba(255,255,255,.15) !important;
-    color: #ffffff !important;
-    border: 1px solid rgba(255,255,255,.25) !important;
-    box-shadow: none !important;
-    position: relative; z-index: 1;
-}
-.fi-wi-account .fi-btn:hover {
-    background: rgba(255,255,255,.25) !important;
-    transform: none !important;
-}
-.fi-wi-account .fi-user-avatar {
-    border: 2px solid rgba(255,255,255,.35) !important;
-    box-shadow: 0 0 0 4px rgba(255,255,255,.1) !important;
-    position: relative; z-index: 1;
-}
 
 /* ================================================================
    ████  TABLE  ████

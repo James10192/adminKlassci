@@ -12,8 +12,8 @@ class RolePermissionPage extends Page
     use TenantConfigTrait;
 
     protected static ?string $navigationIcon = 'heroicon-o-shield-check';
-    protected static ?string $navigationLabel = 'Rôles & Permissions';
-    protected static ?string $navigationGroup = 'Configuration Tenants';
+    protected static ?string $navigationLabel = 'Rôles et permissions';
+    protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 1;
     protected static string $view = 'filament.pages.tenant-config.role-permission';
     protected static ?string $title = 'Gestion des Rôles & Permissions';

@@ -17,7 +17,15 @@ return new class extends Migration
     {
         // MySQL needs the raw ALTER when changing unique + nullable on an
         // existing column (Doctrine DBAL's inference drops the unique index).
-        DB::statement('ALTER TABLE group_members MODIFY COLUMN email VARCHAR(255) NULL');
+        // Elsewhere — SQLite in the test suite — Laravel rebuilds the table
+        // itself, which handles the same change portably.
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE group_members MODIFY COLUMN email VARCHAR(255) NULL');
+        } else {
+            Schema::table('group_members', function (Blueprint $table) {
+                $table->string('email')->nullable()->change();
+            });
+        }
 
         Schema::table('group_members', function (Blueprint $table) {
             // slug-shaped lowercase identifier; unique globally, not scoped
@@ -41,6 +49,12 @@ return new class extends Migration
             );
         }
 
-        DB::statement('ALTER TABLE group_members MODIFY COLUMN email VARCHAR(255) NOT NULL');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE group_members MODIFY COLUMN email VARCHAR(255) NOT NULL');
+        } else {
+            Schema::table('group_members', function (Blueprint $table) {
+                $table->string('email')->nullable(false)->change();
+            });
+        }
     }
 };

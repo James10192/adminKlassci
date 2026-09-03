@@ -51,8 +51,8 @@ class TenantsRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('subdomain')
                     ->label('URL')
-                    ->formatStateUsing(fn (string $state) => "{$state}.klassci.com")
-                    ->url(fn ($record) => "https://{$record->subdomain}.klassci.com", shouldOpenInNewTab: true)
+                    ->formatStateUsing(fn (string $state, $record) => $record->hote)
+                    ->url(fn ($record) => $record->full_url, shouldOpenInNewTab: true)
                     ->color('primary'),
             ])
             ->headerActions([

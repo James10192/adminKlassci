@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Group;
 use App\Services\TenantAggregationService;
+use App\Support\EtatMesure;
 use Filament\Notifications\Notification;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -60,13 +61,43 @@ class GroupAlertCheck extends Command
         $establishments = $kpis['establishments'] ?? [];
 
         foreach ($establishments as $tenantCode => $tenantKpis) {
-            if ($tenantKpis['error'] ?? false) {
+            $tenantName = $tenantKpis['tenant_name'] ?? $tenantCode;
+
+            // Une ecole injoignable etait purement et simplement `continue`,
+            // donc exemptee de TOUTES ses alertes financieres : elle paraissait
+            // saine parce qu'on n'avait rien pu mesurer. L'absence de mesure
+            // est elle-meme ce qu'il faut signaler.
+            if (! EtatMesure::estMesure($tenantKpis['etat_finances'] ?? null)) {
+                $motif = $tenantKpis['motif'] ?? EtatMesure::MOTIF_INJOIGNABLE;
+
+                // `sans_annee` n'est pas une panne : la base a repondu, l'ecole
+                // n'a pas encore ouvert son annee. On ne reveille pas un
+                // fondateur pour ca.
+                if ($motif === EtatMesure::MOTIF_INJOIGNABLE) {
+                    // Le titre porte le code de l'ecole, et ce n'est pas
+                    // cosmetique : `sendAlertIfNotDuplicate()` deduplique sur le
+                    // TITRE SEUL. Avec un titre constant, trois ecoles tombant
+                    // le meme matin n'auraient produit qu'UNE notification, les
+                    // deux autres avalees pendant 24 h. Or les alertes
+                    // financieres de ces tenants sont desormais passees : cette
+                    // notification est le seul signal qu'il en reste.
+                    if ($this->sendAlertIfNotDuplicate(
+                        "Établissement non mesuré — {$tenantCode}",
+                        "{$tenantName}: la base n'a pas répondu — aucun indicateur financier n'a pu être relevé",
+                        'heroicon-o-signal-slash',
+                        'warning',
+                        $recipients
+                    )) {
+                        $alertCount++;
+                        $this->line("  [UNMEASURED] {$tenantName}: database unreachable");
+                    }
+                }
+
                 continue;
             }
 
             // --- Collection rate alerts ---
             $rate = $tenantKpis['collection_rate'] ?? 0;
-            $tenantName = $tenantKpis['tenant_name'] ?? $tenantCode;
 
             if ($rate < 30 && ($tenantKpis['revenue_expected'] ?? 0) > 0) {
                 if ($this->sendAlertIfNotDuplicate(
@@ -150,6 +181,10 @@ class GroupAlertCheck extends Command
             return false;
         }
 
+        // ATTENTION : la deduplication porte sur le TITRE SEUL, pas sur le
+        // corps. Une alerte qui concerne UN etablissement doit donc nommer cet
+        // etablissement DANS SON TITRE, sinon la premiere ecole touchee fait
+        // taire toutes les suivantes pendant 24 h.
         $recentExists = DB::table('notifications')
             ->where('notifiable_type', get_class($firstRecipient))
             ->where('notifiable_id', $firstRecipient->id)

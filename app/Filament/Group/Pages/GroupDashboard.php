@@ -2,7 +2,10 @@
 
 namespace App\Filament\Group\Pages;
 
+use App\Enums\GroupMemberRole;
+use App\Domain\Exports\Reports\EtatEtablissementsReport;
 use App\Filament\Group\Concerns\HasCustomHero;
+use App\Filament\Group\Concerns\HasReportActions;
 use App\Filament\Group\Resources\EstablishmentResource;
 use App\Services\TenantAggregationService;
 use Filament\Actions\Action;
@@ -15,6 +18,7 @@ use Illuminate\Support\Facades\Cache;
 class GroupDashboard extends Dashboard
 {
     use HasCustomHero;
+    use HasReportActions;
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office-2';
 
@@ -22,10 +26,20 @@ class GroupDashboard extends Dashboard
 
     protected static string $routePath = '/';
 
+    /**
+     * Le hero remplace l'entete de Filament — actions comprises.
+     *
+     * Filament ne rend sa propre barre d'actions que lorsque `getHeader()`
+     * retourne null. Les trois actions declarees plus bas (etat des
+     * etablissements, actualiser, verifier les alertes) etaient donc
+     * construites a chaque rendu et n'apparaissaient nulle part. On les passe
+     * au hero, qui a un emplacement pour elles.
+     */
     public function getHeader(): ?View
     {
         return view('filament.group.partials.dashboard-hero', [
             'context' => $this->getHeroContext(),
+            'actions' => $this->getCachedHeaderActions(),
         ]);
     }
 
@@ -36,7 +50,8 @@ class GroupDashboard extends Dashboard
      *     role: string,
      *     establishment_count: int,
      *     academic_years: list<string>,
-     *     last_sync: string,
+     *     last_sync: ?string,
+     *     perimetre: array<string,mixed>,
      *     kpis: array<string,mixed>,
      * }
      */
@@ -53,11 +68,73 @@ class GroupDashboard extends Dashboard
             'role' => self::roleLabel($user->role ?? ''),
             'establishment_count' => self::cachedTenantCount($group),
             'academic_years' => self::extractAcademicYears($kpis),
-            'last_sync' => $group && $service->hasFreshGroupKpis($group)
-                ? 'il y a moins de 15 min'
-                : 'non synchronisé',
+            // L'age reel de la mesure, pas une phrase fixe. La puce annoncait
+            // « il y a moins de 15 min » alors que le cache des KPI vit 300
+            // secondes : le libelle etait faux d'un facteur trois, et ne
+            // dependait meme pas de l'heure du calcul.
+            'last_sync' => self::ageMesure($kpis),
+            'perimetre' => $kpis['perimetre'] ?? [],
             'kpis' => $kpis,
         ];
+    }
+
+    /**
+     * Depuis quand les chiffres affiches ont-ils ete mesures.
+     *
+     * `computeGroupKpis()` horodate son resultat ; comme le tableau entier est
+     * mis en cache, l'horodatage vieillit avec lui et dit donc l'age reel de ce
+     * que le fondateur a sous les yeux.
+     *
+     * Mais `computed_at` date le CALCUL, pas la MESURE — et le calcul a lieu
+     * meme quand aucune base n'a repondu. La puce annoncait donc « Mesure : il
+     * y a 1 seconde » juste au-dessus de quatre tuiles disant « aucun
+     * etablissement mesure » : la meme contradiction, a deux centimetres, que
+     * celle que tout ce chantier corrige. Un horodatage frais sur une absence
+     * de mesure est pire qu'un horodatage absent — il certifie le vide.
+     *
+     * Retourne null quand AUCUNE famille n'a de mesure : la vue affiche alors
+     * l'absence, sans horloge.
+     */
+    private static function ageMesure(array $kpis): ?string
+    {
+        if (! self::auMoinsUneMesure($kpis)) {
+            return null;
+        }
+
+        $calculeA = $kpis['computed_at'] ?? null;
+
+        if (! $calculeA) {
+            return null;
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($calculeA)->locale('fr')->diffForHumans();
+        } catch (\Exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Une seule famille mesuree suffit a dater l'affichage : le fondateur voit
+     * alors au moins un chiffre reel, et l'horodatage le concerne.
+     */
+    private static function auMoinsUneMesure(array $kpis): bool
+    {
+        $perimetre = $kpis['perimetre'] ?? [];
+
+        if ($perimetre === []) {
+            // Charge de cache anterieure au perimetre : les chiffres sont bien
+            // ceux d'une mesure (meme defaut que ListEstablishments).
+            return true;
+        }
+
+        foreach ($perimetre as $famille) {
+            if ((int) ($famille['repondu'] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function cachedTenantCount(?\App\Models\Group $group): int
@@ -74,13 +151,17 @@ class GroupDashboard extends Dashboard
         );
     }
 
+    /**
+     * Reads the label from the enum rather than a local table.
+     *
+     * A hardcoded map silently degrades: a role added to GroupMemberRole but
+     * forgotten here falls through to `?? $role` and greets the member with a
+     * raw slug — which is exactly what a Directeur Général Adjoint saw. The
+     * enum is the single source of truth for every downstream label.
+     */
     private static function roleLabel(string $role): string
     {
-        return [
-            'fondateur' => 'Fondateur',
-            'directeur_general' => 'Directeur Général',
-            'directeur_financier' => 'Directeur Financier',
-        ][$role] ?? $role;
+        return GroupMemberRole::tryFrom($role)?->label() ?? $role;
     }
 
     /** @param array<string,mixed> $kpis @return list<string> */
@@ -100,6 +181,16 @@ class GroupDashboard extends Dashboard
     protected function getHeaderActions(): array
     {
         return [
+            $this->actionsRapport(
+                'etat_etablissements',
+                'État des établissements',
+                fn () => new EtatEtablissementsReport(
+                    app(TenantAggregationService::class)->getGroupKpis(auth('group')->user()->group),
+                    (string) auth('group')->user()->group->name,
+                    \App\Support\Period\PeriodFactory::default()->label(),
+                ),
+                'heroicon-o-building-office-2',
+            ),
             Action::make('refresh')
                 ->label('Actualiser')
                 ->icon('heroicon-o-arrow-path')
@@ -117,10 +208,17 @@ class GroupDashboard extends Dashboard
                         ->success()
                         ->send();
                 }),
+            // Ce bouton etait orange en permanence, y compris quand il n'y
+            // avait rien a signaler. Sur cet ecran, l'orange dit deja
+            // « quelque chose demande votre attention » — le bandeau
+            // d'abonnement, les pastilles d'alerte. Un bouton orange qui ne
+            // depend de rien use ce signal : quand tout va bien, il crie
+            // quand meme. Il prend donc la couleur de ce qu'il annonce, et
+            // reste gris quand il n'y a rien.
             Action::make('check_alerts')
                 ->label('Vérifier alertes')
                 ->icon('heroicon-o-bell-alert')
-                ->color('warning')
+                ->color(fn (): string => EstablishmentResource::alertesCouleur() ?? 'gray')
                 ->action(function () {
                     $group = auth('group')->user()->group;
                     Artisan::call('group:alert-check', ['--group' => $group->code]);

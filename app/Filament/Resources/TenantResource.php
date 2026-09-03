@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\TenantPlan;
+use App\Enums\TenantStatus;
 use App\Filament\Resources\TenantResource\Pages;
 use App\Filament\Resources\TenantResource\RelationManagers;
 use App\Models\Group;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
+use App\Support\SubscriptionCountdown;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -76,7 +79,7 @@ class TenantResource extends Resource
                                             ->unique(ignoreRecord: true)
                                             ->maxLength(100)
                                             ->prefix('https://')
-                                            ->suffix('.klassci.com')
+                                            ->suffix('.' . trim((string) config('group_portal.tenant_domain', 'klassci.com'), '/'))
                                             ->placeholder('lycee-yop')
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
                                         Forms\Components\Select::make('group_id')
@@ -199,11 +202,16 @@ class TenantResource extends Resource
                                         Forms\Components\Select::make('status')
                                             ->label('Statut')
                                             ->required()
-                                            ->options([
-                                                'active' => 'Actif',
-                                                'suspended' => 'Suspendu',
-                                                'inactive' => 'Inactif',
-                                            ])
+                                            // Ce select proposait « inactive »,
+                                            // qui n'existe dans AUCUNE
+                                            // enumeration : la colonne accepte
+                                            // active|suspended|maintenance|
+                                            // cancelled. L'enregistrer etait
+                                            // refuse par MySQL en mode strict,
+                                            // et silencieusement accepte
+                                            // ailleurs — un statut que plus
+                                            // aucun ecran ne savait nommer.
+                                            ->options(TenantStatus::options())
                                             ->default('active')
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
@@ -433,7 +441,7 @@ class TenantResource extends Resource
                 Tables\Columns\TextColumn::make('subdomain')
                     ->label('URL')
                     ->searchable()
-                    ->url(fn ($record) => "https://{$record->subdomain}.klassci.com", true)
+                    ->url(fn ($record) => $record->full_url, true)
                     ->color('primary')
                     ->icon('heroicon-o-link'),
 
@@ -456,14 +464,8 @@ class TenantResource extends Resource
                 Tables\Columns\TextColumn::make('plan')
                     ->label('Plan')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'elite' => 'success',
-                        'professional' => 'info',
-                        'essentiel' => 'warning',
-                        'free' => 'gray',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => ucfirst($state)),
+                    ->color(fn (?string $state): string => TenantPlan::tonDe($state))
+                    ->formatStateUsing(fn (?string $state): string => TenantPlan::libelleDe($state)),
 
                 Tables\Columns\TextColumn::make('group.name')
                     ->label('Groupe')
@@ -499,19 +501,10 @@ class TenantResource extends Resource
                     ->date('d/m/Y')
                     ->sortable()
                     ->badge()
-                    ->color(fn ($record) => match(true) {
-                        !$record->subscription_end_date => 'gray',
-                        $record->subscription_end_date->isPast() => 'danger',
-                        now()->diffInDays($record->subscription_end_date, false) <= 30 => 'warning',
-                        default => 'success',
-                    })
-                    ->formatStateUsing(function ($state, $record) {
-                        if (!$state) return '—';
-                        $days = now()->diffInDays($state, false);
-                        if ($days < 0) return 'Expiré';
-                        if ($days <= 30) return "Dans {$days}j";
-                        return $state->format('d/m/Y');
-                    }),
+                    ->color(fn ($record) => SubscriptionCountdown::tone($record->daysRemaining()))
+                    ->formatStateUsing(
+                        fn ($state, $record) => SubscriptionCountdown::label($record->daysRemaining(), $state, '—')
+                    ),
 
                 Tables\Columns\TextColumn::make('last_deployed_at')
                     ->label('Déployé')
@@ -529,20 +522,11 @@ class TenantResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Statut')
-                    ->options([
-                        'active' => 'Actif',
-                        'suspended' => 'Suspendu',
-                        'inactive' => 'Inactif',
-                    ]),
+                    ->options(TenantStatus::options()),
 
                 Tables\Filters\SelectFilter::make('plan')
                     ->label('Plan')
-                    ->options([
-                        'free' => 'Free',
-                        'essentiel' => 'Essentiel',
-                        'professional' => 'Professional',
-                        'elite' => 'Elite',
-                    ]),
+                    ->options(TenantPlan::options()),
 
                 Tables\Filters\SelectFilter::make('group_id')
                     ->label('Groupe')

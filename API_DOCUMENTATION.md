@@ -105,6 +105,29 @@ Récupère les limites d'abonnement et l'utilisation actuelle d'un tenant.
 }
 ```
 
+> **`last_stats_update` peut valoir `null`.**
+>
+> Ce champ renvoyait `updated_at`, que n'importe quelle édition du tenant dans
+> Filament faisait avancer : il datait donc la dernière modification de la
+> fiche, pas le dernier relevé des compteurs. Il lit désormais
+> `stats_measured_at`, posé par `tenant:update-stats` — et vaut `null` tant que
+> cette commande n'est jamais passée sur le tenant (le cas de tous les tenants
+> existants au déploiement de ce changement, jusqu'à leur première exécution
+> horaire du scheduler).
+>
+> Un client qui parse cette date doit donc gérer `null` explicitement. Attention
+> au piège : `Carbon::parse(null)` ne lève pas — il retourne **l'instant
+> présent**. Un client naïf afficherait donc « relevé il y a quelques secondes »
+> pour des compteurs jamais relevés, ce qui est exactement le genre de mensonge
+> silencieux que ce champ sert à éviter.
+>
+> La valeur `null` veut dire « les compteurs n'ont jamais été relevés », ce qui
+> est une information — pas une erreur.
+>
+> Vérifié au 3 septembre 2026 : aucun consommateur de ce champ dans KLASSCIv2
+> (`app/`, `resources/`). Le `PaywallMiddleware` lit `limits`, `current_usage` et
+> `quota_status`, jamais `last_stats_update`.
+
 #### Réponses d'erreur
 
 **401 Unauthorized - Token manquant**

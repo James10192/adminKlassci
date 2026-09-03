@@ -2,7 +2,9 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\TenantPlan;
 use App\Models\Tenant;
+use App\Support\SubscriptionCountdown;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -16,7 +18,7 @@ class TenantsTableWidget extends BaseWidget
     public function table(Table $table): Table
     {
         return $table
-            ->heading('⚠️ Alertes Quotas & Abonnements')
+            ->heading('Ce qui demande une décision')
             ->query(
                 Tenant::query()
                     ->where('status', 'active')
@@ -53,20 +55,8 @@ class TenantsTableWidget extends BaseWidget
                 Tables\Columns\TextColumn::make('plan')
                     ->label('Plan')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'free' => 'gray',
-                        'essentiel' => 'primary',
-                        'professional' => 'success',
-                        'elite' => 'warning',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'free' => 'Free',
-                        'essentiel' => 'Essentiel',
-                        'professional' => 'Professional',
-                        'elite' => 'Elite',
-                        default => $state,
-                    }),
+                    ->color(fn (?string $state): string => TenantPlan::tonDe($state))
+                    ->formatStateUsing(fn (?string $state): string => TenantPlan::libelleDe($state)),
 
                 Tables\Columns\TextColumn::make('current_users')
                     ->label('Utilisateurs')
@@ -92,13 +82,10 @@ class TenantsTableWidget extends BaseWidget
                     ->label('Expiration')
                     ->date('d/m/Y')
                     ->badge()
-                    ->color(fn ($state) => !$state ? 'gray' : (now()->diffInDays($state, false) < 0 ? 'danger' : (now()->diffInDays($state, false) <= 30 ? 'warning' : 'success')))
-                    ->formatStateUsing(function ($state) {
-                        if (!$state) return 'N/A';
-                        $daysUntil = now()->diffInDays($state, false);
-                        if ($daysUntil < 0) return 'Expiré';
-                        return $daysUntil <= 30 ? "Dans {$daysUntil}j" : $state->format('d/m/Y');
-                    }),
+                    ->color(fn (Tenant $record) => SubscriptionCountdown::tone($record->daysRemaining()))
+                    ->formatStateUsing(
+                        fn ($state, Tenant $record) => SubscriptionCountdown::label($record->daysRemaining(), $state)
+                    ),
             ])
             ->actions([
                 Tables\Actions\Action::make('view')
@@ -109,6 +96,7 @@ class TenantsTableWidget extends BaseWidget
             ->emptyStateHeading('Aucune alerte active')
             ->emptyStateDescription('Tous les quotas et abonnements sont dans les limites autorisées.')
             ->emptyStateIcon('heroicon-o-check-badge')
-            ->paginated([5, 10, 25]);
+            ->searchable(false)
+            ->paginated(false);
     }
 }
