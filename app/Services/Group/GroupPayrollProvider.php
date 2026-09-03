@@ -6,6 +6,7 @@ use App\Contracts\Group\GroupPayrollProviderInterface;
 use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\TenantConnectionManager;
+use App\Support\EtatMesure;
 use App\Support\Period\PeriodFactory;
 use App\Support\Period\PeriodInterface;
 use Illuminate\Support\Facades\DB;
@@ -98,6 +99,8 @@ class GroupPayrollProvider implements GroupPayrollProviderInterface
 
             $paie = $this->emptyPayroll($tenant);
             $paie['error'] = false;
+            $paie['etat'] = EtatMesure::MESURE;
+            $paie['motif'] = null;
 
             foreach ($groupes as $ligne) {
                 $etat = $this->stateResolver->resolve($ligne->workflow_status, $ligne->statut);
@@ -129,6 +132,15 @@ class GroupPayrollProvider implements GroupPayrollProviderInterface
             }
 
             $paie['enseignants'] = $this->countEnseignants($conn, $debut, $fin);
+
+            // La base a repondu et ne tient aucun bulletin sur la periode : ce
+            // n'est pas une panne, c'est une ecole qui ne fait pas sa paie ici.
+            // Les deux affichaient le meme zero — l'une merite une alerte,
+            // l'autre non.
+            if ($paie['bulletins'] === 0 && $paie['bulletins_brouillon'] === 0 && $paie['enseignants'] === 0) {
+                $paie['etat'] = EtatMesure::NON_APPLICABLE;
+                $paie['motif'] = EtatMesure::MOTIF_SANS_MODULE;
+            }
 
             foreach (['masse_brute', 'masse_nette', 'retenues', 'masse_versee', 'masse_engagee', 'masse_brouillon'] as $cle) {
                 $paie[$cle] = round($paie[$cle], 2);
@@ -163,9 +175,14 @@ class GroupPayrollProvider implements GroupPayrollProviderInterface
     }
 
     /**
-     * Structure stable, à zéro. `error` distingue « aucune paie sur la période »
-     * de « établissement injoignable » : sans ce drapeau, une base en panne
-     * ressemblerait à une école sans masse salariale.
+     * Structure stable, à zéro.
+     *
+     * `error` distinguait déjà « aucune paie sur la période » de
+     * « établissement injoignable ». Il manquait le troisième cas, qui
+     * ressemblait aux deux autres : une école qui ne fait tout simplement pas
+     * sa paie dans KLASSCI. `etat` le nomme — `NON_APPLICABLE` — parce qu'une
+     * école sans module ne doit pas déclencher les alertes d'une école en
+     * panne, et qu'un tiret ne se justifie pas de la même façon.
      */
     public function emptyPayroll(Tenant $tenant): array
     {
@@ -183,6 +200,8 @@ class GroupPayrollProvider implements GroupPayrollProviderInterface
             'bulletins_brouillon' => 0,
             'enseignants' => 0,
             'error' => true,
+            'etat' => EtatMesure::NON_MESURE,
+            'motif' => EtatMesure::MOTIF_INJOIGNABLE,
         ];
     }
 }

@@ -1287,7 +1287,7 @@ php artisan optimize:clear
          "storage_over_limit": false
        },
        "blocked_features": [],
-       "last_stats_update": "2025-10-11T21:43:13+00:00"
+       "last_stats_update": "2025-10-11T21:43:13+00:00"   // null si jamais relevé
      }
      ```
 

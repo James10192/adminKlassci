@@ -123,7 +123,11 @@ class TenantLimitsController extends Controller
                 'storage_over_limit' => $tenant->isOverLimit('storage'),
             ],
             'blocked_features' => array_unique($blockedFeatures),
-            'last_stats_update' => $tenant->updated_at->toIso8601String(),
+            // `updated_at` repondait ici, et repondait faux : il bouge des
+            // qu'un champ du tenant est edite depuis Filament, sans qu'aucune
+            // statistique n'ait ete remesuree. Null tant qu'aucun releve n'a
+            // eu lieu — l'appelant sait alors qu'il n'y en a pas eu.
+            'last_stats_update' => $tenant->stats_measured_at?->toIso8601String(),
         ], 200);
     }
 }

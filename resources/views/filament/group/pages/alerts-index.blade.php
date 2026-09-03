@@ -4,20 +4,10 @@
     $alerts = $this->getAlerts();
     $stats = $this->getStats();
 
-    $typeLabels = [
-        AlertType::QuotaExceeded->value => 'Quota dépassé',
-        AlertType::QuotaCritical->value => 'Quota critique',
-        AlertType::SubscriptionExpired->value => 'Abonnement expiré',
-        AlertType::SubscriptionExpiring->value => 'Abonnement expirant',
-        AlertType::HighAttrition->value => 'Attrition élevée',
-        AlertType::ActiveReliquats->value => 'Reliquats actifs',
-        AlertType::PlanMismatch->value => 'Plan dépassé',
-        AlertType::StaleTenant->value => 'Tenant inactif',
-        AlertType::SslExpiring->value => 'SSL expirant',
-        AlertType::EnrollmentDecline->value => 'Inscriptions en baisse',
-        AlertType::UnpaidInvoices->value => 'Factures impayées',
-        AlertType::TeacherOverload->value => 'Surcharge enseignante',
-    ];
+    // Les libellés vivaient ici, dans cette seule vue : la tuile d'alertes du
+    // tableau de bord, qui ne les connaissait pas, affichait l'identifiant brut.
+    // Ils appartiennent désormais à l'énumération.
+    $typeLabels = AlertType::libelles();
 @endphp
 
 <x-filament-panels::page>
@@ -135,7 +125,7 @@
                             <div class="gp-alert-message">{{ $alert['message'] }}</div>
                             <div class="gp-alert-tenant">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:13px;height:13px;"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" /></svg>
-                                {{ $alert['tenant_name'] }} <span class="ga-alert-type-tag">{{ $typeLabels[$alert['type']] ?? $alert['type'] }}</span>
+                                {{ $alert['tenant_name'] }} <span class="ga-alert-type-tag">{{ AlertType::libelleDe($alert['type'] ?? null) }}</span>
                             </div>
                         </div>
                         <div class="ga-alert-actions">

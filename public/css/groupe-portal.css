@@ -308,11 +308,9 @@
     color: #059669;
     border: 1px solid #a7f3d0;
 }
-.gp-status-error {
-    background: #fef2f2;
-    color: #dc2626;
-    border: 1px solid #fecaca;
-}
+/* `.gp-status-error` a ete retiree avec le badge rouge « Erreur » : une ecole
+   injoignable n'est pas une ecole en faute. C'est `.gp-status-inconnu` qui la
+   remplace, en gris. */
 
 /* KPI mini boxes inside cards */
 .gp-kpi-grid {
@@ -680,6 +678,28 @@
     letter-spacing: -0.01em;
 }
 
+/* Une cellule non mesuree : le tiret garde la graisse de la colonne mais perd
+   sa couleur d'affirmation. Il ne doit ni crier comme une alerte ni se lire
+   comme un chiffre. */
+.gp-scorecard-table td.cell-inconnu,
+.gp-scorecard-table td.cell-bold.cell-inconnu {
+    color: var(--gp-inconnu);
+    font-weight: 500;
+    cursor: help;
+}
+
+/* L'etat sous le nom de l'ecole, dans l'en-tete de colonne. */
+.gp-scorecard-etat {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--gp-inconnu);
+    cursor: help;
+}
+
 /* Filiere cards grid (premium) */
 .gp-filiere-grid {
     display: grid;
@@ -811,11 +831,6 @@
     background: rgba(52, 211, 153, 0.1);
     color: #34d399;
     border-color: rgba(52, 211, 153, 0.3);
-}
-.dark .gp-status-error {
-    background: rgba(248, 113, 113, 0.1);
-    color: #f87171;
-    border-color: rgba(248, 113, 113, 0.3);
 }
 
 /* ─── Dark: KPI Boxes ─── */
@@ -989,6 +1004,13 @@
 }
 .dark .gp-scorecard-table .cell-bold {
     color: #f1f5f9;
+}
+.dark .gp-scorecard-table td.cell-inconnu,
+.dark .gp-scorecard-table td.cell-bold.cell-inconnu {
+    color: #64748b;
+}
+.dark .gp-scorecard-etat {
+    color: #64748b;
 }
 
 /* ─── Dark: Filiere Cards ─── */
@@ -1829,3 +1851,210 @@
     display: flex;
     justify-content: flex-end;
 }
+
+/* ═══════════════════════════════════════════════
+   Ce qu'on n'a pas mesuré
+   ───────────────────────────────────────────────
+   Gris et hachures, jamais rouge, jamais vert. Une école injoignable n'est pas
+   une école en faute : c'est une école dont on ne sait rien. Le rouge reste au
+   risque mesuré, le vert à la santé mesurée — sans quoi la panne se déguise en
+   bonne nouvelle, ce que faisait la tuile « Impayés > 30 jours ».
+   ═══════════════════════════════════════════════ */
+
+:root {
+    --gp-inconnu: #94a3b8;
+    --gp-inconnu-bg: #f1f5f9;
+    --gp-inconnu-border: #e2e8f0;
+}
+
+/* Badge d'état sur la tuile établissement — remplace le « Erreur » rouge. */
+.gp-status-inconnu {
+    background: var(--gp-inconnu-bg);
+    color: #475569;
+    border: 1px solid var(--gp-inconnu-border);
+}
+.gp-status-releve {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+/* Un chiffre absent : le tiret pèse moins que la valeur qu'il remplace. */
+.gp-kpi-value--inconnu,
+.gp-revenue-value--inconnu {
+    color: var(--gp-inconnu);
+    font-weight: 600;
+}
+
+/* La pastille entiere, pas seulement son chiffre. Le fond vert d'eau et la
+   bordure verte survivaient au passage au tiret : « Encaisse — » sur fond vert
+   annoncait encore une bonne nouvelle. */
+.gp-revenue--inconnu {
+    background: var(--gp-inconnu-bg);
+    border-color: var(--gp-inconnu-border);
+}
+.gp-revenue--inconnu .gp-revenue-label {
+    color: var(--gp-inconnu);
+}
+.dark .gp-revenue--inconnu {
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.22);
+}
+.dark .gp-revenue--inconnu .gp-revenue-label,
+.dark .gp-revenue--inconnu .gp-revenue-value {
+    color: #94a3b8;
+}
+
+/* La provenance, sous la valeur. Assez discrète pour ne pas encombrer la
+   tuile, assez lisible pour que le fondateur sache d'où vient le chiffre. */
+.gp-kpi-note {
+    margin-top: 0.15rem;
+    font-size: 0.62rem;
+    line-height: 1.25;
+    color: var(--gp-inconnu);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+.gp-progress-value.inconnu {
+    color: var(--gp-inconnu);
+}
+
+/* Hachures plutôt qu'une jauge vide : une barre à zéro se lit comme un
+   recouvrement nul, ce qui n'est pas ce qu'on sait. */
+.gp-progress-track--inconnu {
+    background-image: repeating-linear-gradient(
+        135deg,
+        var(--gp-inconnu-bg),
+        var(--gp-inconnu-bg) 4px,
+        #e2e8f0 4px,
+        #e2e8f0 8px
+    );
+}
+
+.gp-rate-badge.inconnu {
+    background: var(--gp-inconnu-bg);
+    color: #64748b;
+    border: 1px solid var(--gp-inconnu-border);
+}
+
+/* Ligne de tableau financier non mesurée. */
+.gp-fin-row--inconnu td {
+    color: var(--gp-inconnu);
+}
+.gp-fin-etat {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--gp-inconnu);
+    margin-top: 0.1rem;
+}
+
+/* Le hero : une valeur non mesurée ne prend pas le filet de couleur d'un
+   état, elle prend celui de l'ignorance. */
+.gp-hero-kpi[data-tone="inconnu"] {
+    border-top: 3px solid rgba(255, 255, 255, 0.28);
+    padding-top: 0.7rem;
+}
+.gp-hero-kpi[data-tone="inconnu"] .gp-hero-kpi-value {
+    color: rgba(255, 255, 255, 0.62);
+}
+
+/* Une action indisponible doit se voir indisponible — la classe était posée
+   dans la vue depuis le début et n'existait nulle part dans la feuille. */
+.gp-card-action--disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: var(--gp-inconnu-bg);
+    color: #64748b;
+    border-color: var(--gp-inconnu-border);
+}
+.gp-card-action--disabled:hover {
+    background: var(--gp-inconnu-bg);
+    color: #64748b;
+    transform: none;
+}
+
+/* ─── Sombre ─── */
+.dark .gp-status-inconnu {
+    background: rgba(148, 163, 184, 0.12);
+    color: #cbd5e1;
+    border-color: rgba(148, 163, 184, 0.3);
+}
+.dark .gp-status-releve {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.3);
+}
+.dark .gp-kpi-value--inconnu,
+.dark .gp-revenue-value--inconnu,
+.dark .gp-kpi-note,
+.dark .gp-fin-etat,
+.dark .gp-fin-row--inconnu td {
+    color: #64748b;
+}
+.dark .gp-progress-track--inconnu {
+    background-image: repeating-linear-gradient(
+        135deg,
+        #1e293b,
+        #1e293b 4px,
+        #334155 4px,
+        #334155 8px
+    );
+}
+.dark .gp-rate-badge.inconnu {
+    background: rgba(148, 163, 184, 0.12);
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.3);
+}
+.dark .gp-card-action--disabled,
+.dark .gp-card-action--disabled:hover {
+    background: rgba(148, 163, 184, 0.1);
+    color: #94a3b8;
+    border-color: rgba(148, 163, 184, 0.25);
+}
+
+/* ─── Graphique sans donnees ─── */
+/* Un ChartWidget prive de donnees rend un canevas vide : une carte blanche.
+   On dit la raison a la place. */
+.gp-chart-vide {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 3rem 1.5rem;
+    text-align: center;
+}
+.gp-chart-vide svg {
+    width: 2.25rem;
+    height: 2.25rem;
+    color: var(--gp-inconnu);
+    opacity: 0.65;
+}
+.gp-chart-vide-titre {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--gp-text);
+}
+.gp-chart-vide-detail {
+    margin: 0;
+    max-width: 34ch;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--gp-inconnu);
+}
+.dark .gp-chart-vide-titre { color: #e2e8f0; }
+.dark .gp-chart-vide-detail,
+.dark .gp-chart-vide svg { color: #64748b; }
+
+/* Une carte filiere sans mesure : la phrase dit laquelle des trois situations,
+   sans crier — ce n'est pas une alerte, c'est une information manquante. */
+.gp-filiere-empty--inconnu {
+    color: var(--gp-inconnu);
+    font-style: normal;
+    font-size: 0.76rem;
+    line-height: 1.45;
+}
+.dark .gp-filiere-empty--inconnu { color: #64748b; }

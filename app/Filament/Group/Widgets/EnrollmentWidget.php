@@ -3,6 +3,7 @@
 namespace App\Filament\Group\Widgets;
 
 use App\Services\TenantAggregationService;
+use App\Support\EtatMesure;
 use Filament\Widgets\ChartWidget;
 
 class EnrollmentWidget extends ChartWidget
@@ -17,30 +18,64 @@ class EnrollmentWidget extends ChartWidget
 
     protected static ?string $maxHeight = '350px';
 
+    // Un ChartWidget sans donnees rend un canevas vide : une carte blanche au
+    // bas du tableau de bord. Cette vue dit la raison a la place du graphe.
+    protected static string $view = 'filament.group.widgets.chart-ou-vide';
+
+    /**
+     * Rampe monochrome bleu, du plus soutenu au plus clair.
+     *
+     * L'ancienne palette mêlait vert, ambre, VIOLET et rose : le design system
+     * KLASSCI interdit le multicolore décoratif, et le violet nommément. Une
+     * couleur par école ne porte aucune information — elle ne fait que
+     * distinguer — donc une seule teinte déclinée suffit et reste lisible.
+     *
+     * @var list<string>
+     */
+    private const TEINTES = [
+        'rgba(4, 83, 203, 0.85)',
+        'rgba(4, 83, 203, 0.68)',
+        'rgba(59, 125, 219, 0.72)',
+        'rgba(59, 125, 219, 0.55)',
+        'rgba(94, 145, 222, 0.62)',
+        'rgba(94, 145, 222, 0.45)',
+    ];
+
+    /** @var array<string,mixed>|null mémo par instance : getData() et getDescription() lisaient deux fois */
+    private ?array $kpisMemo = null;
+
+    /** @return array<string,mixed> */
+    private function kpis(): array
+    {
+        return $this->kpisMemo ??= app(TenantAggregationService::class)
+            ->getGroupKpis(auth('group')->user()->group);
+    }
+
     protected function getData(): array
     {
-        $group = auth('group')->user()->group;
-        $service = app(TenantAggregationService::class);
-        $kpis = $service->getGroupKpis($group);
+        $kpis = $this->kpis();
 
         $labels = [];
         $students = [];
-        $staff = [];
-        $colors = [
-            'rgba(4, 83, 203, 0.7)',
-            'rgba(16, 185, 129, 0.7)',
-            'rgba(245, 158, 11, 0.7)',
-            'rgba(139, 92, 246, 0.7)',
-            'rgba(236, 72, 153, 0.7)',
-            'rgba(14, 165, 233, 0.7)',
-        ];
 
-        $i = 0;
-        foreach ($kpis['establishments'] ?? [] as $code => $data) {
+        // Une école injoignable renvoyait `inscriptions = 0`, et le camembert
+        // traçait une part de zéro : le graphique dessinait quatre écoles
+        // vides là où il n'y avait qu'une panne. Un graphe ne sait pas dire
+        // « je ne sais pas » — alors on ne lui donne que ce qui est mesuré.
+        foreach ($kpis['establishments'] ?? [] as $data) {
+            if (! EtatMesure::aUneValeur($data['etat_effectifs'] ?? null)) {
+                continue;
+            }
+
             $labels[] = $data['tenant_name'];
-            $students[] = $data['inscriptions'];
-            $staff[] = $data['staff'];
-            $i++;
+            // Des personnes, pas des lignes d'inscription : le camembert doit
+            // totaliser le meme nombre que le KPI « Etudiants inscrits ».
+            $students[] = $data['students'] ?? 0;
+        }
+
+        $teintes = [];
+        for ($i = 0, $n = count($labels); $i < $n; $i++) {
+            $teintes[] = self::TEINTES[$i % count(self::TEINTES)];
         }
 
         return [
@@ -48,11 +83,36 @@ class EnrollmentWidget extends ChartWidget
                 [
                     'label' => 'Étudiants inscrits',
                     'data' => $students,
-                    'backgroundColor' => array_slice($colors, 0, count($labels)),
+                    'backgroundColor' => $teintes,
                 ],
             ],
             'labels' => $labels,
         ];
+    }
+
+    /**
+     * Le sous-titre dit ce que le graphique ne montre pas.
+     *
+     * Sans lui, un camembert amputé de deux écoles se lit comme un camembert
+     * complet.
+     */
+    public function getDescription(): ?string
+    {
+        $perimetre = $this->kpis()['perimetre']['effectifs'] ?? null;
+
+        if ($perimetre === null) {
+            return null;
+        }
+
+        if ((int) $perimetre['repondu'] === 0) {
+            // La raison vient des établissements réellement absents : sans ça,
+            // le sous-titre affirmait une panne de base même quand les écoles
+            // avaient répondu sans année universitaire ouverte.
+            return ucfirst(EtatMesure::absenceGroupe())
+                . ' — ' . EtatMesure::raisonCommune($perimetre['manquants'] ?? []);
+        }
+
+        return EtatMesure::mentionPerimetre((int) $perimetre['repondu'], (int) $perimetre['total']);
     }
 
     protected function getType(): string

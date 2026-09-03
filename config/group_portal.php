@@ -263,6 +263,40 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Seuils d'occupation des quotas d'abonnement
+    |--------------------------------------------------------------------------
+    |
+    | Lus par App\Support\QuotaHealth, qui sert A LA FOIS le moteur d'alertes
+    | et la couleur de la colonne « Inscriptions ». Les deux les lisaient
+    | séparément — le tableau ne testait que le dépassement — et se
+    | contredisaient sur le même écran.
+    |
+    */
+
+    /*
+    |--------------------------------------------------------------------------
+    | Seuils de sante de l'assiduite
+    |--------------------------------------------------------------------------
+    |
+    | Distincts de `rate_health`, qui est calibre pour le RECOUVREMENT. Un taux
+    | d'encaissement de 72 % est confortable ; une assiduite de 72 % ne l'est
+    | pas. Faire lire a l'assiduite les seuils du recouvrement faisait basculer
+    | une tuile de « a surveiller » a « sain » sans decision.
+    |
+    */
+
+    'attendance_health' => [
+        'healthy' => (int) env('GROUP_PORTAL_ATTENDANCE_HEALTHY', 85),
+        'at_risk' => (int) env('GROUP_PORTAL_ATTENDANCE_AT_RISK', 70),
+    ],
+
+    'quota_health' => [
+        'exceeded' => (int) env('GROUP_PORTAL_QUOTA_EXCEEDED', 100),
+        'critical' => (int) env('GROUP_PORTAL_QUOTA_CRITICAL', 90),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Identité visuelle du portail
     |--------------------------------------------------------------------------
     |

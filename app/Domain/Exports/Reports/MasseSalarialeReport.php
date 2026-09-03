@@ -3,6 +3,7 @@
 namespace App\Domain\Exports\Reports;
 
 use App\Domain\Exports\TableauReport;
+use App\Support\EtatMesure;
 
 /**
  * Coût enseignant du groupe, établissement par établissement.
@@ -74,16 +75,26 @@ class MasseSalarialeReport extends TableauReport
         $lignes = [];
 
         foreach ($this->payroll['establishments'] ?? [] as $paie) {
+            // Trois cas se lisaient pareil : base injoignable, école sans
+            // module de paie, école qui n'a rien préparé ce mois-ci. Le
+            // premier n'a rien mesuré et doit le dire ; le troisième a
+            // réellement zéro bulletin, et son zéro est vrai.
+            $etat = $paie['etat'] ?? EtatMesure::MESURE;
+            $mesure = EtatMesure::estMesure($etat);
+
+            $nom = $paie['tenant_name'] ?? EtatMesure::TIRET;
+            if (! $mesure) {
+                $nom .= ' (' . mb_strtolower(EtatMesure::badge($etat, $paie['motif'] ?? null)) . ')';
+            }
+
             $lignes[] = [
-                ($paie['error'] ?? false)
-                    ? ($paie['tenant_name'] ?? '—') . ' (non consolidé)'
-                    : ($paie['tenant_name'] ?? '—'),
-                (int) ($paie['enseignants'] ?? 0),
-                (int) ($paie['bulletins'] ?? 0),
-                (float) ($paie['masse_brute'] ?? 0),
-                (float) ($paie['masse_versee'] ?? 0),
-                (float) ($paie['retenues'] ?? 0),
-                (float) ($paie['masse_engagee'] ?? 0),
+                $nom,
+                $mesure ? (int) ($paie['enseignants'] ?? 0) : null,
+                $mesure ? (int) ($paie['bulletins'] ?? 0) : null,
+                $mesure ? (float) ($paie['masse_brute'] ?? 0) : null,
+                $mesure ? (float) ($paie['masse_versee'] ?? 0) : null,
+                $mesure ? (float) ($paie['retenues'] ?? 0) : null,
+                $mesure ? (float) ($paie['masse_engagee'] ?? 0) : null,
             ];
         }
 
@@ -107,12 +118,24 @@ class MasseSalarialeReport extends TableauReport
         ];
     }
 
+    /**
+     * Combien d'établissements manquent réellement à la masse salariale.
+     *
+     * Cette méthode lisait encore le drapeau `error` pendant que `lignes()`
+     * était passée à `etat`. Les deux sont équivalents aujourd'hui — mais pas
+     * pour longtemps : `NON_APPLICABLE` (l'école n'utilise pas le module de
+     * paie) porte `error = false`, donc dès qu'un autre état apparaîtra, le
+     * tableau dira une chose et son bas de page une autre.
+     *
+     * Et le compte porte sur la seule absence qui ampute le total : une école
+     * sans module de paie ne manque à rien, elle n'a rien à verser.
+     */
     private function etablissementsManquants(): int
     {
         $manquants = 0;
 
         foreach ($this->payroll['establishments'] ?? [] as $paie) {
-            if ($paie['error'] ?? false) {
+            if (($paie['etat'] ?? EtatMesure::MESURE) === EtatMesure::NON_MESURE) {
                 $manquants++;
             }
         }

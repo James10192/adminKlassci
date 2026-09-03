@@ -1,26 +1,50 @@
-@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
+@php use App\Support\EtatMesure; use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
 <x-filament-panels::page>
     @php
         $establishments = $this->getComparisonData();
         $enrollment = $this->getEnrollmentData();
 
-        // Hero KPIs aggregated from comparison data (zero new service call).
-        $totalInscriptions = 0;
-        $totalStaff = 0;
+        // Les totaux du hero, agrégés depuis la comparaison (aucun appel service
+        // supplémentaire) — mais UNIQUEMENT sur les établissements mesurés.
+        //
+        // La moyenne de recouvrement testait `isset($d['collection_rate'])`.
+        // Or une école injoignable a bien cette clé : elle vaut 0. Les quatre
+        // écoles muettes entraient donc dans la moyenne avec un 0 %, qui
+        // l'écrasait, et le hero annonçait « 0,0 % — critique » en rouge. Une
+        // école dont on ne sait rien ne doit peser sur aucune moyenne.
+        $totalInscriptions = 0;   $nbEffectifs = 0;
+        $totalStaff = 0;          $nbPersonnel = 0;
         $totalRevenueCollected = 0.0;
-        $rateSum = 0.0;
-        $rateCount = 0;
+        $rateSum = 0.0;           $nbFinances = 0;
+        $total = count($establishments);
+
         foreach ($establishments as $d) {
-            $totalInscriptions += (int) ($d['inscriptions'] ?? 0);
-            $totalStaff += (int) ($d['staff'] ?? 0);
-            $totalRevenueCollected += (float) ($d['revenue_collected'] ?? 0);
-            if (isset($d['collection_rate'])) {
-                $rateSum += (float) $d['collection_rate'];
-                $rateCount++;
+            if (EtatMesure::aUneValeur($d['etat_effectifs'] ?? null)) {
+                // Des personnes distinctes, comme le KPI « Étudiants inscrits »
+                // du tableau de bord (`total_students` = Σ `students`). Ce total
+                // sommait les LIGNES d'inscription sous le même libellé : les
+                // deux écrans affichaient deux nombres pour la même chose.
+                $totalInscriptions += (int) ($d['students'] ?? 0);
+                $nbEffectifs++;
+            }
+            if (EtatMesure::aUneValeur($d['etat_personnel'] ?? null)) {
+                $totalStaff += (int) ($d['staff'] ?? 0);
+                $nbPersonnel++;
+            }
+            if (EtatMesure::aUneValeur($d['etat_finances'] ?? null)) {
+                $totalRevenueCollected += (float) ($d['revenue_collected'] ?? 0);
+                $rateSum += (float) ($d['collection_rate'] ?? 0);
+                $nbFinances++;
             }
         }
-        $avgRate = $rateCount > 0 ? $rateSum / $rateCount : 0;
-        $avgRatio = $totalStaff > 0 ? round($totalInscriptions / $totalStaff, 1) : 0;
+
+        $avgRate = $nbFinances > 0 ? $rateSum / $nbFinances : 0.0;
+
+        // Le ratio croise deux familles : il n'a de sens que si les DEUX sont
+        // mesurées sur le même périmètre. Sinon on divise des étudiants connus
+        // par un personnel inconnu.
+        $ratioMesurable = $nbEffectifs > 0 && $nbEffectifs === $nbPersonnel && $totalStaff > 0;
+        $avgRatio = $ratioMesurable ? round($totalInscriptions / $totalStaff, 1) : null;
     @endphp
 
     <x-group-hero
@@ -33,28 +57,62 @@
         </x-slot:badges>
 
         <x-slot:kpis>
-            <div class="gp-hero-kpi">
+            <div class="gp-hero-kpi" @if($nbEffectifs === 0) data-tone="inconnu" @endif>
                 <span class="gp-hero-kpi-label">Étudiants total</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($totalInscriptions) }}</span>
-                <span class="gp-hero-kpi-meta">cumul du groupe</span>
+                <span class="gp-hero-kpi-value">
+                    {{ $nbEffectifs > 0 ? FcfaFormatter::integer($totalInscriptions) : EtatMesure::TIRET }}
+                </span>
+                <span class="gp-hero-kpi-meta">
+                    {{ $nbEffectifs === 0
+                        ? EtatMesure::absenceGroupe()
+                        : (EtatMesure::mentionPerimetre($nbEffectifs, $total) ?? 'cumul du groupe') }}
+                </span>
             </div>
 
-            <div class="gp-hero-kpi">
+            <div class="gp-hero-kpi" @if($nbPersonnel === 0) data-tone="inconnu" @endif>
                 <span class="gp-hero-kpi-label">Personnel total</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::integer($totalStaff) }}</span>
-                <span class="gp-hero-kpi-meta">ratio {{ $avgRatio }}:1</span>
+                <span class="gp-hero-kpi-value">
+                    {{ $nbPersonnel > 0 ? FcfaFormatter::integer($totalStaff) : EtatMesure::TIRET }}
+                </span>
+                <span class="gp-hero-kpi-meta">
+                    @if ($nbPersonnel === 0)
+                        {{ EtatMesure::absenceGroupe() }}
+                    @elseif ($avgRatio !== null)
+                        ratio {{ $avgRatio }}:1
+                    @else
+                        ratio non calculable
+                    @endif
+                </span>
             </div>
 
-            <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($avgRate) }}">
+            {{-- « 0,0 % — critique » en rouge quand rien n'a répondu annonçait un
+                 effondrement du recouvrement du groupe. Sans mesure : gris. --}}
+            <div class="gp-hero-kpi" data-tone="{{ $nbFinances > 0 ? RateHealth::tone($avgRate) : 'inconnu' }}">
                 <span class="gp-hero-kpi-label">Taux moyen recouvrement</span>
-                <span class="gp-hero-kpi-value">{{ number_format($avgRate, 1, ',', ' ') }}&nbsp;%</span>
-                <span class="gp-hero-kpi-meta">{{ RateHealth::label($avgRate) }}</span>
+                <span class="gp-hero-kpi-value">
+                    {{ $nbFinances > 0 ? number_format($avgRate, 1, ',', ' ') . ' %' : EtatMesure::TIRET }}
+                </span>
+                <span class="gp-hero-kpi-meta">
+                    @if ($nbFinances === 0)
+                        {{ EtatMesure::absenceGroupe() }}
+                    @else
+                        {{ RateHealth::label($avgRate) }}{{ ($m = EtatMesure::mentionPerimetre($nbFinances, $total)) ? ' · ' . $m : '' }}
+                    @endif
+                </span>
             </div>
 
-            <div class="gp-hero-kpi" data-tone="success">
+            {{-- Le vert était posé en dur : la tuile restait « bonne » même sur
+                 un total nul faute de mesure. --}}
+            <div class="gp-hero-kpi" data-tone="{{ $nbFinances > 0 ? 'success' : 'inconnu' }}">
                 <span class="gp-hero-kpi-label">Encaissés cumulés</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact($totalRevenueCollected) }}</span>
-                <span class="gp-hero-kpi-meta">FCFA cross-établissements</span>
+                <span class="gp-hero-kpi-value">
+                    {{ $nbFinances > 0 ? FcfaFormatter::compact($totalRevenueCollected) : EtatMesure::TIRET }}
+                </span>
+                <span class="gp-hero-kpi-meta">
+                    {{ $nbFinances === 0
+                        ? EtatMesure::absenceGroupe()
+                        : (EtatMesure::mentionPerimetre($nbFinances, $total) ?? 'FCFA cross-établissements') }}
+                </span>
             </div>
         </x-slot:kpis>
     </x-group-hero>
@@ -70,7 +128,13 @@
                 <tr>
                     <th>Indicateur</th>
                     @foreach($establishments as $code => $data)
-                        <th>{{ $data['tenant_name'] }}</th>
+                        <th>
+                            {{ $data['tenant_name'] }}
+                            @unless (EtatMesure::estMesure($data['etat_finances'] ?? null) && EtatMesure::estMesure($data['etat_effectifs'] ?? null))
+                                <span class="gp-scorecard-etat"
+                                      title="{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}">{{ EtatMesure::badge($data['etat_finances'] ?? null, $data['motif'] ?? null) }}</span>
+                            @endunless
+                        </th>
                     @endforeach
                 </tr>
             </thead>
@@ -83,7 +147,11 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        <td class="cell-bold">{{ FcfaFormatter::full((float) ($data['inscriptions'] ?? 0)) }}</td>
+                        @php $mesure = EtatMesure::aUneValeur($data['etat_effectifs'] ?? null); @endphp
+                        <td class="cell-bold {{ $mesure ? '' : 'cell-inconnu' }}"
+                            @unless($mesure) title="{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}" @endunless>
+                            {{ $mesure ? FcfaFormatter::full((float) ($data['students'] ?? 0)) : EtatMesure::TIRET }}
+                        </td>
                     @endforeach
                 </tr>
                 <tr>
@@ -94,7 +162,11 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        <td>{{ $data['staff'] ?? 0 }}</td>
+                        @php $mesure = EtatMesure::aUneValeur($data['etat_personnel'] ?? null); @endphp
+                        <td class="{{ $mesure ? '' : 'cell-inconnu' }}"
+                            @unless($mesure) title="{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}" @endunless>
+                            {{ $mesure ? ($data['staff'] ?? 0) : EtatMesure::TIRET }}
+                        </td>
                     @endforeach
                 </tr>
                 <tr>
@@ -105,8 +177,19 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        @php $ratio = ($data['staff'] ?? 0) > 0 ? round(($data['inscriptions'] ?? 0) / $data['staff'], 1) : 0; @endphp
-                        <td>{{ $ratio }}:1</td>
+                        @php
+                            // Un ratio croise deux familles : les deux doivent être
+                            // mesurées. « 0:1 » se lisait comme un établissement sans
+                            // aucun étudiant par enseignant.
+                            $mesure = EtatMesure::aUneValeur($data['etat_effectifs'] ?? null)
+                                && EtatMesure::aUneValeur($data['etat_personnel'] ?? null)
+                                && ($data['staff'] ?? 0) > 0;
+                            $ratio = $mesure ? round(($data['students'] ?? 0) / $data['staff'], 1) : null;
+                        @endphp
+                        <td class="{{ $mesure ? '' : 'cell-inconnu' }}"
+                            @unless($mesure) title="{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}" @endunless>
+                            {{ $mesure ? $ratio . ':1' : EtatMesure::TIRET }}
+                        </td>
                     @endforeach
                 </tr>
                 <tr>
@@ -117,8 +200,17 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        @php $rateClass = RateHealth::tone((float) ($data['collection_rate'] ?? 0)); @endphp
-                        <td><span class="gp-rate-badge {{ $rateClass }}">{{ $data['collection_rate'] ?? 0 }}%</span></td>
+                        @php
+                            // La pastille ROUGE « 0% » accusait chaque école muette
+                            // de n'avoir rien encaissé. Sans mesure : gris, tiret.
+                            $mesure = EtatMesure::aUneValeur($data['etat_finances'] ?? null);
+                            $rateClass = $mesure ? RateHealth::tone((float) ($data['collection_rate'] ?? 0)) : 'inconnu';
+                        @endphp
+                        <td @unless($mesure) title="{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}" @endunless>
+                            <span class="gp-rate-badge {{ $rateClass }}">
+                                {{ $mesure ? ($data['collection_rate'] ?? 0) . '%' : EtatMesure::TIRET }}
+                            </span>
+                        </td>
                     @endforeach
                 </tr>
                 <tr>
@@ -129,7 +221,14 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        <td class="cell-bold" style="color: var(--gp-success)">{{ FcfaFormatter::millions((float) ($data['revenue_collected'] ?? 0)) }} M</td>
+                        @php $mesure = EtatMesure::aUneValeur($data['etat_finances'] ?? null); @endphp
+                        {{-- Le vert était en dur : « 0,0 M » s'affichait en couleur
+                             de succès pour une école dont la base n'avait pas répondu. --}}
+                        <td class="cell-bold {{ $mesure ? '' : 'cell-inconnu' }}"
+                            @if($mesure) style="color: var(--gp-success)"
+                            @else title="{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}" @endif>
+                            {{ $mesure ? FcfaFormatter::millions((float) ($data['revenue_collected'] ?? 0)) . ' M' : EtatMesure::TIRET }}
+                        </td>
                     @endforeach
                 </tr>
                 <tr>
@@ -140,7 +239,13 @@
                         </div>
                     </td>
                     @foreach($establishments as $data)
-                        <td>{{ ($data['attendance_rate'] ?? 0) > 0 ? $data['attendance_rate'] . '%' : 'N/A' }}</td>
+                        @php $mesure = EtatMesure::aUneValeur($data['etat_assiduite'] ?? null); @endphp
+                        {{-- « N/A » confondait « pas de présences saisies » et
+                             « base injoignable ». L'infobulle tranche. --}}
+                        <td class="{{ $mesure ? '' : 'cell-inconnu' }}"
+                            @unless($mesure) title="{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}" @endunless>
+                            {{ $mesure ? ($data['attendance_rate'] ?? 0) . '%' : EtatMesure::TIRET }}
+                        </td>
                     @endforeach
                 </tr>
             </tbody>
@@ -162,7 +267,18 @@
                             <span class="gp-filiere-count">{{ $filiere->count }}</span>
                         </div>
                     @empty
-                        <div class="gp-filiere-empty">Aucune donnée</div>
+                        {{-- « Aucune donnée » couvrait trois cas differents : base
+                             injoignable, annee non ouverte, et ecole reellement
+                             sans inscrit. Seul le dernier est une absence de
+                             donnee — les deux autres appellent une action. --}}
+                        @if (EtatMesure::aUneValeur($data['etat'] ?? null))
+                            <div class="gp-filiere-empty">Aucun étudiant inscrit cette année</div>
+                        @else
+                            <div class="gp-filiere-empty gp-filiere-empty--inconnu">
+                                {{ EtatMesure::badge($data['etat'] ?? null, $data['motif'] ?? null) }}
+                                — {{ EtatMesure::libelleMotif($data['motif'] ?? null) }}
+                            </div>
+                        @endif
                     @endforelse
                 </div>
             </div>

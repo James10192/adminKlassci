@@ -41,14 +41,19 @@ class GroupPortalDemoSeeder extends Seeder
             ]
         );
 
+        // Le dernier champ dit depuis quand `tenant:update-stats` est passe.
+        // Trois des quatre ecoles ont eu des nouvelles recemment, la quatrieme
+        // jamais — de quoi verifier que l'infobulle des cartes dit bien depuis
+        // quand la maitresse est sans nouvelles, sans jamais dater les chiffres
+        // eux-memes, qui ne sont pas mesures.
         $etablissements = [
-            ['islg-rostan', 'ISLG Rostan', 'elite', 400000, 620, 800, 34, 40, 12, '+18 months'],
-            ['rostan-yopougon', 'Rostan Yopougon', 'professional', 200000, 2140, 3000, 28, 30, 21, '+3 months'],
-            ['rostan-bouake', 'Rostan Bouaké', 'essentiel', 100000, 690, 700, 19, 20, 9, '+11 days'],
-            ['rostan-daloa', 'Rostan Daloa', 'free', 0, 44, 50, 4, 5, 2, null],
+            ['islg-rostan', 'ISLG Rostan', 'elite', 400000, 620, 800, 34, 40, 12, '+18 months', '-47 minutes'],
+            ['rostan-yopougon', 'Rostan Yopougon', 'professional', 200000, 2140, 3000, 28, 30, 21, '+3 months', '-2 hours'],
+            ['rostan-bouake', 'Rostan Bouaké', 'essentiel', 100000, 690, 700, 19, 20, 9, '+11 days', '-3 days'],
+            ['rostan-daloa', 'Rostan Daloa', 'free', 0, 44, 50, 4, 5, 2, null, null],
         ];
 
-        foreach ($etablissements as [$code, $nom, $plan, $frais, $etudiants, $maxEtudiants, $users, $maxUsers, $staff, $fin]) {
+        foreach ($etablissements as [$code, $nom, $plan, $frais, $etudiants, $maxEtudiants, $users, $maxUsers, $staff, $fin, $releve]) {
             Tenant::updateOrCreate(
                 ['code' => $code],
                 [
@@ -79,6 +84,7 @@ class GroupPortalDemoSeeder extends Seeder
                     'current_students' => $etudiants,
                     'current_inscriptions_per_year' => $etudiants,
                     'current_storage_mb' => 1240,
+                    'stats_measured_at' => $releve ? now()->modify($releve) : null,
                     'admin_name' => 'Direction '.$nom,
                     'admin_email' => 'direction@'.$code.'.test',
                 ]

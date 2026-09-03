@@ -26,10 +26,20 @@ class GroupDashboard extends Dashboard
 
     protected static string $routePath = '/';
 
+    /**
+     * Le hero remplace l'entete de Filament — actions comprises.
+     *
+     * Filament ne rend sa propre barre d'actions que lorsque `getHeader()`
+     * retourne null. Les trois actions declarees plus bas (etat des
+     * etablissements, actualiser, verifier les alertes) etaient donc
+     * construites a chaque rendu et n'apparaissaient nulle part. On les passe
+     * au hero, qui a un emplacement pour elles.
+     */
     public function getHeader(): ?View
     {
         return view('filament.group.partials.dashboard-hero', [
             'context' => $this->getHeroContext(),
+            'actions' => $this->getCachedHeaderActions(),
         ]);
     }
 
@@ -41,6 +51,7 @@ class GroupDashboard extends Dashboard
      *     establishment_count: int,
      *     academic_years: list<string>,
      *     last_sync: string,
+     *     perimetre: array<string,mixed>,
      *     kpis: array<string,mixed>,
      * }
      */
@@ -57,11 +68,36 @@ class GroupDashboard extends Dashboard
             'role' => self::roleLabel($user->role ?? ''),
             'establishment_count' => self::cachedTenantCount($group),
             'academic_years' => self::extractAcademicYears($kpis),
-            'last_sync' => $group && $service->hasFreshGroupKpis($group)
-                ? 'il y a moins de 15 min'
-                : 'non synchronisé',
+            // L'age reel de la mesure, pas une phrase fixe. La puce annoncait
+            // « il y a moins de 15 min » alors que le cache des KPI vit 300
+            // secondes : le libelle etait faux d'un facteur trois, et ne
+            // dependait meme pas de l'heure du calcul.
+            'last_sync' => self::ageMesure($kpis),
+            'perimetre' => $kpis['perimetre'] ?? [],
             'kpis' => $kpis,
         ];
+    }
+
+    /**
+     * Depuis quand les chiffres affiches ont-ils ete calcules.
+     *
+     * `computeGroupKpis()` horodate son resultat ; comme le tableau entier est
+     * mis en cache, l'horodatage vieillit avec lui et dit donc l'age reel de ce
+     * que le fondateur a sous les yeux.
+     */
+    private static function ageMesure(array $kpis): string
+    {
+        $calculeA = $kpis['computed_at'] ?? null;
+
+        if (! $calculeA) {
+            return 'non mesuré';
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($calculeA)->locale('fr')->diffForHumans();
+        } catch (\Exception) {
+            return 'non mesuré';
+        }
     }
 
     private static function cachedTenantCount(?\App\Models\Group $group): int

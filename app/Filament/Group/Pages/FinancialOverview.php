@@ -8,6 +8,7 @@ use App\Domain\Exports\Reports\MasseSalarialeReport;
 use App\Filament\Group\Concerns\HasCustomHero;
 use App\Filament\Group\Concerns\HasReportActions;
 use App\Services\TenantAggregationService;
+use App\Support\EtatMesure;
 use Filament\Pages\Page;
 
 class FinancialOverview extends Page
@@ -50,8 +51,24 @@ class FinancialOverview extends Page
 
         $totalExpected = 0;
         $totalCollected = 0;
+        $mesures = 0;
+        $manquants = [];
 
-        foreach ($financials as $data) {
+        foreach ($financials as $code => $data) {
+            // On somme les repondants et on nomme le denominateur. Additionner
+            // le zero d'une base injoignable ne change pas le total, mais un
+            // total qui ne dit pas sur combien d'ecoles il porte laisse croire
+            // qu'il porte sur toutes.
+            if (! EtatMesure::estMesure($data['etat'] ?? EtatMesure::MESURE)) {
+                $manquants[$code] = [
+                    'nom' => $data['tenant_name'] ?? $code,
+                    'motif' => $data['motif'] ?? EtatMesure::MOTIF_INJOIGNABLE,
+                ];
+
+                continue;
+            }
+
+            $mesures++;
             $totalExpected += $data['revenue_expected'];
             $totalCollected += $data['revenue_collected'];
         }
@@ -62,6 +79,15 @@ class FinancialOverview extends Page
             'outstanding' => max(0, $totalExpected - $totalCollected),
             'surplus' => max(0, $totalCollected - $totalExpected),
             'rate' => $totalExpected > 0 ? min(100, round(($totalCollected / $totalExpected) * 100, 1)) : 0,
+            'perimetre' => [
+                'total' => count($financials),
+                'repondu' => $mesures,
+                'manquants' => $manquants,
+                'complet' => $manquants === [],
+                'etat' => $mesures === 0 && $financials !== []
+                    ? EtatMesure::NON_MESURE
+                    : EtatMesure::MESURE,
+            ],
         ];
     }
 
@@ -93,26 +119,49 @@ class FinancialOverview extends Page
      * base est injoignable affiche un résultat trop favorable ; l'écran doit
      * pouvoir le signaler plutôt que de laisser croire au chiffre.
      *
-     * @return array{cout: float, net: float, complet: bool, manquants: int}
+     * `cout_mesure` et `net_mesure` disent s'il y a un chiffre à afficher.
+     * Quand AUCUNE école n'a répondu, la masse brute vaut 0 et le net vaut
+     * `0 - 0 = 0` : la tuile annonçait « Masse salariale 0 · 0 enseignant »
+     * et « Reste après paie 0 » à un fondateur dont les écoles emploient des
+     * dizaines d'enseignants. Une soustraction entre deux inconnues n'est pas
+     * un résultat nul, c'est une absence de résultat.
+     *
+     * @return array{cout: float, net: float, complet: bool, manquants: int, cout_mesure: bool, net_mesure: bool}
      */
     public function getResultat(): array
     {
         $paie = $this->getPayroll();
-        $encaisse = (float) ($this->getTotals()['collected'] ?? 0);
+        $totaux = $this->getTotals();
+        $encaisse = (float) ($totaux['collected'] ?? 0);
         $cout = (float) $paie['masse_brute'];
 
+        // Une ecole injoignable manque a l'appel ; une ecole qui ne fait
+        // simplement pas sa paie dans KLASSCI n'a rien a manquer. Les deux
+        // portaient `error` et se comptaient pareil.
         $manquants = 0;
+        $mesures = 0;
         foreach ($paie['establishments'] as $etablissement) {
-            if ($etablissement['error'] ?? false) {
+            $etat = $etablissement['etat'] ?? EtatMesure::MESURE;
+
+            if ($etat === EtatMesure::NON_MESURE) {
                 $manquants++;
+            } elseif (EtatMesure::aUneValeur($etat)) {
+                $mesures++;
             }
         }
+
+        // Le net croise la paie et l'encaissé : les deux doivent être mesurés,
+        // sinon on soustrait un coût connu d'une recette inconnue (ou l'inverse)
+        // et le chiffre obtenu ne veut rien dire.
+        $encaisseMesure = EtatMesure::estMesure($totaux['perimetre']['etat'] ?? EtatMesure::MESURE);
 
         return [
             'cout' => $cout,
             'net' => $encaisse - $cout,
             'complet' => $manquants === 0,
             'manquants' => $manquants,
+            'cout_mesure' => $mesures > 0,
+            'net_mesure' => $mesures > 0 && $encaisseMesure,
         ];
     }
 

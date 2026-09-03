@@ -15,8 +15,10 @@ use App\Services\Group\TeacherWorkloadResolver;
 use App\Services\Group\TenantAggregator;
 use App\Services\Group\TenantBillingContext;
 use App\Support\Alerts\AlertPayload;
+use App\Support\EtatMesure;
 use App\Support\Period\PeriodFactory;
 use App\Support\Period\PeriodInterface;
+use App\Support\QuotaHealth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -69,13 +71,6 @@ class TenantAggregationService
     private function cacheKey(int $groupId, string $suffix, PeriodInterface $period): string
     {
         return self::CACHE_KEY_PREFIX . "_{$groupId}_{$suffix}_{$period->cacheKey()}";
-    }
-
-    public function hasFreshGroupKpis(Group $group, ?PeriodInterface $period = null): bool
-    {
-        $period ??= PeriodFactory::default();
-
-        return Cache::has($this->cacheKey($group->id, 'kpis', $period));
     }
 
     public function getGroupKpis(Group $group, ?PeriodInterface $period = null): array
@@ -191,8 +186,18 @@ class TenantAggregationService
 
         $enrollment = [];
         foreach ($group->activeTenants as $tenant) {
-            $enrollment[$tenant->code] = $perTenant[$tenant->code]
-                ?? ['tenant_name' => $tenant->name, 'filieres' => [], 'classes' => []];
+            // Trois situations tombaient sur le meme `filieres: []`, donc sur le
+            // meme « Aucune donnee » a l'ecran : base injoignable, base qui
+            // repond sans annee courante, et ecole reellement sans inscrit.
+            // Seule la troisieme est une absence de donnee ; les deux autres
+            // sont une absence de mesure.
+            $enrollment[$tenant->code] = $perTenant[$tenant->code] ?? [
+                'tenant_name' => $tenant->name,
+                'filieres' => [],
+                'classes' => [],
+                'etat' => EtatMesure::NON_MESURE,
+                'motif' => EtatMesure::MOTIF_INJOIGNABLE,
+            ];
         }
 
         return $enrollment;
@@ -211,7 +216,16 @@ class TenantAggregationService
         try {
             $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
             if (! $currentYear) {
-                return ['tenant_name' => $tenant->name, 'filieres' => [], 'classes' => []];
+                // La base a repondu : ce n'est pas une panne, c'est une annee
+                // qui n'est pas ouverte. Le fondateur n'a pas la meme action a
+                // mener dans les deux cas.
+                return [
+                    'tenant_name' => $tenant->name,
+                    'filieres' => [],
+                    'classes' => [],
+                    'etat' => EtatMesure::NON_MESURE,
+                    'motif' => EtatMesure::MOTIF_SANS_ANNEE,
+                ];
             }
 
             $byFiliere = DB::connection($conn)
@@ -246,10 +260,21 @@ class TenantAggregationService
                 'tenant_name' => $tenant->name,
                 'filieres' => $byFiliere,
                 'classes' => $classOccupancy,
+                // La base a repondu : un tableau vide veut alors dire zero
+                // inscrit, ce qui est une information, pas une absence.
+                'etat' => EtatMesure::MESURE,
+                'motif' => null,
             ];
         } catch (\Exception $e) {
             Log::error("[group-refactor] computeTenantEnrollment failed for {$tenant->code}: {$e->getMessage()}");
-            return ['tenant_name' => $tenant->name, 'filieres' => [], 'classes' => []];
+
+            return [
+                'tenant_name' => $tenant->name,
+                'filieres' => [],
+                'classes' => [],
+                'etat' => EtatMesure::NON_MESURE,
+                'motif' => EtatMesure::MOTIF_INJOIGNABLE,
+            ];
         } finally {
             $this->connectionManager->closeConnection($conn);
         }
@@ -262,20 +287,57 @@ class TenantAggregationService
 
         $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantOutstandingAging', 'Aging', $period);
 
-        foreach ($perTenant as $tenantCode => $aging) {
+        // On boucle sur les etablissements du groupe, pas sur les reponses.
+        //
+        // La boucle precedente parcourait `$perTenant` : une ecole dont la
+        // requete avait echoue etait simplement absente, et les tranches
+        // d'impayes tombaient a zero sans que rien ne le dise. La tuile
+        // « Impayes > 30 jours » passait alors au VERT et annoncait zero
+        // dossier a relancer — le seul endroit du portail ou la panne se
+        // deguisait en bonne nouvelle.
+        $mesures = 0;
+        $manquants = [];
+
+        foreach ($group->activeTenants as $tenant) {
+            $aging = $perTenant[$tenant->code] ?? null;
+
+            if ($aging === null || ($aging['etat'] ?? EtatMesure::MESURE) !== EtatMesure::MESURE) {
+                $manquants[$tenant->code] = [
+                    'nom' => $tenant->name,
+                    'motif' => $aging['motif'] ?? EtatMesure::MOTIF_INJOIGNABLE,
+                ];
+                $aggregated['by_tenant'][$tenant->code] = array_merge(
+                    ['tenant_name' => $tenant->name],
+                    $aging ?? $this->emptyAging(EtatMesure::NON_MESURE, EtatMesure::MOTIF_INJOIGNABLE),
+                );
+                continue;
+            }
+
+            $mesures++;
+
             foreach (self::AGING_BUCKETS as $bucket) {
                 $aggregated[$bucket]['count'] += $aging[$bucket]['count'];
                 $aggregated[$bucket]['amount'] += $aging[$bucket]['amount'];
             }
-            $tenant = $group->activeTenants->firstWhere('code', $tenantCode);
-            $aggregated['by_tenant'][$tenantCode] = array_merge(
-                ['tenant_name' => $tenant?->name],
+
+            $aggregated['by_tenant'][$tenant->code] = array_merge(
+                ['tenant_name' => $tenant->name],
                 $aging
             );
         }
 
         $aggregated['total_count'] = array_sum(array_column(array_intersect_key($aggregated, array_flip(self::AGING_BUCKETS)), 'count'));
         $aggregated['total_amount'] = array_sum(array_column(array_intersect_key($aggregated, array_flip(self::AGING_BUCKETS)), 'amount'));
+
+        $total = $group->activeTenants->count();
+        $aggregated['perimetre'] = [
+            'total' => $total,
+            'repondu' => $mesures,
+            'manquants' => $manquants,
+            'complet' => $manquants === [],
+            'etat' => $mesures === 0 && $total > 0 ? EtatMesure::NON_MESURE : EtatMesure::MESURE,
+        ];
+        $aggregated['computed_at'] = now()->toIso8601String();
 
         return $aggregated;
     }
@@ -297,7 +359,10 @@ class TenantAggregationService
         try {
             $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
             if (! $currentYear) {
-                return $this->emptyAging();
+                // La base a repondu, mais l'echeancier part de `is_current` :
+                // sans annee courante il n'y a rien a echelonner, et le zero
+                // qu'on retournait ne disait pas lequel des deux.
+                return $this->emptyAging(EtatMesure::NON_MESURE, EtatMesure::MOTIF_SANS_ANNEE);
             }
 
             $ctx = $this->billingContext->load($conn, $tenant->id, $currentYear->id);
@@ -353,7 +418,7 @@ class TenantAggregationService
             return $buckets;
         } catch (\Exception $e) {
             Log::error("[group-refactor] computeTenantOutstandingAging failed for {$tenant->code}: {$e->getMessage()}");
-            return $this->emptyAging();
+            return $this->emptyAging(EtatMesure::NON_MESURE, EtatMesure::MOTIF_INJOIGNABLE);
         } finally {
             $this->connectionManager->closeConnection($conn);
         }
@@ -516,7 +581,7 @@ class TenantAggregationService
     {
         $quotaPct = $this->computeQuotaPercentages($tenant, skipStudents: $planMismatchFired);
 
-        if ($quotaPct['max'] >= 100) {
+        if ($quotaPct['max'] >= QuotaHealth::exceededThreshold()) {
             $health['quota_exceeded_count']++;
             $health['alerts'][] = $this->buildAlert(
                 $tenant,
@@ -524,7 +589,7 @@ class TenantAggregationService
                 AlertType::QuotaExceeded,
                 "Quota {$quotaPct['max_type']} dépassé ({$quotaPct['max']}%)"
             );
-        } elseif ($quotaPct['max'] >= 90) {
+        } elseif ($quotaPct['max'] >= QuotaHealth::criticalThreshold()) {
             $health['quota_critical_count']++;
             $health['alerts'][] = $this->buildAlert(
                 $tenant,
@@ -928,15 +993,39 @@ class TenantAggregationService
 
         $perTenant = $this->aggregator->aggregate($group, self::class, 'computeTenantTrends', 'Trends', $period);
 
-        foreach ($perTenant as $tenantCode => $tenantTrends) {
+        $mesures = 0;
+        $manquants = [];
+
+        foreach ($group->activeTenants as $tenant) {
+            $tenantTrends = $perTenant[$tenant->code] ?? null;
+
+            if ($tenantTrends === null || ($tenantTrends['etat'] ?? EtatMesure::MESURE) !== EtatMesure::MESURE) {
+                $manquants[$tenant->code] = [
+                    'nom' => $tenant->name,
+                    'motif' => $tenantTrends['motif'] ?? EtatMesure::MOTIF_INJOIGNABLE,
+                ];
+                $trends['by_tenant'][$tenant->code] = array_merge(
+                    ['tenant_name' => $tenant->name],
+                    $tenantTrends ?? $this->emptyTrends(EtatMesure::NON_MESURE, EtatMesure::MOTIF_INJOIGNABLE),
+                );
+                continue;
+            }
+
+            $mesures++;
+
             foreach (['revenue_mom', 'revenue_yoy', 'inscriptions_yoy'] as $key) {
                 $trends[$key]['current'] += $tenantTrends[$key]['current'];
                 $trends[$key]['previous'] += $tenantTrends[$key]['previous'];
             }
-            $tenant = $group->activeTenants->firstWhere('code', $tenantCode);
-            $trends['by_tenant'][$tenantCode] = array_merge(['tenant_name' => $tenant?->name], $tenantTrends);
+
+            $trends['by_tenant'][$tenant->code] = array_merge(['tenant_name' => $tenant->name], $tenantTrends);
         }
 
+        // Le delta reste affichable meme sur un perimetre ampute : `current` et
+        // `previous` sont calcules sur le MEME ensemble de repondants, dans le
+        // meme passage. Une ecole absente manque des deux fenetres, donc le
+        // rapport reste coherent — seule la valeur absolue est ampute, et c'est
+        // elle qui portera la mention de perimetre.
         foreach (['revenue_mom', 'revenue_yoy', 'inscriptions_yoy'] as $key) {
             $prev = $trends[$key]['previous'];
             $curr = $trends[$key]['current'];
@@ -944,6 +1033,16 @@ class TenantAggregationService
                 ? round((($curr - $prev) / $prev) * 100, 1)
                 : ($curr > 0 ? 100 : 0);
         }
+
+        $total = $group->activeTenants->count();
+        $trends['perimetre'] = [
+            'total' => $total,
+            'repondu' => $mesures,
+            'manquants' => $manquants,
+            'complet' => $manquants === [],
+            'etat' => $mesures === 0 && $total > 0 ? EtatMesure::NON_MESURE : EtatMesure::MESURE,
+        ];
+        $trends['computed_at'] = now()->toIso8601String();
 
         return $trends;
     }
@@ -964,7 +1063,7 @@ class TenantAggregationService
 
             $currentYear = DB::connection($conn)->table('esbtp_annee_universitaires')->where('is_current', 1)->first();
             if (! $currentYear) {
-                return $this->emptyTrends();
+                return $this->emptyTrends(EtatMesure::NON_MESURE, EtatMesure::MOTIF_SANS_ANNEE);
             }
 
             $previousYear = DB::connection($conn)
@@ -1006,10 +1105,12 @@ class TenantAggregationService
                     'current' => $inscriptionsCount($currentYear->id),
                     'previous' => $previousYear ? $inscriptionsCount($previousYear->id) : 0,
                 ],
+                'etat' => EtatMesure::MESURE,
+                'motif' => null,
             ];
         } catch (\Exception $e) {
             Log::error("[group-refactor] computeTenantTrends failed for {$tenant->code}: {$e->getMessage()}");
-            return $this->emptyTrends();
+            return $this->emptyTrends(EtatMesure::NON_MESURE, EtatMesure::MOTIF_INJOIGNABLE);
         } finally {
             if ($conn !== null) {
                 $this->connectionManager->closeConnection($conn);
@@ -1129,17 +1230,34 @@ class TenantAggregationService
         }
     }
 
-    private function emptyAging(): array
+    /**
+     * Tranches d'anciennete a zero.
+     *
+     * L'etat par defaut est MESURE : une ecole qui a repondu et n'a aucune
+     * inscription active a reellement zero impaye, et ce zero-la est vrai.
+     * Les appelants qui n'ont RIEN pu mesurer passent NON_MESURE — sans quoi
+     * leur panne se lit comme une caisse en ordre.
+     */
+    private function emptyAging(string $etat = EtatMesure::MESURE, ?string $motif = null): array
     {
-        return array_fill_keys(self::AGING_BUCKETS, ['count' => 0, 'amount' => 0]);
+        return array_merge(
+            array_fill_keys(self::AGING_BUCKETS, ['count' => 0, 'amount' => 0]),
+            ['etat' => $etat, 'motif' => $motif],
+        );
     }
 
-    private function emptyTrends(): array
+    /**
+     * Tendances a zero. Meme regle que emptyAging() : une base qui a repondu
+     * sans mouvement a reellement zero, une base injoignable n'a rien mesure.
+     */
+    private function emptyTrends(string $etat = EtatMesure::MESURE, ?string $motif = null): array
     {
         return [
             'revenue_mom' => ['current' => 0, 'previous' => 0],
             'revenue_yoy' => ['current' => 0, 'previous' => 0],
             'inscriptions_yoy' => ['current' => 0, 'previous' => 0],
+            'etat' => $etat,
+            'motif' => $motif,
         ];
     }
 }

@@ -35,6 +35,7 @@ class Tenant extends Model
         'current_students',
         'current_inscriptions_per_year',
         'current_storage_mb',
+        'stats_measured_at',
         'admin_name',
         'admin_email',
         'support_email',
@@ -64,6 +65,7 @@ class Tenant extends Model
         'current_students' => 'integer',
         'current_inscriptions_per_year' => 'integer',
         'current_storage_mb' => 'integer',
+        'stats_measured_at' => 'datetime',
     ];
 
     /**
