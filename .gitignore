@@ -60,3 +60,7 @@ storage/framework/testing/disks/*
 # Tenant-specific (for local development)
 /tenants/
 /tenant-backups/
+
+# Base SQLite locale, montee par GroupPortalDemoSeeder pour rendre le portail.
+database/*.sqlite
+database/*.sqlite-journal
