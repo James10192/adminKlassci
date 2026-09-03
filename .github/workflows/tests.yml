@@ -112,7 +112,7 @@ jobs:
               echo '```'
               head -n 20 audit.err
               echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
             echo "::warning::Audit non concluant (API injoignable) — la fusion n'est pas bloquée pour autant."
             exit 0
           fi
@@ -121,6 +121,10 @@ jobs:
           bloquants=$(jq '[.advisories[]?[]? | select(((.severity // "") | ascii_downcase) as $s | $s == "high" or $s == "critical")] | length' audit.json)
           abandonnes=$(jq '(.abandoned // {}) | length' audit.json)
 
+          # Le rapport part dans le journal ET dans le resume. Ecrit dans le
+          # seul resume, il n'etait lisible que dans un navigateur : ni un
+          # outil, ni une API, ni un agent ne pouvait dire QUELS avis avaient
+          # bloque la fusion — seulement qu'il y en avait.
           {
             echo "### Avis de sécurité des dépendances"
             echo
@@ -140,7 +144,7 @@ jobs:
               echo
               jq -r '.abandoned | to_entries[] | "- `\(.key)`\(if (.value | type) == "string" then " — remplacer par `\(.value)`" else "" end)"' audit.json
             fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
           if [ "$bloquants" -gt 0 ]; then
             echo "::error::$bloquants avis de gravité haute ou critique sur composer.lock. Détail dans le résumé du job."
