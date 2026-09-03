@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\TenantPlan;
 use App\Models\Tenant;
 use App\Support\SubscriptionCountdown;
 use Filament\Tables;
@@ -54,20 +55,8 @@ class TenantsTableWidget extends BaseWidget
                 Tables\Columns\TextColumn::make('plan')
                     ->label('Plan')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'free' => 'gray',
-                        'essentiel' => 'primary',
-                        'professional' => 'success',
-                        'elite' => 'warning',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'free' => 'Free',
-                        'essentiel' => 'Essentiel',
-                        'professional' => 'Professional',
-                        'elite' => 'Elite',
-                        default => $state,
-                    }),
+                    ->color(fn (?string $state): string => TenantPlan::tonDe($state))
+                    ->formatStateUsing(fn (?string $state): string => TenantPlan::libelleDe($state)),
 
                 Tables\Columns\TextColumn::make('current_users')
                     ->label('Utilisateurs')

@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\TenantPlan;
+use App\Enums\TenantStatus;
 use App\Filament\Resources\TenantResource\Pages;
 use App\Filament\Resources\TenantResource\RelationManagers;
 use App\Models\Group;
@@ -209,7 +211,7 @@ class TenantResource extends Resource
                                             // et silencieusement accepte
                                             // ailleurs — un statut que plus
                                             // aucun ecran ne savait nommer.
-                                            ->options(\App\Enums\TenantStatus::options())
+                                            ->options(TenantStatus::options())
                                             ->default('active')
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
@@ -462,14 +464,8 @@ class TenantResource extends Resource
                 Tables\Columns\TextColumn::make('plan')
                     ->label('Plan')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'elite' => 'success',
-                        'professional' => 'info',
-                        'essentiel' => 'warning',
-                        'free' => 'gray',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => ucfirst($state)),
+                    ->color(fn (?string $state): string => TenantPlan::tonDe($state))
+                    ->formatStateUsing(fn (?string $state): string => TenantPlan::libelleDe($state)),
 
                 Tables\Columns\TextColumn::make('group.name')
                     ->label('Groupe')
@@ -526,20 +522,11 @@ class TenantResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Statut')
-                    ->options([
-                        'active' => 'Actif',
-                        'suspended' => 'Suspendu',
-                        'inactive' => 'Inactif',
-                    ]),
+                    ->options(TenantStatus::options()),
 
                 Tables\Filters\SelectFilter::make('plan')
                     ->label('Plan')
-                    ->options([
-                        'free' => 'Free',
-                        'essentiel' => 'Essentiel',
-                        'professional' => 'Professional',
-                        'elite' => 'Elite',
-                    ]),
+                    ->options(TenantPlan::options()),
 
                 Tables\Filters\SelectFilter::make('group_id')
                     ->label('Groupe')

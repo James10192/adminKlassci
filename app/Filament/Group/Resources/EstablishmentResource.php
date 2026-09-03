@@ -3,10 +3,11 @@
 namespace App\Filament\Group\Resources;
 
 use App\Enums\AlertSeverity;
+use App\Enums\TenantPlan;
+use App\Enums\TenantStatus;
 use App\Filament\Group\Resources\EstablishmentResource\Pages;
 use App\Models\Tenant;
 use App\Services\TenantAggregationService;
-use App\Enums\TenantStatus;
 use App\Support\EtatMesure;
 use App\Support\FcfaFormatter;
 use App\Support\QuotaHealth;
@@ -238,12 +239,10 @@ class EstablishmentResource extends Resource
                 Tables\Columns\TextColumn::make('plan')
                     ->label('Plan')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'elite' => 'success',
-                        'professional' => 'primary',
-                        'essentiel' => 'warning',
-                        default => 'gray',
-                    }),
+                    // Cette colonne rendait la valeur BRUTE — « elite », « free »,
+                    // en minuscules — a cote d'un « Statut » traduit en « Actif ».
+                    ->formatStateUsing(fn (?string $state): string => TenantPlan::libelleDe($state))
+                    ->color(fn (?string $state): string => TenantPlan::tonDe($state)),
 
                 Tables\Columns\TextColumn::make('current_inscriptions_per_year')
                     ->label('Inscriptions')
@@ -338,9 +337,11 @@ class EstablishmentResource extends Resource
                             ->formatStateUsing(fn (?string $state): string => TenantStatus::libelleDe($state))
                             ->color(fn (?string $state): string => TenantStatus::tonDe($state)),
                         Infolists\Components\TextEntry::make('plan')
+                            // `ucfirst()` rendait « Elite » sans accent, alors
+                            // que l'offre s'ecrit « Élite ».
                             ->label('Plan')
                             ->formatStateUsing(fn (?string $state): string => $state
-                                ? ucfirst($state)
+                                ? TenantPlan::libelleDe($state)
                                 : EtatMesure::TIRET),
                         Infolists\Components\TextEntry::make('admin_email')
                             ->label('Email admin'),

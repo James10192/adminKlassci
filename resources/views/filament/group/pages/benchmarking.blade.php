@@ -68,7 +68,7 @@
 
         <x-slot:kpis>
             <div class="gp-hero-kpi" @if($nbEffectifs === 0) data-tone="inconnu" @endif>
-                <span class="gp-hero-kpi-label">Étudiants total</span>
+                <span class="gp-hero-kpi-label">Total étudiants</span>
                 <span class="gp-hero-kpi-value">
                     {{ $nbEffectifs > 0 ? FcfaFormatter::integer($totalInscriptions) : EtatMesure::TIRET }}
                 </span>
@@ -80,7 +80,7 @@
             </div>
 
             <div class="gp-hero-kpi" @if($nbPersonnel === 0) data-tone="inconnu" @endif>
-                <span class="gp-hero-kpi-label">Personnel total</span>
+                <span class="gp-hero-kpi-label">Total personnel</span>
                 <span class="gp-hero-kpi-value">
                     {{ $nbPersonnel > 0 ? FcfaFormatter::integer($totalStaff) : EtatMesure::TIRET }}
                 </span>
@@ -129,10 +129,10 @@
         </x-slot:kpis>
     </x-group-hero>
 
-    {{-- Scorecard --}}
+    {{-- Le tableau comparatif --}}
     <div class="gp-scorecard-wrap">
         <div class="gp-scorecard-header">
-            <div class="gp-scorecard-title">Scorecard</div>
+            <div class="gp-scorecard-title">Tableau comparatif</div>
             <div class="gp-scorecard-desc">Comparaison des indicateurs clés par établissement</div>
         </div>
         <table class="gp-scorecard-table">

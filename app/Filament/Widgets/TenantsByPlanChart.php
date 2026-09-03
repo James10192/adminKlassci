@@ -2,6 +2,7 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\TenantPlan;
 use App\Models\Tenant;
 use Filament\Widgets\ChartWidget;
 
@@ -21,7 +22,7 @@ class TenantsByPlanChart extends ChartWidget
 
     protected function getData(): array
     {
-        $allPlans = ['free' => 0, 'essentiel' => 0, 'professional' => 0, 'elite' => 0];
+        $allPlans = array_fill_keys(array_column(TenantPlan::cases(), 'value'), 0);
 
         $counts = Tenant::where('status', 'active')
             ->selectRaw('plan, count(*) as count')
@@ -31,12 +32,9 @@ class TenantsByPlanChart extends ChartWidget
 
         $plans = array_merge($allPlans, $counts);
 
-        $planLabels = [
-            'free'         => 'Free',
-            'essentiel'    => 'Essentiel',
-            'professional' => 'Professional',
-            'elite'        => 'Elite',
-        ];
+        // Les libelles viennent de l'enumeration : « Elite » y perdait son
+        // accent, et la liste divergeait deja des quatre autres copies.
+        $planLabels = TenantPlan::options();
 
         $colors = [
             'free'         => 'rgba(148, 163, 184, 0.85)',
