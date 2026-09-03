@@ -116,3 +116,44 @@ function makeHeroContext(array $overrides = []): array
         ],
     ], $overrides);
 }
+
+it('ne date pas une mesure qui n\'a pas eu lieu', function () {
+    // `computed_at` date le CALCUL, et le calcul a lieu même quand aucune base
+    // n'a répondu. La puce annonçait donc « Mesuré : il y a 1 seconde » juste
+    // au-dessus de quatre tuiles disant « aucun établissement mesuré ».
+    $html = view('filament.group.partials.dashboard-hero', [
+        'context' => [
+            'group_name' => 'Groupe ROSTAN',
+            'user_name' => 'Marcel Djedje-li',
+            'role' => 'Directeur Général',
+            'establishment_count' => 4,
+            'academic_years' => [],
+            'last_sync' => null,
+            'perimetre' => [],
+            'kpis' => [],
+        ],
+        'actions' => [],
+    ])->render();
+
+    expect($html)->toContain('Aucune mesure');
+    expect($html)->not->toContain('Mesuré&nbsp;:');
+});
+
+it('date bien l\'affichage dès qu\'une mesure existe', function () {
+    $html = view('filament.group.partials.dashboard-hero', [
+        'context' => [
+            'group_name' => 'Groupe ROSTAN',
+            'user_name' => 'Marcel Djedje-li',
+            'role' => 'Directeur Général',
+            'establishment_count' => 4,
+            'academic_years' => ['2025-2026'],
+            'last_sync' => 'il y a 3 minutes',
+            'perimetre' => [],
+            'kpis' => [],
+        ],
+        'actions' => [],
+    ])->render();
+
+    expect($html)->toContain('il y a 3 minutes');
+    expect($html)->not->toContain('Aucune mesure');
+});

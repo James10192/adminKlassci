@@ -69,3 +69,27 @@ it('laisse passer une école active vers l\'interrogation de sa base', function 
 
     expect($kpis['motif'])->toBe(EtatMesure::MOTIF_INJOIGNABLE);
 });
+
+it('la puce de fraîcheur du tableau de bord suit le périmètre, pas l\'horloge', function () {
+    $ageMesure = new ReflectionMethod(\App\Filament\Group\Pages\GroupDashboard::class, 'ageMesure');
+    $ageMesure->setAccessible(true);
+
+    // Aucune école n'a répondu : le calcul vient d'avoir lieu, mais il n'a rien
+    // mesuré. Pas d'horodatage.
+    expect($ageMesure->invoke(null, [
+        'computed_at' => now()->toIso8601String(),
+        'perimetre' => [
+            'effectifs' => ['total' => 4, 'repondu' => 0],
+            'finances' => ['total' => 4, 'repondu' => 0],
+        ],
+    ]))->toBeNull();
+
+    // Une seule famille mesurée suffit : le fondateur voit un chiffre réel.
+    expect($ageMesure->invoke(null, [
+        'computed_at' => now()->toIso8601String(),
+        'perimetre' => [
+            'effectifs' => ['total' => 4, 'repondu' => 2],
+            'finances' => ['total' => 4, 'repondu' => 0],
+        ],
+    ]))->not->toBeNull();
+});

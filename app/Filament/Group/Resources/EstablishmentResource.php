@@ -100,31 +100,26 @@ class EstablishmentResource extends Resource
         unset(self::$alertsRequestMemo[$groupId]);
     }
 
-    public static function getNavigationBadge(): ?string
-    {
-        $count = count(self::currentGroupAlerts());
-
-        return $count > 0 ? (string) $count : null;
-    }
-
     /**
-     * Le badge compte les ALERTES, pas les établissements.
+     * Le compte d'alertes vit desormais sur l'entree « Alertes ».
      *
-     * Sans cette infobulle, une pastille « 3 » collée au libellé
-     * « Établissements » se lit comme « 3 établissements » — et le groupe en
-     * compte quatre. Un chiffre au mauvais endroit dit une chose fausse même
-     * quand il est juste.
+     * Cette pastille etait posee sur « Etablissements » : une « 3 » collee a ce
+     * libelle se lit « 3 etablissements », alors que le groupe en compte
+     * quatre — et le tableau de bord affichait « Etablissements 4 » sur le meme
+     * ecran, a quelques centimetres. Une infobulle ne rattrape pas un chiffre
+     * qui ment au premier coup d'oeil : elle demande de survoler pour
+     * comprendre qu'on a mal lu.
+     *
+     * Le portail a une entree « Alertes » ; un compte d'alertes s'y pose sans
+     * ambiguite. Ces deux methodes restent ici parce qu'elles lisent le cache
+     * d'alertes du groupe, dont cette ressource est proprietaire.
      */
-    public static function getNavigationBadgeTooltip(): ?string
+    public static function alertesCount(): int
     {
-        $count = count(self::currentGroupAlerts());
-
-        return $count > 0
-            ? $count . ' ' . \Illuminate\Support\Str::plural('alerte', $count) . ' en cours sur vos établissements'
-            : null;
+        return count(self::currentGroupAlerts());
     }
 
-    public static function getNavigationBadgeColor(): ?string
+    public static function alertesCouleur(): ?string
     {
         $alerts = self::currentGroupAlerts();
         if (empty($alerts)) {
@@ -331,16 +326,31 @@ class EstablishmentResource extends Resource
                         Infolists\Components\TextEntry::make('code')
                             ->label('Code')
                             ->badge(),
+                        // Le hero, juste au-dessus, dit « Actif » et « Plan
+                        // Elite » ; cette section disait « active » et « elite ».
+                        // Deux vocabulaires sur le meme ecran, et celui d'en bas
+                        // est celui de la base de donnees, pas celui d'un
+                        // directeur.
                         Infolists\Components\TextEntry::make('status')
                             ->label('Statut')
                             ->badge()
-                            ->color(fn (string $state): string => match ($state) {
+                            ->formatStateUsing(fn (?string $state): string => match ($state) {
+                                'active' => 'Actif',
+                                'suspended' => 'Suspendu',
+                                'maintenance' => 'Maintenance',
+                                'archived' => 'Archivé',
+                                default => ucfirst((string) ($state ?: 'inconnu')),
+                            })
+                            ->color(fn (?string $state): string => match ($state) {
                                 'active' => 'success',
-                                'suspended' => 'warning',
+                                'suspended', 'maintenance' => 'warning',
                                 default => 'danger',
                             }),
                         Infolists\Components\TextEntry::make('plan')
-                            ->label('Plan'),
+                            ->label('Plan')
+                            ->formatStateUsing(fn (?string $state): string => $state
+                                ? ucfirst($state)
+                                : EtatMesure::TIRET),
                         Infolists\Components\TextEntry::make('admin_email')
                             ->label('Email admin'),
                         Infolists\Components\TextEntry::make('phone')

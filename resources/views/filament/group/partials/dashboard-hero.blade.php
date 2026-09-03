@@ -8,7 +8,7 @@
      *     role: string,
      *     establishment_count: int,
      *     academic_years: list<string>,
-     *     last_sync: string,
+     *     last_sync: ?string,
      *     kpis: array<string,mixed>,
      * } $context
      */
@@ -56,9 +56,18 @@
     @endif
 
     <x-slot:badges>
+        {{-- L'horodatage ne s'affiche QUE s'il date une mesure reelle.
+             `computed_at` date le calcul, qui a lieu meme quand aucune base n'a
+             repondu : la puce annoncait « Mesure : il y a 1 seconde » juste
+             au-dessus de quatre tuiles disant « aucun etablissement mesure ».
+             Un horodatage frais pose sur une absence certifie le vide. --}}
         <span class="gp-hero-chip">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            Mesuré&nbsp;: {{ $context['last_sync'] }}
+            @if(! empty($context['last_sync']))
+                Mesuré&nbsp;: {{ $context['last_sync'] }}
+            @else
+                Aucune mesure
+            @endif
         </span>
         @if(! empty($context['academic_years']))
             <span class="gp-hero-chip">

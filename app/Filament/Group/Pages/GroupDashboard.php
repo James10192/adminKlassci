@@ -50,7 +50,7 @@ class GroupDashboard extends Dashboard
      *     role: string,
      *     establishment_count: int,
      *     academic_years: list<string>,
-     *     last_sync: string,
+     *     last_sync: ?string,
      *     perimetre: array<string,mixed>,
      *     kpis: array<string,mixed>,
      * }
@@ -79,25 +79,62 @@ class GroupDashboard extends Dashboard
     }
 
     /**
-     * Depuis quand les chiffres affiches ont-ils ete calcules.
+     * Depuis quand les chiffres affiches ont-ils ete mesures.
      *
      * `computeGroupKpis()` horodate son resultat ; comme le tableau entier est
      * mis en cache, l'horodatage vieillit avec lui et dit donc l'age reel de ce
      * que le fondateur a sous les yeux.
+     *
+     * Mais `computed_at` date le CALCUL, pas la MESURE — et le calcul a lieu
+     * meme quand aucune base n'a repondu. La puce annoncait donc « Mesure : il
+     * y a 1 seconde » juste au-dessus de quatre tuiles disant « aucun
+     * etablissement mesure » : la meme contradiction, a deux centimetres, que
+     * celle que tout ce chantier corrige. Un horodatage frais sur une absence
+     * de mesure est pire qu'un horodatage absent — il certifie le vide.
+     *
+     * Retourne null quand AUCUNE famille n'a de mesure : la vue affiche alors
+     * l'absence, sans horloge.
      */
-    private static function ageMesure(array $kpis): string
+    private static function ageMesure(array $kpis): ?string
     {
+        if (! self::auMoinsUneMesure($kpis)) {
+            return null;
+        }
+
         $calculeA = $kpis['computed_at'] ?? null;
 
         if (! $calculeA) {
-            return 'non mesuré';
+            return null;
         }
 
         try {
             return \Illuminate\Support\Carbon::parse($calculeA)->locale('fr')->diffForHumans();
         } catch (\Exception) {
-            return 'non mesuré';
+            return null;
         }
+    }
+
+    /**
+     * Une seule famille mesuree suffit a dater l'affichage : le fondateur voit
+     * alors au moins un chiffre reel, et l'horodatage le concerne.
+     */
+    private static function auMoinsUneMesure(array $kpis): bool
+    {
+        $perimetre = $kpis['perimetre'] ?? [];
+
+        if ($perimetre === []) {
+            // Charge de cache anterieure au perimetre : les chiffres sont bien
+            // ceux d'une mesure (meme defaut que ListEstablishments).
+            return true;
+        }
+
+        foreach ($perimetre as $famille) {
+            if ((int) ($famille['repondu'] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function cachedTenantCount(?\App\Models\Group $group): int
