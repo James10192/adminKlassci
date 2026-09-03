@@ -2069,3 +2069,80 @@
     line-height: 1.45;
 }
 .dark .gp-filiere-empty--inconnu { color: #64748b; }
+
+/* ===========================================================================
+   Page Rapports — le catalogue des états et leur cadrage.
+
+   Ces classes vivent ici, pas dans des utilitaires Tailwind posés sur la vue :
+   le panel ne compile aucun CSS et ne sert que la feuille précompilée de
+   Filament, si bien qu'un `sm:grid-cols-2` écrit dans un gabarit n'existe
+   simplement pas dans le style livré. Il ne casse rien — il ne fait rien, ce
+   qui est pire : la page paraît correcte au relecteur et s'empile sur une
+   colonne chez l'utilisateur.
+   =========================================================================== */
+
+.gp-rapports-section { margin-top: 1.75rem; }
+
+.gp-rapports-section-titre {
+    font-family: var(--gp-font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--gp-text);
+    margin: 0;
+}
+
+.gp-rapports-section-note {
+    margin: 0.35rem 0 0;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--gp-text-secondary);
+    max-width: 78ch;
+}
+
+.gp-rapports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.gp-rapport-carte {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1rem;
+    background: #fff;
+    border: 1px solid var(--gp-border);
+    border-radius: 0.875rem;
+    padding: 1.15rem 1.25rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .04), 0 1px 2px rgba(15, 23, 42, .06);
+}
+
+.gp-rapport-carte-titre {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--gp-text);
+    margin: 0;
+}
+
+.gp-rapport-carte-resume {
+    margin: 0.35rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--gp-text-secondary);
+}
+
+.gp-rapport-carte-actions { display: flex; gap: 0.5rem; }
+
+.dark .gp-rapports-section-titre,
+.dark .gp-rapport-carte-titre { color: #f1f5f9; }
+.dark .gp-rapports-section-note,
+.dark .gp-rapport-carte-resume { color: #94a3b8; }
+.dark .gp-rapport-carte {
+    background: rgb(17 24 39);
+    border-color: rgba(255, 255, 255, .1);
+}
+
+@media (max-width: 640px) {
+    .gp-rapports-grid { grid-template-columns: 1fr; }
+}

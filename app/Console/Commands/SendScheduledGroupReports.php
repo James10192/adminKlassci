@@ -105,7 +105,15 @@ class SendScheduledGroupReports extends Command
         $nomFichier = $renderer->filename($report, 'pdf');
 
         $cadence = $programmation->frequency === ScheduleDueResolver::MENSUEL ? 'mensuel' : 'hebdomadaire';
-        $periode = PeriodFactory::default()->label();
+
+        // La periode annoncee dans le corps du message se lit DANS le document
+        // joint, elle ne se recalcule pas a cote. Les deux etaient
+        // independants tant que tous les etats couvraient l'annee ; depuis que
+        // les etats de detail se cadrent sur le mois, un `PeriodFactory::default()`
+        // pose ici annoncerait « Année 2026 » au-dessus d'une piece jointe qui
+        // ne porte que septembre. Un message qui ment sur sa propre piece
+        // jointe est pire qu'un message sans periode.
+        $periode = $report->filters()['Période'] ?? PeriodFactory::default()->label();
 
         $this->line("  #{$programmation->id} {$registry->libelle($programmation->report_key)} → {$destinataires->count()} destinataire(s)");
 
