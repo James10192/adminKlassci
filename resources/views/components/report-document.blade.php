@@ -103,6 +103,12 @@
             border-bottom: 1px solid #eef2f7;
         }
         table.donnees tr:nth-child(even) td { background: #fafbfc; }
+        table.donnees tfoot td {
+            font-weight: bold;
+            background: #f1f5f9;
+            border-top: 1.5px solid {{ $primaire }};
+            border-bottom: none;
+        }
         .num { text-align: right; }
     </style>
 </head>

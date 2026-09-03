@@ -114,7 +114,8 @@ class ReportRenderer
         throw new HttpException(422, $message);
     }
 
-    private function filename(ExportableReport $report, string $extension): string
+    /** Nom de fichier daté — public pour que les écrans ne réinventent pas la convention. */
+    public function filename(ExportableReport $report, string $extension): string
     {
         return $report->filenameBase() . '-' . now()->format('Y-m-d') . '.' . $extension;
     }

@@ -3,13 +3,17 @@
 namespace App\Filament\Group\Pages;
 
 use App\Contracts\Group\GroupPayrollProviderInterface;
+use App\Domain\Exports\Reports\ConsolidationFinanciereReport;
+use App\Domain\Exports\Reports\MasseSalarialeReport;
 use App\Filament\Group\Concerns\HasCustomHero;
+use App\Filament\Group\Concerns\HasReportActions;
 use App\Services\TenantAggregationService;
 use Filament\Pages\Page;
 
 class FinancialOverview extends Page
 {
     use HasCustomHero;
+    use HasReportActions;
 
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
 
@@ -109,6 +113,36 @@ class FinancialOverview extends Page
             'net' => $encaisse - $cout,
             'complet' => $manquants === 0,
             'manquants' => $manquants,
+        ];
+    }
+
+    protected function getHeaderActions(): array
+    {
+        $group = auth('group')->user()->group;
+        $periode = \App\Support\Period\PeriodFactory::default()->label();
+
+        return [
+            $this->actionsRapport(
+                'consolidation',
+                'Consolidation financière',
+                fn () => new ConsolidationFinanciereReport(
+                    $this->getFinancials(),
+                    (string) $group->name,
+                    $periode,
+                ),
+                'heroicon-o-banknotes',
+            ),
+
+            $this->actionsRapport(
+                'masse_salariale',
+                'Masse salariale',
+                fn () => new MasseSalarialeReport(
+                    $this->getPayroll(),
+                    (string) $group->name,
+                    $periode,
+                ),
+                'heroicon-o-users',
+            ),
         ];
     }
 }

@@ -3,7 +3,9 @@
 namespace App\Filament\Group\Pages;
 
 use App\Enums\GroupMemberRole;
+use App\Domain\Exports\Reports\EtatEtablissementsReport;
 use App\Filament\Group\Concerns\HasCustomHero;
+use App\Filament\Group\Concerns\HasReportActions;
 use App\Filament\Group\Resources\EstablishmentResource;
 use App\Services\TenantAggregationService;
 use Filament\Actions\Action;
@@ -16,6 +18,7 @@ use Illuminate\Support\Facades\Cache;
 class GroupDashboard extends Dashboard
 {
     use HasCustomHero;
+    use HasReportActions;
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office-2';
 
@@ -105,6 +108,16 @@ class GroupDashboard extends Dashboard
     protected function getHeaderActions(): array
     {
         return [
+            $this->actionsRapport(
+                'etat_etablissements',
+                'État des établissements',
+                fn () => new EtatEtablissementsReport(
+                    app(TenantAggregationService::class)->getGroupKpis(auth('group')->user()->group),
+                    (string) auth('group')->user()->group->name,
+                    \App\Support\Period\PeriodFactory::default()->label(),
+                ),
+                'heroicon-o-building-office-2',
+            ),
             Action::make('refresh')
                 ->label('Actualiser')
                 ->icon('heroicon-o-arrow-path')
