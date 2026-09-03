@@ -1,9 +1,12 @@
 <?php
 
 use App\Domain\Exports\Reports\ConsolidationFinanciereReport;
+use App\Domain\Exports\Reports\DetailPaiementsReport;
+use App\Domain\Exports\Reports\EffectifsScolariteReport;
 use App\Domain\Exports\Reports\EtatEtablissementsReport;
 use App\Domain\Exports\Reports\MasseSalarialeReport;
 use App\Domain\Exports\Reports\SanteAbonnementsReport;
+use App\Domain\Exports\Reports\SituationParEtudiantReport;
 
 /**
  * Un en-tete de colonne qui ne tient pas dans sa colonne casse en plein mot.
@@ -53,6 +56,9 @@ dataset('rapports a largeurs declarees', [
     'état des établissements' => [EtatEtablissementsReport::class],
     'consolidation financière' => [ConsolidationFinanciereReport::class],
     'masse salariale' => [MasseSalarialeReport::class],
+    'détail des paiements' => [DetailPaiementsReport::class],
+    'situation par étudiant' => [SituationParEtudiantReport::class],
+    'effectifs et scolarité' => [EffectifsScolariteReport::class],
 ]);
 
 it('ne laisse aucun en-tete casser en plein mot', function (string $classe) {

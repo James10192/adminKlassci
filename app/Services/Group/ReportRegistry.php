@@ -5,11 +5,18 @@ namespace App\Services\Group;
 use App\Contracts\Group\GroupPayrollProviderInterface;
 use App\Domain\Exports\ExportableReport;
 use App\Domain\Exports\Reports\ConsolidationFinanciereReport;
+use App\Domain\Exports\Reports\DetailPaiementsReport;
+use App\Domain\Exports\Reports\EffectifsScolariteReport;
 use App\Domain\Exports\Reports\EtatEtablissementsReport;
 use App\Domain\Exports\Reports\MasseSalarialeReport;
 use App\Domain\Exports\Reports\SanteAbonnementsReport;
+use App\Domain\Exports\Reports\SituationParEtudiantReport;
 use App\Models\Group;
+use App\Services\Group\Detail\FournisseurDetailPaiements;
+use App\Services\Group\Detail\FournisseurEffectifs;
+use App\Services\Group\Detail\FournisseurSituationEtudiants;
 use App\Services\TenantAggregationService;
+use App\Support\Filtres\FiltresRapport;
 use App\Support\Period\PeriodFactory;
 
 /**
@@ -26,6 +33,13 @@ class ReportRegistry
     public const MASSE_SALARIALE = 'masse_salariale';
     public const SANTE_ABONNEMENTS = 'sante_abonnements';
 
+    // Les états de DÉTAIL. Ils descendent sous l'établissement — une ligne par
+    // paiement, par étudiant — et ne se produisent donc pas sans cadrage : voir
+    // FiltresRapport pour la raison, qui tient au volume et pas au confort.
+    public const DETAIL_PAIEMENTS = 'detail_paiements';
+    public const SITUATION_ETUDIANTS = 'situation_etudiants';
+    public const EFFECTIFS_SCOLARITE = 'effectifs_scolarite';
+
     /** @return array<string, string> [clé => libellé] */
     public function options(): array
     {
@@ -34,6 +48,9 @@ class ReportRegistry
             self::CONSOLIDATION_FINANCIERE => 'Consolidation financière',
             self::MASSE_SALARIALE => 'Masse salariale enseignante',
             self::SANTE_ABONNEMENTS => 'Santé et abonnements',
+            self::DETAIL_PAIEMENTS => 'Détail des paiements',
+            self::SITUATION_ETUDIANTS => 'Situation par étudiant',
+            self::EFFECTIFS_SCOLARITE => 'Effectifs et scolarité',
         ];
     }
 
@@ -54,9 +71,13 @@ class ReportRegistry
      *         produit quand un rapport est retiré alors qu'une programmation
      *         le vise encore ; l'appelant doit le signaler, pas l'ignorer.
      */
-    public function construire(string $cle, Group $group): ExportableReport
+    public function construire(string $cle, Group $group, ?FiltresRapport $filtres = null): ExportableReport
     {
-        $periode = PeriodFactory::default()->label();
+        // La période venait de `PeriodFactory::default()`, en dur. Le sélecteur
+        // affiché en tête du portail ne parvenait donc JAMAIS aux documents :
+        // on pouvait choisir « mois en cours » à l'écran et exporter l'année.
+        // Elle suit désormais le cadrage quand il y en a un.
+        $periode = ($filtres?->periode() ?? PeriodFactory::default())->label();
         $nom = (string) $group->name;
 
         return match ($cle) {
@@ -81,7 +102,66 @@ class ReportRegistry
                 $nom,
                 $periode,
             ),
+            self::DETAIL_PAIEMENTS => $this->detailPaiements($group, $filtres),
+            self::SITUATION_ETUDIANTS => $this->situationEtudiants($group, $filtres),
+            self::EFFECTIFS_SCOLARITE => $this->effectifs($group, $filtres),
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
+    }
+
+    private function detailPaiements(Group $group, ?FiltresRapport $filtres): ExportableReport
+    {
+        $filtres ??= FiltresRapport::paiementsParDefaut();
+
+        return new DetailPaiementsReport(
+            app(FournisseurDetailPaiements::class)->pourGroupe($group, $filtres),
+            (string) $group->name,
+            $filtres,
+            $this->nomsRetenus($group, $filtres),
+        );
+    }
+
+    private function situationEtudiants(Group $group, ?FiltresRapport $filtres): ExportableReport
+    {
+        $filtres ??= FiltresRapport::etudiantsParDefaut();
+
+        return new SituationParEtudiantReport(
+            app(FournisseurSituationEtudiants::class)->pourGroupe($group, $filtres),
+            (string) $group->name,
+            $filtres,
+            $this->nomsRetenus($group, $filtres),
+        );
+    }
+
+    private function effectifs(Group $group, ?FiltresRapport $filtres): ExportableReport
+    {
+        $filtres ??= FiltresRapport::etudiantsParDefaut();
+
+        return new EffectifsScolariteReport(
+            app(FournisseurEffectifs::class)->pourGroupe($group, $filtres),
+            (string) $group->name,
+            $filtres,
+            $this->nomsRetenus($group, $filtres),
+        );
+    }
+
+    /**
+     * Les écoles nommées dans le bandeau — seulement quand le périmètre est
+     * restreint. Lister les quatre écoles d'un groupe qui en compte quatre
+     * n'apprend rien et pousse le bandeau sur deux lignes.
+     *
+     * @return array<int, string>
+     */
+    private function nomsRetenus(Group $group, FiltresRapport $filtres): array
+    {
+        if ($filtres->etablissements === []) {
+            return [];
+        }
+
+        return $group->activeTenants
+            ->filter(fn ($t): bool => $filtres->retient($t->code))
+            ->pluck('name')
+            ->values()
+            ->all();
     }
 }
