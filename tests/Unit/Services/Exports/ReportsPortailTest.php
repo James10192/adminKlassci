@@ -243,3 +243,113 @@ it('mentionne le périmètre de toutes les familles amputées, pas des seules fi
 
     expect($rapport->totaux()[0])->toContain('sur 2 des 4 établissements');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Ce que la lecture des documents produits a révélé
+|--------------------------------------------------------------------------
+|
+| Les tests ci-dessus vérifiaient le code qui fabrique les états. Ceux-ci
+| verrouillent quatre défauts qu'aucun n'avait vus, parce qu'ils ne se
+| voyaient qu'en ouvrant le fichier : une offre imprimée en minuscules, un
+| total fabriqué, deux formulations d'une même absence, un classeur muet.
+|
+*/
+
+it('imprime le nom commercial de l offre, pas la valeur de la colonne', function () {
+    // La colonne « Offre » sortait « elite », « professional » — la valeur
+    // brute de `tenants.plan`, en minuscules et sans accent, posée juste à
+    // côté d'une colonne « Statut » correctement traduite.
+    $rapport = new EtatEtablissementsReport([
+        'establishments' => [
+            'a' => ['tenant_name' => 'A', 'plan' => 'elite'],
+            'b' => ['tenant_name' => 'B', 'plan' => 'professional'],
+            'c' => ['tenant_name' => 'C'],  // aucune offre connue
+        ],
+    ], 'G', 'P');
+
+    $lignes = $rapport->lignes();
+
+    expect($lignes[0][7])->toBe('Élite')
+        ->and($lignes[1][7])->toBe('Professional')
+        // Offre inconnue : un tiret, comme partout ailleurs. « Sans offre »
+        // affirmerait qu'aucune n'est souscrite, ce qu'on ne sait pas.
+        ->and($lignes[2][7])->toBe(\App\Support\EtatMesure::TIRET);
+});
+
+it('ne fabrique pas un total de masse salariale quand rien n a été mesuré', function () {
+    // Le fournisseur additionne TOUS les établissements ; ceux qui n'ont rien
+    // mesuré y apportent des zéros. Le bas de page imprimait donc
+    // « TOTAL GROUPE · 0 · 0 · 0 » sous quatre lignes qui affichaient « — ».
+    $muet = fn (string $nom) => [
+        'tenant_name' => $nom, 'masse_brute' => 0.0, 'masse_versee' => 0.0,
+        'retenues' => 0.0, 'masse_engagee' => 0.0, 'bulletins' => 0, 'enseignants' => 0,
+        'etat' => \App\Support\EtatMesure::NON_MESURE,
+        'motif' => \App\Support\EtatMesure::MOTIF_INJOIGNABLE,
+    ];
+
+    $totaux = (new MasseSalarialeReport([
+        'masse_brute' => 0.0, 'masse_versee' => 0.0, 'retenues' => 0.0,
+        'masse_engagee' => 0.0, 'bulletins' => 0, 'enseignants' => 0,
+        'establishments' => ['a' => $muet('A'), 'b' => $muet('B')],
+    ], 'G', 'P'))->totaux();
+
+    expect($totaux[0])->toBe('TOTAL GROUPE — aucun établissement mesuré')
+        ->and($totaux[1])->toBeNull()
+        ->and($totaux[3])->toBeNull()
+        ->and($totaux[6])->toBeNull();
+});
+
+it('nomme le périmètre d un total de masse salariale partiel', function () {
+    $totaux = (new MasseSalarialeReport([
+        'masse_brute' => 1_000_000.0, 'masse_versee' => 900_000.0, 'retenues' => 100_000.0,
+        'masse_engagee' => 0.0, 'bulletins' => 10, 'enseignants' => 8,
+        'establishments' => [
+            'a' => [
+                'tenant_name' => 'A', 'masse_brute' => 1_000_000.0, 'masse_versee' => 900_000.0,
+                'retenues' => 100_000.0, 'masse_engagee' => 0.0, 'bulletins' => 10, 'enseignants' => 8,
+            ],
+            'b' => [
+                'tenant_name' => 'B', 'masse_brute' => 0.0, 'masse_versee' => 0.0,
+                'retenues' => 0.0, 'masse_engagee' => 0.0, 'bulletins' => 0, 'enseignants' => 0,
+                'etat' => \App\Support\EtatMesure::NON_MESURE,
+            ],
+        ],
+    ], 'G', 'P'))->totaux();
+
+    expect($totaux[0])->toBe('TOTAL GROUPE — sur 1 des 2 établissements')
+        ->and($totaux[3])->toBe(1_000_000.0);
+});
+
+it('dit la même absence avec les mêmes mots dans les trois états', function () {
+    // La consolidation financière disait « aucun établissement mesuré » ;
+    // l'état des établissements, pour exactement la même situation, disait
+    // « sur 0 des 4 établissements ». Trois documents du même envoi qui
+    // nomment différemment la même chose se lisent comme trois situations.
+    $perimetre = ['etat' => \App\Support\EtatMesure::NON_MESURE, 'repondu' => 0, 'total' => 4];
+
+    $etat = (new EtatEtablissementsReport([
+        'establishments' => ['a' => ['tenant_name' => 'A', 'plan' => 'free']],
+        'perimetre' => [
+            'effectifs' => $perimetre, 'personnel' => $perimetre,
+            'finances' => $perimetre, 'assiduite' => $perimetre,
+        ],
+    ], 'G', 'P'))->totaux();
+
+    expect($etat[0])->toBe('TOTAL GROUPE — aucun établissement mesuré')
+        ->and($etat[0])->not->toContain('sur 0 des');
+});
+
+it('accorde le nombre d établissements injoignables', function () {
+    $muet = fn (string $nom) => [
+        'tenant_name' => $nom, 'masse_brute' => 0.0, 'masse_versee' => 0.0, 'retenues' => 0.0,
+        'masse_engagee' => 0.0, 'bulletins' => 0, 'enseignants' => 0,
+        'etat' => \App\Support\EtatMesure::NON_MESURE,
+    ];
+
+    $un = new MasseSalarialeReport(['establishments' => ['a' => $muet('A')]], 'G', 'P');
+    $deux = new MasseSalarialeReport(['establishments' => ['a' => $muet('A'), 'b' => $muet('B')]], 'G', 'P');
+
+    expect($un->filters()['Consolidation'])->toContain('1 établissement injoignable')
+        ->and($deux->filters()['Consolidation'])->toContain('2 établissements injoignables');
+});

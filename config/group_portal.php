@@ -331,6 +331,12 @@ return [
         'name' => env('GROUP_PORTAL_BRAND_NAME', 'KLASSCI Groupe'),
         'logo' => env('GROUP_PORTAL_BRAND_LOGO', 'images/LOGO-KLASSCI-PNG.png'),
         'logo_height' => env('GROUP_PORTAL_BRAND_LOGO_HEIGHT', '2.5rem'),
+
+        // Côté document, le logo est réduit à cette taille avant d'être
+        // embarqué. Les écrans, eux, servent toujours le fichier d'origine.
+        // Un logo de 1080 px affiché à 40 points pesait 99 % d'un PDF de
+        // quatre lignes — pièce jointe comprise, à chaque destinataire.
+        'logo_max_px' => (int) env('GROUP_PORTAL_BRAND_LOGO_MAX_PX', 320),
         'favicon' => env('GROUP_PORTAL_BRAND_FAVICON', 'images/LOGO-KLASSCI-PNG.png'),
         'primary' => env('GROUP_PORTAL_BRAND_PRIMARY', '#0453cb'),
     ],

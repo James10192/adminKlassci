@@ -36,6 +36,9 @@
         ],
         "post-create-project-cmd": [
             "@php artisan key:generate --ansi"
+        ],
+        "securite": [
+            "@composer audit --locked --abandoned=report"
         ]
     },
     "config": {
@@ -49,6 +52,7 @@
             "pestphp/pest-plugin-arch": true
         },
         "platform": {
+            "php": "8.3.0"
         }
     },
     "minimum-stability": "stable",

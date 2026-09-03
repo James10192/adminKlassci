@@ -51,13 +51,17 @@
         $worstName = $health['subscription_worst_tenant_name'] ?? '—';
         $days = $health['subscription_worst_days_remaining'];
 
+        // Le bandeau disait « expire SOUS 11 jours » pendant que la liste
+        // d'alertes, deux centimetres plus bas, disait « expire DANS 11 jours ».
+        // Meme fait, deux formulations, sur le meme ecran. Et l'expiration ne
+        // portait aucune duree, la ou l'alerte disait « depuis 12 jours ».
         $headline = match (true) {
             $worstTier === SubscriptionTierResolver::TIER_EXPIRED
-                => "Abonnement expiré — {$worstName}",
+                => 'Abonnement expiré depuis ' . \App\Support\Duree::jours(abs((int) $days)) . " — {$worstName}",
             $days === 0
                 => "Abonnement expire aujourd'hui — {$worstName}",
             default
-                => "Abonnement expire sous {$days} jour" . ($days > 1 ? 's' : '') . " — {$worstName}",
+                => 'Abonnement expire dans ' . \App\Support\Duree::jours((int) $days) . " — {$worstName}",
         };
 
         $others = $totalExpiring - 1;

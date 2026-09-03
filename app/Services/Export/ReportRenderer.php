@@ -54,9 +54,56 @@ class ReportRenderer
     {
         $this->guardPdfVolume($report);
 
-        return Pdf::loadView($report->pdfView(), $this->viewData($report))
-            ->setPaper('a4', $report->orientation())
-            ->output();
+        $pdf = Pdf::loadView($report->pdfView(), $this->viewData($report))
+            ->setPaper('a4', $report->orientation());
+
+        $pdf->render();
+        self::dessinePagination($pdf->getDomPDF());
+
+        return $pdf->output();
+    }
+
+    /**
+     * Le « Page N / M » du pied, dessine par le moteur.
+     *
+     * Il vivait dans le gabarit, en `content: counter(pages)`. DomPDF 3.1.6
+     * resout `counter(page)` mais rend `counter(pages)` a ZERO — verifie a la
+     * main sur un document de deux pages. Tous les rapports sortaient donc
+     * « Page 1 / 0 », ce qui est pire qu'une pagination absente : un lecteur
+     * qui recoit un tirage incomplet n'a aucun moyen de s'en apercevoir.
+     *
+     * Le placeholder `{PAGE_COUNT}`, lui, est substitue par le moteur au
+     * moment de l'ecriture du fichier — mais uniquement par `page_text()`.
+     * On ne passe donc PAS par `<script type="text/php">` : cela demanderait
+     * d'activer l'execution de PHP dans les gabarits HTML, ce qui elargit la
+     * surface d'attaque d'une application maitre pour un numero de page.
+     */
+    private static function dessinePagination(\Dompdf\Dompdf $dompdf): void
+    {
+        $canvas = $dompdf->getCanvas();
+        $metrics = $dompdf->getFontMetrics();
+        $police = $metrics->getFont('DejaVu Sans', 'normal');
+
+        if ($police === null) {
+            return; // Plutot aucune pagination qu'une exception a l'export.
+        }
+
+        $taille = 7.5;
+        $texte = 'Page {PAGE_NUM} / {PAGE_COUNT}';
+
+        // La largeur se mesure sur le texte SUBSTITUE, pas sur le gabarit :
+        // « {PAGE_NUM} / {PAGE_COUNT} » est trois fois plus large que « 1 / 3 »,
+        // et l'alignement a droite serait calcule sur la mauvaise chaine.
+        $largeur = $metrics->getTextWidth('Page 99 / 99', $police, $taille);
+
+        $canvas->page_text(
+            $canvas->get_width() - 34 - $largeur,
+            $canvas->get_height() - 42,
+            $texte,
+            $police,
+            $taille,
+            [0.39, 0.45, 0.55], // #64748b, la couleur du pied
+        );
     }
 
     private function pdfResponse(ExportableReport $report, string $disposition): Response

@@ -37,7 +37,13 @@
     <meta charset="utf-8">
     <title>{{ $titre }}</title>
     <style>
-        @page { margin: 130px 34px 74px 34px; }
+        /* La hauteur reservee en haut ne couvre QUE le bandeau, dont le
+           contenu est constant. Le recapitulatif des filtres, lui, depend des
+           donnees et peut passer a la ligne : il vivait dans l'en-tete fixe, y
+           debordait de la hauteur declaree, et venait se superposer a la
+           premiere ligne du tableau — deux textes l'un sur l'autre, illisibles.
+           Il est desormais dans le flux. */
+        @page { margin: 108px 34px 74px 34px; }
 
         body {
             font-family: DejaVu Sans, sans-serif;
@@ -48,7 +54,7 @@
 
         /* En-tête et pied répétés sur chaque page : DomPDF ne sait le faire
            qu'avec du position:fixed, pas avec des balises thead/tfoot. */
-        header { position: fixed; top: -104px; left: 0; right: 0; height: 92px; }
+        header { position: fixed; top: -96px; left: 0; right: 0; height: 84px; }
         footer { position: fixed; bottom: -52px; left: 0; right: 0; height: 40px; }
 
         .bandeau {
@@ -65,7 +71,7 @@
         .sous-titre { font-size: 9pt; opacity: .85; margin-top: 2px; }
 
         .filtres {
-            margin-top: 8px;
+            margin-bottom: 10px;
             font-size: 8pt;
             color: #475569;
             border-left: 3px solid {{ $primaire }};
@@ -82,10 +88,6 @@
         .pied-table { width: 100%; border-collapse: collapse; }
         .pied-table td { border: none; padding: 0; }
         .pied-droite { text-align: right; }
-        /* Compteur de pages DomPDF : ces deux classes sont remplies par le
-           moteur au moment du rendu, pas par Blade. */
-        .page-num:before { content: counter(page); }
-        .page-total:before { content: counter(pages); }
 
         table.donnees { width: 100%; border-collapse: collapse; margin-top: 4px; }
         table.donnees th {
@@ -110,6 +112,13 @@
             border-bottom: none;
         }
         .num { text-align: right; }
+
+        /* Mise en page fixe : les largeurs declarees par le rapport priment sur
+           la repartition automatique. `word-wrap` evite qu'un libelle plus long
+           que sa colonne deborde silencieusement sur la voisine. */
+        table.donnees--fixe { table-layout: fixed; }
+        table.donnees--fixe th,
+        table.donnees--fixe td { word-wrap: break-word; vertical-align: top; }
     </style>
 </head>
 <body>
@@ -131,13 +140,6 @@
             </table>
         </div>
 
-        @if(! empty($filtres))
-            <div class="filtres">
-                @foreach($filtres as $libelle => $valeur)
-                    <b>{{ $libelle }}</b> : {{ $valeur }}@if(! $loop->last) &nbsp;·&nbsp; @endif
-                @endforeach
-            </div>
-        @endif
     </header>
 
     <footer>
@@ -146,14 +148,22 @@
                 <td>
                     Édité le {{ $genereLe }}@if($genesPar) par {{ $genesPar }}@endif
                 </td>
-                <td class="pied-droite">
-                    Page <span class="page-num"></span> / <span class="page-total"></span>
-                </td>
+                {{-- La pagination est dessinee par ReportRenderer apres le
+                     rendu : DomPDF ne sait pas resoudre `counter(pages)` ici,
+                     il y ecrivait « Page 1 / 0 ». --}}
             </tr>
         </table>
     </footer>
 
     <main>
+        @if(! empty($filtres))
+            <div class="filtres">
+                @foreach($filtres as $libelle => $valeur)
+                    <b>{{ $libelle }}</b> : {{ $valeur }}@if(! $loop->last) &nbsp;·&nbsp; @endif
+                @endforeach
+            </div>
+        @endif
+
         {{ $slot }}
     </main>
 </body>

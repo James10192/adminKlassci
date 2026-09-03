@@ -15,6 +15,13 @@
         };
     };
 
+    // Un rapport peut declarer la largeur de ses colonnes, en pourcentage.
+    // Sans ca, DomPDF repartit au juge : sur un tableau a huit colonnes, il
+    // donnait 97 points a « Echeance » — assez pour couper « Dans 547 jours »
+    // en deux lignes — pendant qu'une colonne de dates en gardait le double.
+    $largeurs = array_filter(array_map(fn (array $c) => $c['largeur'] ?? null, $colonnes));
+    $largeursDeclarees = $largeurs !== [];
+
     $estNumerique = fn (?string $format) => in_array(
         $format,
         [TableauReport::FCFA, TableauReport::NOMBRE, TableauReport::POURCENT],
@@ -30,7 +37,14 @@
             Aucune donnée sur la période retenue.
         </p>
     @else
-        <table class="donnees">
+        <table class="donnees {{ $largeursDeclarees ? 'donnees--fixe' : '' }}">
+            @if ($largeursDeclarees)
+                <colgroup>
+                    @foreach ($colonnes as $colonne)
+                        <col @if(isset($colonne['largeur'])) style="width: {{ $colonne['largeur'] }}%" @endif>
+                    @endforeach
+                </colgroup>
+            @endif
             <thead>
                 <tr>
                     @foreach ($colonnes as $colonne)

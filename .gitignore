@@ -61,6 +61,10 @@ storage/framework/views/*
 !storage/framework/views/.gitkeep
 # Disques factices ecrits par Storage::fake() pendant la suite de tests
 storage/framework/testing/disks/*
+# Vignettes de logo generees pour les documents (GroupBranding::miniature).
+# Elles se reconstruisent seules, et dependent du logo depose par le groupe :
+# commiter celle d une machine servirait le mauvais logo sur une autre.
+storage/app/branding/*
 
 # Tenant-specific (for local development)
 /tenants/

@@ -97,6 +97,55 @@ class GroupBranding
      */
     public function logoDataUri(?Group $group = null): ?string
     {
+        $chemin = $this->logoPath($group);
+
+        if ($chemin === null) {
+            return null;
+        }
+
+        $type = match (strtolower(pathinfo($chemin, PATHINFO_EXTENSION))) {
+            'png' => 'image/png',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'svg' => 'image/svg+xml',
+            'webp' => 'image/webp',
+            default => null,
+        };
+
+        if ($type === null) {
+            return null;
+        }
+
+        $octets = @file_get_contents($chemin);
+
+        if ($octets === false || $octets === '') {
+            return null;
+        }
+
+        return 'data:' . $type . ';base64,' . base64_encode($octets);
+    }
+
+    /**
+     * Le logo sur le disque, ou null si aucun fichier lisible.
+     *
+     * Extrait de `logoDataUri()`, qui reste son seul usage historique : le
+     * tableur ne peut pas consommer une data URI — PhpSpreadsheet veut un
+     * chemin — et ecrire une seconde resolution de candidats aurait garanti
+     * qu'un jour les deux exports affichent deux logos differents.
+     */
+    public function logoPath(?Group $group = null): ?string
+    {
+        $source = $this->logoSourcePath($group);
+
+        if ($source === null) {
+            return null;
+        }
+
+        return $this->miniature($source) ?? $source;
+    }
+
+    /** Le fichier deposé, sans redimensionnement. */
+    private function logoSourcePath(?Group $group = null): ?string
+    {
         $group ??= $this->currentGroup();
 
         $candidats = [];
@@ -108,30 +157,96 @@ class GroupBranding
         $candidats[] = public_path((string) config('group_portal.branding.logo', 'images/LOGO-KLASSCI-PNG.png'));
 
         foreach ($candidats as $chemin) {
-            if (! is_file($chemin) || ! is_readable($chemin)) {
-                continue;
-            }
-
-            $type = match (strtolower(pathinfo($chemin, PATHINFO_EXTENSION))) {
-                'png' => 'image/png',
-                'jpg', 'jpeg' => 'image/jpeg',
-                'svg' => 'image/svg+xml',
-                'webp' => 'image/webp',
-                default => null,
-            };
-
-            if ($type === null) {
-                continue;
-            }
-
-            $octets = @file_get_contents($chemin);
-
-            if ($octets !== false && $octets !== '') {
-                return 'data:' . $type . ';base64,' . base64_encode($octets);
+            if (is_file($chemin) && is_readable($chemin)) {
+                return $chemin;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Une copie réduite du logo, mise en cache — ou null s'il n'en faut pas.
+     *
+     * Le logo KLASSCI fait 1080 × 1080 pour 126 Ko. Les documents l'affichent
+     * à 40 points dans le PDF, 52 pixels dans le tableur. DomPDF, lui, décode
+     * l'image et la ré-encode telle quelle : un état de QUATRE lignes pesait
+     * ainsi 994 Ko, dont 99 % de logo — et cet état part en pièce jointe à
+     * chaque destinataire, chaque semaine ou chaque mois.
+     *
+     * Le seuil est configurable : un groupe qui déposerait un logo très large
+     * en tirerait le même bénéfice sans qu'on touche à son fichier d'origine.
+     *
+     * Tout échec — GD absent, format exotique, disque en lecture seule —
+     * retombe silencieusement sur la source : un document un peu lourd vaut
+     * mieux qu'un document sans logo.
+     */
+    private function miniature(string $source): ?string
+    {
+        $max = (int) config('group_portal.branding.logo_max_px', 320);
+
+        if ($max < 16 || ! extension_loaded('gd')) {
+            return null;
+        }
+
+        $taille = @getimagesize($source);
+
+        if ($taille === false) {
+            return null; // SVG, WebP exotique : on ne touche pas.
+        }
+
+        [$largeur, $hauteur] = $taille;
+
+        if ($largeur <= $max && $hauteur <= $max) {
+            return null; // Déjà raisonnable.
+        }
+
+        // La clé porte mtime ET taille : un logo remplacé par un autre de même
+        // date ne doit pas servir l'ancienne vignette.
+        $cle = sha1($source . '|' . @filemtime($source) . '|' . @filesize($source) . '|' . $max);
+        $cible = storage_path('app/branding/' . $cle . '.png');
+
+        if (is_file($cible)) {
+            return $cible;
+        }
+
+        $ratio = $max / max($largeur, $hauteur);
+        $nouvelleLargeur = max(1, (int) round($largeur * $ratio));
+        $nouvelleHauteur = max(1, (int) round($hauteur * $ratio));
+
+        $origine = match ($taille[2]) {
+            IMAGETYPE_PNG => @imagecreatefrompng($source),
+            IMAGETYPE_JPEG => @imagecreatefromjpeg($source),
+            IMAGETYPE_GIF => @imagecreatefromgif($source),
+            default => null,
+        };
+
+        if (! $origine) {
+            return null;
+        }
+
+        try {
+            $reduit = imagecreatetruecolor($nouvelleLargeur, $nouvelleHauteur);
+
+            // Sans ces deux lignes, un logo à fond transparent ressort sur un
+            // aplat noir — au milieu du bandeau de couleur du groupe.
+            imagealphablending($reduit, false);
+            imagesavealpha($reduit, true);
+            imagecopyresampled($reduit, $origine, 0, 0, 0, 0, $nouvelleLargeur, $nouvelleHauteur, $largeur, $hauteur);
+
+            if (! is_dir(dirname($cible)) && ! @mkdir(dirname($cible), 0755, true) && ! is_dir(dirname($cible))) {
+                return null;
+            }
+
+            $ecrit = @imagepng($reduit, $cible, 9);
+        } finally {
+            imagedestroy($origine);
+            if (isset($reduit) && $reduit) {
+                imagedestroy($reduit);
+            }
+        }
+
+        return $ecrit ? $cible : null;
     }
 
     /** Hauteur CSS du logo dans la barre latérale. */

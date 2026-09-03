@@ -7,6 +7,7 @@ use App\Domain\Exports\ExportableReport;
 use App\Domain\Exports\Reports\ConsolidationFinanciereReport;
 use App\Domain\Exports\Reports\EtatEtablissementsReport;
 use App\Domain\Exports\Reports\MasseSalarialeReport;
+use App\Domain\Exports\Reports\SanteAbonnementsReport;
 use App\Models\Group;
 use App\Services\TenantAggregationService;
 use App\Support\Period\PeriodFactory;
@@ -23,6 +24,7 @@ class ReportRegistry
     public const ETAT_ETABLISSEMENTS = 'etat_etablissements';
     public const CONSOLIDATION_FINANCIERE = 'consolidation_financiere';
     public const MASSE_SALARIALE = 'masse_salariale';
+    public const SANTE_ABONNEMENTS = 'sante_abonnements';
 
     /** @return array<string, string> [clé => libellé] */
     public function options(): array
@@ -31,6 +33,7 @@ class ReportRegistry
             self::ETAT_ETABLISSEMENTS => 'État des établissements',
             self::CONSOLIDATION_FINANCIERE => 'Consolidation financière',
             self::MASSE_SALARIALE => 'Masse salariale enseignante',
+            self::SANTE_ABONNEMENTS => 'Santé et abonnements',
         ];
     }
 
@@ -69,6 +72,12 @@ class ReportRegistry
             ),
             self::MASSE_SALARIALE => new MasseSalarialeReport(
                 app(GroupPayrollProviderInterface::class)->computeGroupPayroll($group),
+                $nom,
+                $periode,
+            ),
+            self::SANTE_ABONNEMENTS => new SanteAbonnementsReport(
+                $group->activeTenants()->orderBy('name')->get(),
+                app(TenantAggregationService::class)->getGroupHealthMetrics($group),
                 $nom,
                 $periode,
             ),

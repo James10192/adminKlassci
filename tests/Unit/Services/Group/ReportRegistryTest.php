@@ -6,11 +6,12 @@ beforeEach(function () {
     $this->registry = new ReportRegistry();
 });
 
-it('expose les trois états du portail', function () {
+it('expose les états du portail', function () {
     expect($this->registry->options())->toHaveKeys([
         ReportRegistry::ETAT_ETABLISSEMENTS,
         ReportRegistry::CONSOLIDATION_FINANCIERE,
         ReportRegistry::MASSE_SALARIALE,
+        ReportRegistry::SANTE_ABONNEMENTS,
     ]);
 });
 

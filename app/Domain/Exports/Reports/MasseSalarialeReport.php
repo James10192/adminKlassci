@@ -46,7 +46,10 @@ class MasseSalarialeReport extends TableauReport
             // Écrit dans le document lui-même : un état imprimé circule sans
             // l'écran qui l'a produit, et un total incomplet qui ne le dit pas
             // est un chiffre faux.
-            $filtres['Consolidation'] = "incomplète — {$manquants} établissement(s) injoignable(s)";
+            // Accorde : « 4 établissement(s) injoignable(s) » sur un etat que
+            // le fondateur pose devant son banquier fait brouillon.
+            $pluriel = $manquants > 1 ? 's' : '';
+            $filtres['Consolidation'] = "incomplète — {$manquants} établissement{$pluriel} injoignable{$pluriel}";
         }
 
         return $filtres;
@@ -103,12 +106,39 @@ class MasseSalarialeReport extends TableauReport
 
     public function totaux(): ?array
     {
-        if (empty($this->payroll['establishments'] ?? [])) {
+        $etablissements = $this->payroll['establishments'] ?? [];
+
+        if (empty($etablissements)) {
             return null;
         }
 
+        // Le fournisseur additionne TOUS les etablissements ; une ecole qui n'a
+        // rien mesure y apporte des zeros. L'arithmetique est juste, la lecture
+        // ne l'etait pas : le bas de page imprimait « TOTAL GROUPE · 0 · 0 · 0 »
+        // sous quatre lignes qui affichaient toutes « — ». Le tiret dit « on ne
+        // sait pas », le zero dit « on sait, et il n'y a rien » : c'est la
+        // deuxieme affirmation qui etait fausse, et c'est celle qu'un fondateur
+        // montre a son banquier.
+        //
+        // Le predicat est le MEME que celui des lignes (`estMesure`) : si
+        // aucune ligne ne porte de chiffre, le total n'en porte pas non plus.
+        $mesures = 0;
+        foreach ($etablissements as $paie) {
+            if (EtatMesure::estMesure($paie['etat'] ?? EtatMesure::MESURE)) {
+                $mesures++;
+            }
+        }
+
+        if ($mesures === 0) {
+            return ['TOTAL GROUPE — ' . EtatMesure::absenceGroupe(), null, null, null, null, null, null];
+        }
+
+        // Un total partiel nomme son perimetre. `mentionPerimetre()` se tait
+        // quand il est complet, et pour un groupe d'une seule ecole.
+        $mention = EtatMesure::mentionPerimetre($mesures, count($etablissements));
+
         return [
-            'TOTAL GROUPE',
+            'TOTAL GROUPE' . ($mention ? ' — ' . $mention : ''),
             (int) ($this->payroll['enseignants'] ?? 0),
             (int) ($this->payroll['bulletins'] ?? 0),
             (float) ($this->payroll['masse_brute'] ?? 0),

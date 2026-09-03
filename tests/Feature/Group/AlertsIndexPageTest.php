@@ -116,3 +116,21 @@ it('alerts-index CSS namespace is shipped', function () {
     expect($css)->toContain('.ga-chip--info');
     expect($css)->toContain('.gp-alerts-footer-link');
 });
+
+it('expose l export de la santé et des abonnements', function () {
+    // `getHeading()` rend une chaine vide pour laisser le hero seul — et
+    // Filament n'affiche alors NI son en-tete NI les actions d'en-tete. Un
+    // bouton pose sur cette page ne serait jamais rendu : c'est exactement ce
+    // qui etait arrive au bouton de creation des rapports programmes.
+    $vue = file_get_contents(resource_path('views/filament/group/pages/alerts-index.blade.php'));
+
+    expect($vue)->toContain('getCachedHeaderActions()')
+        ->and($vue)->toContain('<x-slot:actions>');
+
+    $page = file_get_contents(app_path('Filament/Group/Pages/AlertsIndex.php'));
+
+    expect($page)->toContain('getHeaderActions')
+        // Le rapport passe par le registre : l'ecran et l'envoi programme
+        // doivent construire le MEME document.
+        ->and($page)->toContain('ReportRegistry::SANTE_ABONNEMENTS');
+});

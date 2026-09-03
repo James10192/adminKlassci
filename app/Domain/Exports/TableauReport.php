@@ -68,9 +68,12 @@ abstract class TableauReport extends ExportableReport
     public function excelExport(): ?object
     {
         return new TableauExport(
-            array_map(fn (array $c) => $c['label'], $this->colonnes()),
+            $this->colonnes(),
             $this->lignes(),
             $this->totaux(),
+            $this->title(),
+            $this->subtitle(),
+            $this->filters(),
         );
     }
 }
