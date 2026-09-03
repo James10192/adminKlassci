@@ -49,14 +49,17 @@ class EstablishmentResource extends Resource
      * réduite au seul id de tenant servirait les chiffres d'une période sous
      * une autre le jour où ce tableau deviendra période-aware.
      *
-     * Statique, donc partagé par tout le processus : `forgetKpisMemo()` existe
-     * pour que les tests d'un même worker Pest ne se contaminent pas.
+     * Statique, donc partagé par tout le processus. Inoffensif sous PHP-FPM
+     * (un processus = une requête), mais un worker Pest enchaîne les tests dans
+     * le même processus : `forgetKpisMemo()` est là pour eux, et le
+     * `TestCase::setUp()` l'appelle — sans quoi ce docblock décrirait une
+     * protection qui n'existe pas.
      *
      * @var array<string, array<string,mixed>>
      */
     private static array $kpisRequestMemo = [];
 
-    /** Vide le mémo — appelé par les tests, jamais nécessaire en requête web. */
+    /** Vide le mémo — appelé par TestCase::setUp(), jamais nécessaire en requête web. */
     public static function forgetKpisMemo(): void
     {
         self::$kpisRequestMemo = [];

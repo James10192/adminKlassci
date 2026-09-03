@@ -51,6 +51,12 @@ class KpiOverviewWidget extends StatsOverviewWidget
         };
         $mEffectifs = $mention($perimetre['effectifs'] ?? []);
         $mFinances = $mention($perimetre['finances'] ?? []);
+        // L'assiduite etait la SEULE famille sans sa mention : la tuile disait
+        // « moyenne ponderee groupe » sans reserve, alors qu'une ecole qui ne
+        // fait pas l'appel en est desormais (a juste titre) exclue. Un groupe
+        // ou une ecole sur quatre emarge presentait donc le taux de cette ecole
+        // comme celui du groupe.
+        $mAssiduite = $mention($perimetre['assiduite'] ?? []);
         $mAging = $mention($aging['perimetre'] ?? []);
         $mTrends = $mention($trends['perimetre'] ?? []);
 
@@ -180,7 +186,9 @@ class KpiOverviewWidget extends StatsOverviewWidget
                 'Taux de présence',
                 $attendanceMesure ? $attendance . '%' : $tiret,
             )
-                ->description($attendanceMesure ? 'moyenne pondérée groupe' : EtatMesure::absenceGroupe())
+                ->description($attendanceMesure
+                    ? ($mAssiduite ?? 'moyenne pondérée groupe')
+                    : EtatMesure::absenceGroupe())
                 ->descriptionIcon($attendanceMesure ? 'heroicon-o-check-circle' : 'heroicon-o-question-mark-circle')
                 ->color($attendanceColor),
 

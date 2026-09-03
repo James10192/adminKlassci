@@ -3,6 +3,7 @@
 namespace App\Domain\Exports\Reports;
 
 use App\Domain\Exports\TableauReport;
+use App\Support\EtatMesure;
 
 /**
  * Recettes du groupe, établissement par établissement.
@@ -34,10 +35,32 @@ class ConsolidationFinanciereReport extends TableauReport
 
     public function filters(): array
     {
+        $total = count($this->financials);
+        $mesures = $this->nombreMesures();
+
+        // « Établissements : 4 » annoncait quatre etablissements CONSOLIDES
+        // quand l'un d'eux n'avait pas repondu. Le bandeau du rapport doit dire
+        // sur quoi porte le document, pas combien d'ecoles existent.
         return [
             'Période' => $this->periode,
-            'Établissements' => (string) count($this->financials),
+            'Établissements' => $mesures === $total
+                ? (string) $total
+                : sprintf('%d mesuré%s sur %d', $mesures, $mesures > 1 ? 's' : '', $total),
         ];
+    }
+
+    /** Combien d'établissements ont réellement alimenté ce document. */
+    private function nombreMesures(): int
+    {
+        $mesures = 0;
+
+        foreach ($this->financials as $donnees) {
+            if (EtatMesure::aUneValeur($donnees['etat'] ?? null)) {
+                $mesures++;
+            }
+        }
+
+        return $mesures;
     }
 
     public function orientation(): string
@@ -61,12 +84,25 @@ class ConsolidationFinanciereReport extends TableauReport
         $lignes = [];
 
         foreach ($this->financials as $donnees) {
+            // Meme patron que MasseSalarialeReport : le nom porte l'etat, les
+            // cellules chiffrees passent a `null` — que le formateur PDF rend en
+            // tiret et le tableur en case vide. Ce rapport imprimait encore
+            // « 0 / 0 / 0 / 0,0 % » pour une ecole injoignable, dans le document
+            // qui circule chez un banquier.
+            $etat = $donnees['etat'] ?? EtatMesure::MESURE;
+            $mesure = EtatMesure::aUneValeur($etat);
+
+            $nom = $donnees['tenant_name'] ?? EtatMesure::TIRET;
+            if (! $mesure) {
+                $nom .= ' (' . mb_strtolower(EtatMesure::badge($etat, $donnees['motif'] ?? null)) . ')';
+            }
+
             $lignes[] = [
-                $donnees['tenant_name'] ?? '—',
-                (float) ($donnees['revenue_expected'] ?? 0),
-                (float) ($donnees['revenue_collected'] ?? 0),
-                (float) ($donnees['outstanding'] ?? 0),
-                (float) ($donnees['collection_rate'] ?? 0),
+                $nom,
+                $mesure ? (float) ($donnees['revenue_expected'] ?? 0) : null,
+                $mesure ? (float) ($donnees['revenue_collected'] ?? 0) : null,
+                $mesure ? (float) ($donnees['outstanding'] ?? 0) : null,
+                $mesure ? (float) ($donnees['collection_rate'] ?? 0) : null,
             ];
         }
 
@@ -83,10 +119,25 @@ class ConsolidationFinanciereReport extends TableauReport
         $encaisse = 0.0;
         $reste = 0.0;
 
+        // Le total n'additionne que ce qui a ete mesure : une base muette
+        // apportait jusqu'ici zero, indiscernable d'une ecole sans recette.
         foreach ($this->financials as $donnees) {
+            if (! EtatMesure::aUneValeur($donnees['etat'] ?? null)) {
+                continue;
+            }
+
             $attendu += (float) ($donnees['revenue_expected'] ?? 0);
             $encaisse += (float) ($donnees['revenue_collected'] ?? 0);
             $reste += (float) ($donnees['outstanding'] ?? 0);
+        }
+
+        $total = count($this->financials);
+        $mesures = $this->nombreMesures();
+
+        // Rien de mesure : pas de total. Un « TOTAL GROUPE 0 » sous des lignes
+        // vides affirme une consolidation qui n'a pas eu lieu.
+        if ($mesures === 0) {
+            return ['TOTAL GROUPE — ' . EtatMesure::absenceGroupe(), null, null, null, null];
         }
 
         // Le taux du groupe se recalcule sur les totaux : faire la moyenne des
@@ -94,6 +145,14 @@ class ConsolidationFinanciereReport extends TableauReport
         // élèves qu'à une de deux mille.
         $taux = $attendu > 0 ? min(100, round(($encaisse / $attendu) * 100, 1)) : 0.0;
 
-        return ['TOTAL GROUPE', $attendu, $encaisse, $reste, $taux];
+        $mention = EtatMesure::mentionPerimetre($mesures, $total);
+
+        return [
+            'TOTAL GROUPE' . ($mention ? ' — ' . $mention : ''),
+            $attendu,
+            $encaisse,
+            $reste,
+            $taux,
+        ];
     }
 }

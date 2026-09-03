@@ -39,8 +39,40 @@ class EstablishmentCardsWidget extends Widget
             return null;
         }
 
-        $tenant = Tenant::where('code', $tenantCode)->first();
+        // LE GROUPE DU MEMBRE, PAS LA PLATEFORME ENTIERE.
+        //
+        // Cette methode est PUBLIQUE sur un composant Livewire : elle est donc
+        // appelable depuis la console du navigateur, et Livewire renvoie sa
+        // valeur de retour au JS. Sans ce scope, un membre du groupe ROSTAN
+        // pouvait executer `$wire.getSsoUrl('esbtp-abidjan')`, recuperer une URL
+        // signee, et se connecter chez un client qui n'est pas le sien.
+        //
+        // Le maitre est la SEULE autorite sur l'appartenance a un groupe : le
+        // tenant ne verifie que la signature HMAC, l'expiration, le rate-limit
+        // et l'open-redirect. Il n'a aucun moyen de rattraper ce controle.
+        $tenant = Tenant::where('code', $tenantCode)
+            ->where('group_id', $member->group_id)
+            ->first();
+
         if (! $tenant) {
+            Log::warning('[sso] Jeton refuse : etablissement hors du groupe du membre', [
+                'membre' => $member->id,
+                'groupe' => $member->group_id,
+                'tenant_demande' => $tenantCode,
+            ]);
+
+            return null;
+        }
+
+        // La destination est bornee : `$redirectTo` arrive du meme appel Livewire
+        // et part signe vers le tenant. Une valeur libre y ferait entrer une URL
+        // absolue choisie par l'appelant.
+        if (! self::destinationAutorisee($redirectTo)) {
+            Log::warning('[sso] Destination refusee', [
+                'membre' => $member->id,
+                'destination' => $redirectTo,
+            ]);
+
             return null;
         }
 
@@ -60,6 +92,24 @@ class EstablishmentCardsWidget extends Widget
         $baseUrl = $this->tenantBaseUrl($tenant);
 
         return $baseUrl . '/auth/sso-from-group?token=' . urlencode($token);
+    }
+
+    /**
+     * Une destination interne au tenant, jamais une URL choisie par l'appelant.
+     *
+     * Le tenant applique deja un controle d'open-redirect, mais le maitre SIGNE
+     * cette valeur : lui laisser passer n'importe quoi revient a authentifier
+     * une destination qu'on n'a pas verifiee.
+     */
+    private static function destinationAutorisee(string $redirectTo): bool
+    {
+        if ($redirectTo === '') {
+            return false;
+        }
+
+        // Un chemin absolu du site, et rien d'autre : ni schema, ni hote, ni
+        // « // » qui ferait une URL protocol-relative.
+        return (bool) preg_match('#^/(?!/)[A-Za-z0-9/_\-.~%?&=]*$#', $redirectTo);
     }
 
     private function tenantBaseUrl(Tenant $tenant): string

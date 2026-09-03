@@ -104,12 +104,19 @@ class EnrollmentWidget extends ChartWidget
             return null;
         }
 
+        // Un groupe sans etablissement n'a rien a comparer et rien a expliquer :
+        // le meme garde que RevenueComparisonWidget.
+        if ((int) ($perimetre['total'] ?? 0) === 0) {
+            return null;
+        }
+
         if ((int) $perimetre['repondu'] === 0) {
             // La raison vient des établissements réellement absents : sans ça,
             // le sous-titre affirmait une panne de base même quand les écoles
             // avaient répondu sans année universitaire ouverte.
-            return ucfirst(EtatMesure::absenceGroupe())
-                . ' — ' . EtatMesure::raisonCommune($perimetre['manquants'] ?? []);
+            $raison = EtatMesure::raisonCommune($perimetre['manquants'] ?? []);
+
+            return ucfirst(EtatMesure::absenceGroupe()) . ($raison ? ' — ' . $raison : '');
         }
 
         return EtatMesure::mentionPerimetre((int) $perimetre['repondu'], (int) $perimetre['total']);

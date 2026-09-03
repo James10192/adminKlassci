@@ -113,6 +113,18 @@ class GroupKpiProvider implements GroupKpiProviderInterface
      * @param  array<string,array<string,mixed>>  $establishments
      * @return array<string,array<string,mixed>>
      */
+    /**
+     * Les familles dont l'indicateur de tete est un TAUX, pas un compte.
+     *
+     * Un groupe sans etablissement a bien zero etudiant et zero membre du
+     * personnel — ce sont des mesures. Il n'a pas « 0 % de recouvrement » :
+     * un taux sans denominateur n'existe pas, et l'afficher en rouge accuse
+     * d'un effondrement un groupe qui n'a simplement pas encore d'ecole.
+     *
+     * @var list<string>
+     */
+    private const FAMILLES_A_TAUX = ['finances', 'assiduite'];
+
     private function perimetre(array $establishments): array
     {
         $familles = [
@@ -169,12 +181,20 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                 // pas l'état — un total de trois écoles sur quatre n'est pas
                 // « non mesuré ».
                 'etat' => match (true) {
-                    // Un groupe SANS etablissement n'est pas un groupe non
-                    // mesure : il n'y a rien a mesurer, et zero est la bonne
-                    // reponse. `getGroupOutstandingAging()` et
-                    // `getGroupTrends()` gardaient deja `$total > 0` pour cette
-                    // raison — le perimetre disait l'inverse pour le meme cas.
-                    $total === 0 => EtatMesure::MESURE,
+                    // Un groupe SANS etablissement : « zero » est la bonne
+                    // reponse pour un COMPTE (zero etudiant, zero personnel),
+                    // mais il n'existe pas de TAUX sans denominateur. Poser
+                    // MESURE sur les deux faisait afficher « Recouvrement moyen
+                    // 0,0 % — critique » en ROUGE a un groupe neuf ou dont
+                    // toutes les ecoles sont suspendues : le zero fabrique qu'on
+                    // corrige, revenu par le bord.
+                    //
+                    // `getGroupOutstandingAging()` et `getGroupTrends()` gardent
+                    // `$total > 0` pour la meme raison — ce sont des montants,
+                    // pas des taux.
+                    $total === 0 => in_array($famille, self::FAMILLES_A_TAUX, true)
+                        ? EtatMesure::NON_MESURE
+                        : EtatMesure::MESURE,
                     $mesures + $releves === 0 => EtatMesure::NON_MESURE,
                     $releves > 0 => EtatMesure::RELEVE,
                     default => EtatMesure::MESURE,
@@ -276,7 +296,10 @@ class GroupKpiProvider implements GroupKpiProviderInterface
                 // Meme nom que sur le chemin d'echec (`emptyKpis()`) : deux noms
                 // pour une idee, c'est une cle que personne ne lit des qu'on
                 // change de chemin.
-                'derniere_nouvelle_at' => $tenant->stats_measured_at,
+                // Chaine ISO8601, comme sur le chemin d'echec : le NOM avait ete
+                // unifie, le TYPE divergeait encore (Carbon ici, chaine la-bas).
+                // Le meme piege, un cran plus bas.
+                'derniere_nouvelle_at' => $tenant->stats_measured_at?->toIso8601String(),
             ];
         } catch (\Exception $e) {
             Log::error("[group-refactor] computeTenantKpis failed for {$tenant->code}: {$e->getMessage()}");
@@ -396,6 +419,9 @@ class GroupKpiProvider implements GroupKpiProviderInterface
             'etat_personnel' => EtatMesure::NON_MESURE,
             'etat_finances' => EtatMesure::NON_MESURE,
             'etat_assiduite' => EtatMesure::NON_MESURE,
+            // Presente sur le chemin nominal : « on n'ajoute que des cles, on
+            // n'en retire jamais » vaut dans les deux sens.
+            'has_surplus' => false,
             // Date du dernier passage de `tenant:update-stats`. Elle ne date
             // AUCUN chiffre affiche ici (voir ci-dessus) ; elle dit seulement
             // depuis quand la maitresse a eu des nouvelles de cette ecole.

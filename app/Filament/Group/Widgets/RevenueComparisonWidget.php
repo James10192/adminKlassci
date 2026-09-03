@@ -107,9 +107,13 @@ class RevenueComparisonWidget extends ChartWidget
 
         // La raison vient des etablissements reellement absents, pas d'un motif
         // par defaut qui affirmerait une panne reseau non constatee.
-        return $mesures === 0
-            ? ucfirst(EtatMesure::absenceGroupe()) . ' — ' . EtatMesure::raisonCommune($manquants)
-            : EtatMesure::mentionPerimetre($mesures, $total);
+        if ($mesures === 0) {
+            $raison = EtatMesure::raisonCommune($manquants);
+
+            return ucfirst(EtatMesure::absenceGroupe()) . ($raison ? ' — ' . $raison : '');
+        }
+
+        return EtatMesure::mentionPerimetre($mesures, $total);
     }
 
     protected function getType(): string

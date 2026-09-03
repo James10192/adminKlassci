@@ -119,8 +119,11 @@ class EtatEtablissementsReport extends TableauReport
         // La mention se construit sur TOUTES les familles amputees, pas sur les
         // seules finances : un total d'effectifs partiel alors que les finances
         // sont completes ne disait rien.
+        // Les QUATRE familles : `totaux()` imprime aussi `avg_attendance_rate`,
+        // et l'assiduite manquait a cette boucle — le seul chiffre du tableau
+        // dont le perimetre ampute n'etait jamais dit.
         $mentions = [];
-        foreach (['effectifs' => 'effectifs', 'personnel' => 'personnel', 'finances' => 'finances'] as $famille) {
+        foreach (['effectifs', 'personnel', 'finances', 'assiduite'] as $famille) {
             $m = EtatMesure::mentionPerimetre(
                 $perimetre[$famille]['repondu'] ?? 0,
                 $perimetre[$famille]['total'] ?? 0,

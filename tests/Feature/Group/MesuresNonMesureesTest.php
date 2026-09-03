@@ -256,13 +256,41 @@ it('ne reproche pas une panne de base à une école qui n\'utilise pas le module
         ->toBe("l'établissement n'utilise pas ce module");
 });
 
-it('ne déclare pas non mesuré un groupe qui n\'a aucun établissement', function () {
-    // Il n'y a rien à mesurer, et zéro est la bonne réponse. Les tranches
-    // d'impayés et les tendances gardaient déjà `$total > 0` pour cette raison ;
-    // le périmètre disait l'inverse pour le même cas.
+it('sur un groupe sans établissement, compte un zéro mais refuse d\'inventer un taux', function () {
+    // « Zéro » est la bonne réponse pour un COMPTE : un groupe neuf a bien zéro
+    // étudiant et zéro membre du personnel. Mais il n'existe pas de TAUX sans
+    // dénominateur — et une première version de ce garde posait MESURE sur les
+    // quatre familles, ce qui affichait « Recouvrement moyen 0,0 % — critique »
+    // en ROUGE à un groupe dont toutes les écoles sont suspendues. Le zéro
+    // fabriqué que corrige ce chantier, revenu par le bord.
     $kpis = app(TenantAggregationService::class)->getGroupKpis($this->group->fresh());
 
-    foreach (['effectifs', 'personnel', 'finances', 'assiduite'] as $famille) {
-        expect($kpis['perimetre'][$famille]['etat'])->toBe(EtatMesure::MESURE);
+    foreach (['effectifs', 'personnel'] as $compte) {
+        expect($kpis['perimetre'][$compte]['etat'])
+            ->toBe(EtatMesure::MESURE, "un compte vaut zéro : {$compte}");
     }
+
+    foreach (['finances', 'assiduite'] as $taux) {
+        expect($kpis['perimetre'][$taux]['etat'])
+            ->toBe(EtatMesure::NON_MESURE, "un taux sans dénominateur n'existe pas : {$taux}");
+    }
+});
+
+it('ne peint pas en rouge le recouvrement d\'un groupe qui n\'a aucune école', function () {
+    // Le bout de la chaîne : ce que le fondateur voit réellement.
+    $kpis = app(TenantAggregationService::class)->getGroupKpis($this->group->fresh());
+
+    $html = view('filament.group.partials.establishments-hero', [
+        'context' => [
+            'total_students' => 0, 'total_staff' => 0, 'establishment_count' => 0,
+            'avg_rate' => (float) ($kpis['collection_rate'] ?? 0),
+            'etat_effectifs' => $kpis['perimetre']['effectifs']['etat'],
+            'etat_personnel' => $kpis['perimetre']['personnel']['etat'],
+            'etat_finances' => $kpis['perimetre']['finances']['etat'],
+            'mention_effectifs' => null, 'mention_personnel' => null, 'mention_finances' => null,
+        ],
+    ])->render();
+
+    expect($html)->not->toContain('data-tone="danger"');
+    expect($html)->not->toContain('critique');
 });

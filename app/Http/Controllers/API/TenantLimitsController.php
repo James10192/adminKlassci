@@ -127,6 +127,15 @@ class TenantLimitsController extends Controller
             // qu'un champ du tenant est edite depuis Filament, sans qu'aucune
             // statistique n'ait ete remesuree. Null tant qu'aucun releve n'a
             // eu lieu — l'appelant sait alors qu'il n'y en a pas eu.
+            //
+            // CONTRAT : ce champ pouvait auparavant etre suppose non-nul. Il
+            // vaudra null pour TOUS les tenants existants jusqu'au premier
+            // passage horaire de `tenant:update-stats`. Piege pour l'appelant :
+            // `Carbon::parse(null)` ne leve pas, il retourne l'instant present —
+            // un client naif afficherait « releve il y a quelques secondes »
+            // pour des compteurs jamais releves. Documente dans
+            // API_DOCUMENTATION.md ; aucun consommateur dans KLASSCIv2 au
+            // 3 septembre 2026.
             'last_stats_update' => $tenant->stats_measured_at?->toIso8601String(),
         ], 200);
     }

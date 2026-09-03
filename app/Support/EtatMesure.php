@@ -171,8 +171,16 @@ final class EtatMesure
      *
      * @param  array<string, array{nom?: string, motif?: string}>  $manquants
      */
-    public static function raisonCommune(array $manquants): string
+    public static function raisonCommune(array $manquants): ?string
     {
+        // Aucun etablissement concerne : il n'y a aucune raison a donner.
+        // Sans ce garde, la methode retournait « les etablissements concernes
+        // n'ont pas tous la meme raison » pour un groupe SANS etablissement —
+        // une phrase qui parle d'etablissements qui n'existent pas.
+        if ($manquants === []) {
+            return null;
+        }
+
         $motifs = array_unique(array_map(
             static fn (array $m): string => $m['motif'] ?? self::MOTIF_INJOIGNABLE,
             $manquants,
