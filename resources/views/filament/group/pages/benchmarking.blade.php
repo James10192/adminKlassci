@@ -15,7 +15,8 @@
         $totalInscriptions = 0;   $nbEffectifs = 0;
         $totalStaff = 0;          $nbPersonnel = 0;
         $totalRevenueCollected = 0.0;
-        $rateSum = 0.0;           $nbFinances = 0;
+        $totalRevenueExpected = 0.0;
+        $nbFinances = 0;
         $total = count($establishments);
 
         foreach ($establishments as $d) {
@@ -33,12 +34,28 @@
             }
             if (EtatMesure::aUneValeur($d['etat_finances'] ?? null)) {
                 $totalRevenueCollected += (float) ($d['revenue_collected'] ?? 0);
-                $rateSum += (float) ($d['collection_rate'] ?? 0);
+                $totalRevenueExpected += (float) ($d['revenue_expected'] ?? 0);
                 $nbFinances++;
             }
         }
 
-        $avgRate = $nbFinances > 0 ? $rateSum / $nbFinances : 0.0;
+        // Le taux du groupe se pondere par les MONTANTS, il ne se moyenne pas.
+        //
+        // Cet ecran faisait la moyenne arithmetique des taux de chaque ecole,
+        // la ou le tableau de bord (GroupKpiProvider) divise l'encaisse du
+        // groupe par son attendu. Les deux nombres divergent des que les ecoles
+        // n'ont pas le meme poids : une ecole qui encaisse 100 000 sur 100 000
+        // et une qui encaisse 100 000 sur 1 000 000 donnent 55 % en moyenne
+        // simple, contre 18 % en realite. Le fondateur lisait 55 % ici et 18 %
+        // sur son tableau de bord, pour le meme groupe et le meme jour.
+        //
+        // Sans attendu, il n'y a pas de taux — c'est la meme regle que pour un
+        // groupe sans etablissement mesure, et elle rend `$tauxMesurable` faux
+        // plutot que d'afficher un 0 % qui accuserait a tort.
+        $tauxMesurable = $nbFinances > 0 && $totalRevenueExpected > 0;
+        $avgRate = $tauxMesurable
+            ? min(100, round(($totalRevenueCollected / $totalRevenueExpected) * 100, 1))
+            : 0.0;
 
         // Le ratio croise deux familles : il n'a de sens que si les DEUX sont
         // mesurées sur le même périmètre. Sinon on divise des étudiants connus
@@ -87,14 +104,16 @@
 
             {{-- « 0,0 % — critique » en rouge quand rien n'a répondu annonçait un
                  effondrement du recouvrement du groupe. Sans mesure : gris. --}}
-            <div class="gp-hero-kpi" data-tone="{{ $nbFinances > 0 ? RateHealth::tone($avgRate) : 'inconnu' }}">
-                <span class="gp-hero-kpi-label">Taux moyen recouvrement</span>
+            <div class="gp-hero-kpi" data-tone="{{ $tauxMesurable ? RateHealth::tone($avgRate) : 'inconnu' }}">
+                <span class="gp-hero-kpi-label">Taux de recouvrement</span>
                 <span class="gp-hero-kpi-value">
-                    {{ $nbFinances > 0 ? number_format($avgRate, 1, ',', ' ') . ' %' : EtatMesure::TIRET }}
+                    {{ $tauxMesurable ? number_format($avgRate, 1, ',', ' ') . ' %' : EtatMesure::TIRET }}
                 </span>
                 <span class="gp-hero-kpi-meta">
                     @if ($nbFinances === 0)
                         {{ EtatMesure::absenceGroupe() }}
+                    @elseif (! $tauxMesurable)
+                        aucun montant attendu sur le périmètre mesuré
                     @else
                         {{ RateHealth::label($avgRate) }}{{ ($m = EtatMesure::mentionPerimetre($nbFinances, $total)) ? ' · ' . $m : '' }}
                     @endif

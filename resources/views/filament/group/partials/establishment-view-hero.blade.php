@@ -3,7 +3,12 @@
 @php
     /** @var \App\Models\Tenant $tenant */
     /** @var array<string,mixed> $kpis */
-    $students = (int) ($kpis['students'] ?? $kpis['inscriptions'] ?? 0);
+    // `students` (personnes distinctes) et `inscriptions` (lignes) sont deux
+    // grandeurs differentes, et les deux chemins de GroupKpiProvider emettent
+    // TOUJOURS `students` — la seconde branche n'a jamais pu s'executer. Elle
+    // laissait croire que la tuile pouvait basculer d'une grandeur a l'autre
+    // sans que son libelle change.
+    $students = (int) ($kpis['students'] ?? 0);
     $staff = (int) ($kpis['staff'] ?? 0);
     $rate = (float) ($kpis['collection_rate'] ?? 0);
     $academicYear = $kpis['academic_year'] ?? null;

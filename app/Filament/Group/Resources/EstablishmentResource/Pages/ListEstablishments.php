@@ -45,11 +45,27 @@ class ListEstablishments extends ListRecords
         $kpis = $group ? app(TenantAggregationService::class)->getGroupKpis($group) : [];
         $perimetre = $kpis['perimetre'] ?? [];
 
-        $etat = static fn (string $famille): string => $perimetre[$famille]['etat'] ?? EtatMesure::NON_MESURE;
+        // Deux absences distinctes, longtemps confondues sous un seul `??`.
+        //
+        // Pas de groupe : on n'a RIEN interrogé, et les zéros qui suivent ne
+        // sont pas des mesures — c'est le cas où le tiret s'impose.
+        //
+        // Groupe présent mais `perimetre` absent : c'est une charge de cache
+        // écrite avant que le périmètre n'existe. Les chiffres, eux, sont bien
+        // ceux d'une mesure ; les afficher en tirets jusqu'à expiration du
+        // cache effacerait un tableau de bord juste. On retombe donc sur
+        // MESURE, comme `EtatMesure::estMesure(null)` — et comme le fait
+        // KpiOverviewWidget, qui répondait jusqu'ici l'inverse pour la même
+        // question.
+        $defaut = $group ? EtatMesure::MESURE : EtatMesure::NON_MESURE;
+
+        $etat = static fn (string $famille): string => $perimetre[$famille]['etat'] ?? $defaut;
         $mention = static function (string $famille) use ($perimetre): ?string {
             $p = $perimetre[$famille] ?? null;
 
-            return $p ? EtatMesure::mentionPerimetre((int) $p['repondu'], (int) $p['total']) : null;
+            return $p
+                ? EtatMesure::mentionPerimetre((int) ($p['repondu'] ?? 0), (int) ($p['total'] ?? 0))
+                : null;
         };
 
         return [

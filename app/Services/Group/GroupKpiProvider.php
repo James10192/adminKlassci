@@ -208,6 +208,23 @@ class GroupKpiProvider implements GroupKpiProviderInterface
     public function computeTenantKpis(Tenant $tenant, ?PeriodInterface $period = null): array
     {
         $period ??= PeriodFactory::default();
+
+        // Une ecole suspendue ou archivee n'est pas une ecole en panne.
+        //
+        // `getEloquentQuery()` de EstablishmentResource ne filtre que sur
+        // `group_id` : la liste montre donc AUSSI les etablissements suspendus,
+        // et on allait interroger leur base. Celle-ci ne repond generalement
+        // plus — on affichait alors « la base de l'etablissement n'a pas
+        // repondu » pour une ecole que le groupe a lui-meme suspendue, en
+        // designant une panne technique la ou il y a une decision
+        // administrative. On s'arrete avant la connexion, et on le dit.
+        //
+        // Les totaux de groupe ne bougent pas : `getGroupKpis()` n'itere que
+        // `activeTenants`.
+        if (($tenant->status ?? '') !== 'active') {
+            return $this->emptyKpis($tenant, EtatMesure::MOTIF_INACTIF);
+        }
+
         $conn = $this->connectionManager->createConnection($tenant);
 
         try {
