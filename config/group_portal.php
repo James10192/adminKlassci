@@ -146,6 +146,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Rapports programmés
+    |--------------------------------------------------------------------------
+    |
+    | Envoi automatique des états du portail par e-mail, selon les
+    | programmations créées par les membres du groupe.
+    |
+    | Éteint par défaut, comme les notifications : la mécanique est branchée
+    | mais ne part pas tant qu'on ne l'allume pas sur l'environnement.
+    |
+    |   GROUP_PORTAL_SCHEDULED_REPORTS_ENABLED=true
+    |
+    | Le balayage est horaire ; c'est la commande qui décide de l'échéance,
+    | par semaine ou par mois, pour rattraper un passage manqué sans jamais
+    | envoyer deux fois dans la même période.
+    */
+    'scheduled_reports_enabled' => env('GROUP_PORTAL_SCHEDULED_REPORTS_ENABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Storage ingestion (PR7e)
     |--------------------------------------------------------------------------
     |
