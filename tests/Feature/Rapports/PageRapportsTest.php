@@ -1,11 +1,15 @@
 <?php
 
 use App\Filament\Group\Pages\Rapports;
+use App\Mail\Group\ScheduledReportMail;
 use App\Models\Group;
 use App\Models\GroupMember;
+use App\Models\GroupReportSchedule;
 use App\Services\Group\ReportRegistry;
+use App\Services\Group\ScheduleDueResolver;
 use App\Support\Filtres\FiltresRapport;
 use App\Support\Period\PeriodFactory;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * La page qui expose les états, et le cadrage qui les rend produisibles.
@@ -86,4 +90,39 @@ it('ne nomme les établissements dans le bandeau que si le périmètre est restr
 
     expect($tout)->not->toHaveKey('Établissements')
         ->and($restreint['Établissements'])->toBe('École A');
+});
+
+it('annonce dans l\'e-mail la période du document joint, pas une autre', function (): void {
+    $groupe = Group::create(['name' => 'Groupe', 'code' => 'p5', 'status' => 'active']);
+    $membre = directeur($groupe);
+
+    // Le corps du message lisait `PeriodFactory::default()`, soit l'année. Tant
+    // que tous les états couvraient l'année, les deux coïncidaient par hasard.
+    // Depuis que les états de détail se cadrent sur le MOIS, le message
+    // annonçait « Année 2026 » au-dessus d'une pièce jointe portant septembre.
+    //
+    // On vérifie ce que la commande ENVOIE, pas ce que son source contient :
+    // chercher une chaîne dans un fichier passe au vert sur une régression qui
+    // survit en commentaire, et au rouge sur un simple renommage.
+    GroupReportSchedule::create([
+        'group_id' => $groupe->id,
+        'report_key' => ReportRegistry::DETAIL_PAIEMENTS,
+        'frequency' => ScheduleDueResolver::HEBDOMADAIRE,
+        'day_of_week' => (int) now()->dayOfWeek,
+        'hour' => (int) now()->hour,
+        'recipient_member_ids' => [$membre->id],
+        'is_active' => true,
+    ]);
+
+    Mail::fake();
+
+    $this->artisan('group:send-scheduled-reports')->assertSuccessful();
+
+    $moisEnCours = PeriodFactory::make(PeriodFactory::TYPE_CURRENT_MONTH)->label();
+    $annee = PeriodFactory::make(PeriodFactory::TYPE_CURRENT_YEAR)->label();
+
+    Mail::assertQueued(
+        ScheduledReportMail::class,
+        fn (ScheduledReportMail $mail): bool => $mail->periode === $moisEnCours && $mail->periode !== $annee,
+    );
 });
