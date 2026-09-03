@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Domain\Exploitation\Sauvegarde\CoffreSauvegarde;
+use App\Domain\Exploitation\Sauvegarde\PipelineSauvegarde;
 use App\Models\TenantBackup as TenantBackupModel;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -124,13 +126,39 @@ class TenantBackup extends Command
                 }
             }
 
-            // Mettre à jour le backup avec les chemins et la taille
+            // Déposer une copie hors du serveur qu'on vient de sauvegarder.
+            // Tant qu'elle reste ici, elle protège d'une fausse manipulation,
+            // pas d'une perte du serveur — et elle disparaît avec lui.
+            $horsSite = [];
+
+            foreach (array_filter([$databaseBackupPath, $storageBackupPath]) as $fichier) {
+                $depot = CoffreSauvegarde::deposer($fichier, $tenant->code);
+
+                if ($depot !== null) {
+                    $horsSite[] = $depot;
+                }
+            }
+
             $backup->update([
                 'database_backup_path' => $databaseBackupPath,
                 'storage_backup_path' => $storageBackupPath,
                 'size_bytes' => $totalSize,
+                'est_chiffre' => CoffreSauvegarde::cle() !== null,
+                'copie_hors_site' => $horsSite === [] ? null : implode(', ', $horsSite),
+                'copie_hors_site_at' => $horsSite === [] ? null : now(),
                 'status' => 'completed',
             ]);
+
+            // Ce qui manque doit se voir. Une sauvegarde en clair, ou restée
+            // sur le serveur qu'elle protège, n'est pas une faute de la
+            // commande — c'est un réglage absent, et il faut qu'on le sache.
+            if (CoffreSauvegarde::cle() === null) {
+                $this->avertirUneFois('sauvegardes non chiffrées : SAUVEGARDE_CLE absente ou trop courte (32 caractères minimum)');
+            }
+
+            if (CoffreSauvegarde::disqueHorsSite() === null) {
+                $this->avertirUneFois('sauvegardes conservées sur le serveur sauvegardé : SAUVEGARDE_DISQUE_HORS_SITE absent');
+            }
 
             if ($verbose) {
                 $this->displayBackupInfo($backup);
@@ -155,33 +183,60 @@ class TenantBackup extends Command
         }
     }
 
+    /**
+     * Le dump de la base d'une instance, compressé et — si une clé est posée —
+     * chiffré.
+     *
+     * La commande est construite par `PipelineSauvegarde`, qui est vérifiée.
+     * Ce qui se joue ici, c'est le cycle de vie des deux secrets : ils vivent
+     * dans des fichiers en 0600, et sont effacés quoi qu'il arrive. Le `finally`
+     * n'est pas une politesse — sans lui, un dump qui échoue laisse le mot de
+     * passe de la base d'une école dans /tmp.
+     */
     private function backupDatabase(Tenant $tenant, string $backupDir, string $backupName): ?string
     {
-        $credentials = $tenant->database_credentials;
-        $databaseName = $tenant->database_name;
+        $cle = CoffreSauvegarde::cle();
+        $chiffre = $cle !== null;
 
-        $backupFile = "{$backupDir}/{$backupName}_database.sql.gz";
+        $backupFile = "{$backupDir}/" . PipelineSauvegarde::extension("{$backupName}_database.sql.gz", $chiffre);
 
-        // Commande mysqldump avec compression gzip
-        $command = sprintf(
-            'mysqldump -h %s -P %d -u %s -p%s %s | gzip > %s',
-            $credentials['host'] ?? 'localhost',
-            $credentials['port'] ?? 3306,
-            escapeshellarg($credentials['username']),
-            escapeshellarg($credentials['password']),
-            escapeshellarg($databaseName),
-            escapeshellarg($backupFile)
-        );
+        $fichierOptions = null;
+        $fichierCle = null;
 
-        exec($command, $output, $returnCode);
+        try {
+            $fichierOptions = CoffreSauvegarde::fichierSecret(
+                PipelineSauvegarde::fichierOptions($tenant->database_credentials ?? []),
+            );
 
-        if ($returnCode !== 0) {
-            throw new \Exception("Échec du backup de la base de données (code: {$returnCode})");
+            if ($chiffre) {
+                $fichierCle = CoffreSauvegarde::fichierSecret($cle);
+            }
+
+            exec(PipelineSauvegarde::commandeDump(
+                $fichierOptions,
+                $tenant->database_name,
+                $backupFile,
+                $fichierCle,
+            ), $output, $returnCode);
+
+            if ($returnCode !== 0) {
+                throw new \Exception("Échec du backup de la base de données (code: {$returnCode})");
+            }
+        } finally {
+            CoffreSauvegarde::effacerSecret($fichierOptions);
+            CoffreSauvegarde::effacerSecret($fichierCle);
+        }
+
+        $doute = PipelineSauvegarde::raisonDeDouter($backupFile, $chiffre);
+
+        if ($doute !== null) {
+            throw new \Exception("Sauvegarde de la base inutilisable : {$doute}");
         }
 
         return $backupFile;
     }
 
+    /** L'archive du dossier `storage` d'une instance, chiffrée si une clé est posée. */
     private function backupFiles(Tenant $tenant, string $backupDir, string $backupName): ?string
     {
         $tenantPath = env('PRODUCTION_PATH') . $tenant->code;
@@ -190,25 +245,35 @@ class TenantBackup extends Command
             throw new \Exception("Répertoire tenant introuvable: {$tenantPath}");
         }
 
-        $backupFile = "{$backupDir}/{$backupName}_files.tar.gz";
-
-        // Créer une archive tar.gz du répertoire storage
-        $storagePath = "{$tenantPath}/storage";
-
-        if (!file_exists($storagePath)) {
-            throw new \Exception("Répertoire storage introuvable: {$storagePath}");
+        if (!file_exists("{$tenantPath}/storage")) {
+            throw new \Exception("Répertoire storage introuvable: {$tenantPath}/storage");
         }
 
-        $command = sprintf(
-            'tar -czf %s -C %s storage',
-            escapeshellarg($backupFile),
-            escapeshellarg($tenantPath)
-        );
+        $cle = CoffreSauvegarde::cle();
+        $chiffre = $cle !== null;
 
-        exec($command, $output, $returnCode);
+        $backupFile = "{$backupDir}/" . PipelineSauvegarde::extension("{$backupName}_files.tar.gz", $chiffre);
 
-        if ($returnCode !== 0) {
-            throw new \Exception("Échec du backup des fichiers (code: {$returnCode})");
+        $fichierCle = null;
+
+        try {
+            if ($chiffre) {
+                $fichierCle = CoffreSauvegarde::fichierSecret($cle);
+            }
+
+            exec(PipelineSauvegarde::commandeFichiers($tenantPath, $backupFile, $fichierCle), $output, $returnCode);
+
+            if ($returnCode !== 0) {
+                throw new \Exception("Échec du backup des fichiers (code: {$returnCode})");
+            }
+        } finally {
+            CoffreSauvegarde::effacerSecret($fichierCle);
+        }
+
+        $doute = PipelineSauvegarde::raisonDeDouter($backupFile, $chiffre);
+
+        if ($doute !== null) {
+            throw new \Exception("Sauvegarde des fichiers inutilisable : {$doute}");
         }
 
         return $backupFile;
@@ -234,5 +299,25 @@ class TenantBackup extends Command
         $this->newLine();
         $this->info('✅ Backup terminé avec succès !');
         $this->newLine();
+    }
+
+    /**
+     * Signale un réglage manquant, une fois par exécution.
+     *
+     * `--all` passe sur six instances : sans ce garde-fou, le même
+     * avertissement s'écrirait six fois et se lirait zéro.
+     */
+    private function avertirUneFois(string $message): void
+    {
+        static $deja = [];
+
+        if (isset($deja[$message])) {
+            return;
+        }
+
+        $deja[$message] = true;
+
+        $this->warn("⚠️  {$message}");
+        \Log::warning("[sauvegarde] {$message}");
     }
 }

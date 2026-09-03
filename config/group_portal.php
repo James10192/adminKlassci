@@ -22,7 +22,13 @@ return [
     | Debounce applied client-side (Alpine) before the Livewire state is updated.
     | Tuned for quick clicks without triggering one HTTP roundtrip per keystroke.
     */
-    'period_selector_debounce_ms' => env('GROUP_PORTAL_PERIOD_DEBOUNCE_MS', 300),
+    // `(int)` a l'air superflu et ne l'est pas : `env()` rend TOUJOURS une
+    // chaine pour une valeur posee dans `.env`, et `.env.example` pose
+    // justement celle-ci. Le reglage valait donc 300 en entier sur une
+    // installation sans `.env`, et '300' en chaine des qu'on suit la
+    // procedure d'installation documentee — deux comportements pour un meme
+    // depot, dont un seul passait les tests.
+    'period_selector_debounce_ms' => (int) env('GROUP_PORTAL_PERIOD_DEBOUNCE_MS', 300),
 
     /*
     |--------------------------------------------------------------------------

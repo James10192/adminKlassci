@@ -21,11 +21,19 @@ class TenantBackup extends Model
         'error_message',
         'expires_at',
         'created_by_user_id',
+        'est_chiffre',
+        'copie_hors_site',
+        'copie_hors_site_at',
     ];
 
     protected $casts = [
         'size_bytes' => 'integer',
         'expires_at' => 'datetime',
+        // `nullable` a un sens ici : les sauvegardes prises avant cette
+        // colonne n'ont jamais ete ni chiffrees ni copiees, et les marquer
+        // `false` serait aussi faux que les marquer `true`. Nul ne sait.
+        'est_chiffre' => 'boolean',
+        'copie_hors_site_at' => 'datetime',
     ];
 
     /**
