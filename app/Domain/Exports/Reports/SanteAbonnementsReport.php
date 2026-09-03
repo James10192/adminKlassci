@@ -88,11 +88,11 @@ class SanteAbonnementsReport extends TableauReport
             ['label' => 'Établissement', 'format' => self::TEXTE, 'largeur' => 15],
             ['label' => 'Offre', 'format' => self::TEXTE, 'largeur' => 9],
             ['label' => 'Statut', 'format' => self::TEXTE, 'largeur' => 8],
-            ['label' => 'Fin d\'abonnement', 'format' => self::TEXTE, 'largeur' => 10],
+            ['label' => 'Fin d\'abonnement', 'format' => self::TEXTE, 'largeur' => 12],
             ['label' => 'Échéance', 'format' => self::TEXTE, 'largeur' => 12],
             ['label' => 'Utilisation max', 'format' => self::POURCENT, 'largeur' => 10],
             ['label' => 'Gravité', 'format' => self::TEXTE, 'largeur' => 10],
-            ['label' => 'Points de vigilance', 'format' => self::TEXTE, 'largeur' => 26],
+            ['label' => 'Points de vigilance', 'format' => self::TEXTE, 'largeur' => 24],
         ];
     }
 
