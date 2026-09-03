@@ -36,6 +36,9 @@
         ],
         "post-create-project-cmd": [
             "@php artisan key:generate --ansi"
+        ],
+        "securite": [
+            "@composer audit --locked --abandoned=report"
         ]
     },
     "config": {
