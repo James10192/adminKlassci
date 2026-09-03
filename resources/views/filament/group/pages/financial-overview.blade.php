@@ -6,6 +6,8 @@
         $rate = (float) ($totals['rate'] ?? 0);
         $outstanding = (float) ($totals['outstanding'] ?? 0);
         $surplus = (float) ($totals['surplus'] ?? 0);
+        $paie = $this->getPayroll();
+        $resultat = $this->getResultat();
     @endphp
 
     <x-group-hero
@@ -41,6 +43,30 @@
                 <span class="gp-hero-kpi-label">Taux de recouvrement</span>
                 <span class="gp-hero-kpi-value">{{ number_format($rate, 1, ',', ' ') }}&nbsp;%</span>
                 <span class="gp-hero-kpi-meta">{{ RateHealth::label($rate) }}</span>
+            </div>
+
+            <div class="gp-hero-kpi">
+                <span class="gp-hero-kpi-label">Masse salariale</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact($resultat['cout']) }}</span>
+                <span class="gp-hero-kpi-meta">
+                    {{ $paie['enseignants'] }} enseignant{{ $paie['enseignants'] > 1 ? 's' : '' }} ·
+                    {{ $paie['bulletins'] }} bulletin{{ $paie['bulletins'] > 1 ? 's' : '' }}
+                </span>
+            </div>
+
+            {{-- Encaisse moins le cout enseignant. Si un etablissement n'a pas
+                 repondu, son cout manque et le resultat parait meilleur qu'il
+                 ne l'est : on le dit plutot que d'afficher un chiffre net. --}}
+            <div class="gp-hero-kpi" data-tone="{{ ! $resultat['complet'] ? 'warning' : ($resultat['net'] >= 0 ? 'success' : 'danger') }}">
+                <span class="gp-hero-kpi-label">Reste après paie</span>
+                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact($resultat['net']) }}</span>
+                <span class="gp-hero-kpi-meta">
+                    @if (! $resultat['complet'])
+                        {{ $resultat['manquants'] }} établissement{{ $resultat['manquants'] > 1 ? 's' : '' }} non consolidé{{ $resultat['manquants'] > 1 ? 's' : '' }}
+                    @else
+                        encaissé moins masse salariale
+                    @endif
+                </span>
             </div>
         </x-slot:kpis>
     </x-group-hero>
