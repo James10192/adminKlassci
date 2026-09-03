@@ -54,6 +54,7 @@
     "prefer-stable": true,
     "require-dev": {
         "laravel/tinker": "^2.10",
+        "mockery/mockery": "^1.6",
         "pestphp/pest": "^3.0",
         "pestphp/pest-plugin-laravel": "^3.0"
     }

@@ -3,9 +3,7 @@
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Services\Group\UsernameGenerator;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 
-uses(DatabaseTransactions::class);
 
 beforeEach(function () {
     $this->group = Group::create(['name' => 'Test Group', 'code' => 'test-uname', 'status' => 'active']);

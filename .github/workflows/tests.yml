@@ -49,5 +49,8 @@ jobs:
       - name: Generate app key
         run: php artisan key:generate --ansi
 
-      - name: Run Pest unit tests
-        run: ./vendor/bin/pest --testsuite=Unit --colors=always
+      # Toute la suite, Unit ET Feature : les tests Feature tournent sur SQLite
+      # en memoire (voir phpunit.xml), donc aucun service de base a demarrer.
+      # Les jouer ici est le seul endroit ou ils sont verifies avant la fusion.
+      - name: Run the full Pest suite
+        run: ./vendor/bin/pest --colors=always

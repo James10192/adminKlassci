@@ -8,10 +8,8 @@ use App\Services\Group\AlertFingerprintGenerator;
 use App\Services\Group\AlertNotificationDispatcher;
 use App\Services\Group\AlertRoleMatcher;
 use App\Services\TenantAggregationService;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Mail;
 
-uses(DatabaseTransactions::class);
 
 beforeEach(function () {
     config()->set('group_portal.notifications_enabled', true);

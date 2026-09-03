@@ -11,8 +11,10 @@
 |
 */
 
+// Les tests Feature migrent une base SQLite en memoire a chaque test : rien a
+// installer, et la CI peut donc jouer cette suite au meme titre que Unit.
 pest()->extend(Tests\TestCase::class)
- // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+    ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
     ->in('Feature');
 
 // Tests that resolve from the container need the Laravel app booted.

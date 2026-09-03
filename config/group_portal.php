@@ -22,7 +22,7 @@ return [
     | Debounce applied client-side (Alpine) before the Livewire state is updated.
     | Tuned for quick clicks without triggering one HTTP roundtrip per keystroke.
     */
-    'period_selector_debounce_ms' => env('GROUP_PORTAL_PERIOD_DEBOUNCE_MS', 300),
+    'period_selector_debounce_ms' => (int) env('GROUP_PORTAL_PERIOD_DEBOUNCE_MS', 300),
 
     /*
     |--------------------------------------------------------------------------
@@ -68,9 +68,9 @@ return [
     | they have no expiry to worry about.
     */
     'alerts_banner_enabled' => env('GROUP_PORTAL_ALERTS_BANNER_ENABLED', true),
-    'subscription_urgent_days' => env('GROUP_PORTAL_SUBSCRIPTION_URGENT_DAYS', 7),
-    'subscription_warning_days' => env('GROUP_PORTAL_SUBSCRIPTION_WARNING_DAYS', 14),
-    'subscription_info_days' => env('GROUP_PORTAL_SUBSCRIPTION_INFO_DAYS', 30),
+    'subscription_urgent_days' => (int) env('GROUP_PORTAL_SUBSCRIPTION_URGENT_DAYS', 7),
+    'subscription_warning_days' => (int) env('GROUP_PORTAL_SUBSCRIPTION_WARNING_DAYS', 14),
+    'subscription_info_days' => (int) env('GROUP_PORTAL_SUBSCRIPTION_INFO_DAYS', 30),
 
     /*
     |--------------------------------------------------------------------------
@@ -91,34 +91,34 @@ return [
     */
     'health_alerts_enabled' => env('GROUP_PORTAL_HEALTH_ALERTS_ENABLED', true),
 
-    'plan_overage_warning_pct' => env('GROUP_PORTAL_PLAN_OVERAGE_WARNING_PCT', 100),
-    'plan_overage_critical_pct' => env('GROUP_PORTAL_PLAN_OVERAGE_CRITICAL_PCT', 110),
+    'plan_overage_warning_pct' => (int) env('GROUP_PORTAL_PLAN_OVERAGE_WARNING_PCT', 100),
+    'plan_overage_critical_pct' => (int) env('GROUP_PORTAL_PLAN_OVERAGE_CRITICAL_PCT', 110),
 
-    'stale_tenant_days' => env('GROUP_PORTAL_STALE_TENANT_DAYS', 30),
+    'stale_tenant_days' => (int) env('GROUP_PORTAL_STALE_TENANT_DAYS', 30),
 
     // Group-level SSL thresholds are intentionally more conservative than the
     // per-tenant TenantHealthCheck thresholds (30/7) so the founder is alerted
     // before any single tenant flips to degraded/unhealthy status.
-    'ssl_expiry_warning_days' => env('GROUP_PORTAL_SSL_EXPIRY_WARNING_DAYS', 15),
-    'ssl_expiry_critical_days' => env('GROUP_PORTAL_SSL_EXPIRY_CRITICAL_DAYS', 7),
+    'ssl_expiry_warning_days' => (int) env('GROUP_PORTAL_SSL_EXPIRY_WARNING_DAYS', 15),
+    'ssl_expiry_critical_days' => (int) env('GROUP_PORTAL_SSL_EXPIRY_CRITICAL_DAYS', 7),
 
     // Single-month dips are noise; the two-consecutive-months requirement in
     // EnrollmentTrendAnalyzer filters for genuine trends.
-    'enrollment_decline_threshold_pct' => env('GROUP_PORTAL_ENROLLMENT_DECLINE_THRESHOLD_PCT', 10),
+    'enrollment_decline_threshold_pct' => (int) env('GROUP_PORTAL_ENROLLMENT_DECLINE_THRESHOLD_PCT', 10),
 
     // Unpaid invoices (PR7c): per-tenant balance_due threshold in FCFA.
     // Pre-aggregated from the master-DB `invoices` table (status sent|overdue)
     // so a group with 20 tenants incurs a single grouped SELECT, not 20 per-
     // tenant queries. Thresholds match the general KLASSCI spending bands.
-    'unpaid_invoices_warning_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_WARNING_FCFA', 200000),
-    'unpaid_invoices_critical_fcfa' => env('GROUP_PORTAL_UNPAID_INVOICES_CRITICAL_FCFA', 500000),
+    'unpaid_invoices_warning_fcfa' => (int) env('GROUP_PORTAL_UNPAID_INVOICES_WARNING_FCFA', 200000),
+    'unpaid_invoices_critical_fcfa' => (int) env('GROUP_PORTAL_UNPAID_INVOICES_CRITICAL_FCFA', 500000),
 
     // Teacher workload (PR7d): weekly hours per teacher thresholds.
     // Computed from `esbtp_seance_cours` (current academic year) per tenant,
     // fanned out via the aggregator pattern. CI labor convention is 40h/week;
     // warning at 30h gives a 10h cushion before the hard ceiling.
-    'teacher_workload_warning_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_WARNING_HOURS', 30),
-    'teacher_workload_critical_hours' => env('GROUP_PORTAL_TEACHER_WORKLOAD_CRITICAL_HOURS', 40),
+    'teacher_workload_warning_hours' => (int) env('GROUP_PORTAL_TEACHER_WORKLOAD_WARNING_HOURS', 30),
+    'teacher_workload_critical_hours' => (int) env('GROUP_PORTAL_TEACHER_WORKLOAD_CRITICAL_HOURS', 40),
 
     /*
     |--------------------------------------------------------------------------
@@ -187,7 +187,7 @@ return [
     'storage_ssh_host' => env('GROUP_PORTAL_STORAGE_SSH_HOST', ''),
     'storage_ssh_user' => env('GROUP_PORTAL_STORAGE_SSH_USER', ''),
     'storage_tenant_base_path' => env('GROUP_PORTAL_STORAGE_TENANT_BASE_PATH', ''),
-    'storage_ssh_timeout_sec' => env('GROUP_PORTAL_STORAGE_SSH_TIMEOUT_SEC', 30),
+    'storage_ssh_timeout_sec' => (int) env('GROUP_PORTAL_STORAGE_SSH_TIMEOUT_SEC', 30),
 
     /*
     |--------------------------------------------------------------------------
@@ -212,7 +212,7 @@ return [
     |   GROUP_PORTAL_BOUNCE_AUTO_DISABLE_ENABLED=true
     */
     'bounce_auto_disable_enabled' => env('GROUP_PORTAL_BOUNCE_AUTO_DISABLE_ENABLED', false),
-    'bounce_threshold' => env('GROUP_PORTAL_BOUNCE_THRESHOLD', 3),
+    'bounce_threshold' => (int) env('GROUP_PORTAL_BOUNCE_THRESHOLD', 3),
 
     /*
     |--------------------------------------------------------------------------
@@ -235,7 +235,7 @@ return [
     | in the emailed URL — zero plaintext persistence).
     */
     'invite_flow_enabled' => env('GROUP_PORTAL_INVITE_FLOW_ENABLED', false),
-    'invitation_ttl_hours' => env('GROUP_PORTAL_INVITATION_TTL_HOURS', 24),
+    'invitation_ttl_hours' => (int) env('GROUP_PORTAL_INVITATION_TTL_HOURS', 24),
 
     /*
     |--------------------------------------------------------------------------
@@ -257,8 +257,8 @@ return [
     |
     */
     'rate_health' => [
-        'healthy' => env('GROUP_PORTAL_RATE_HEALTHY', 70),
-        'at_risk' => env('GROUP_PORTAL_RATE_AT_RISK', 50),
+        'healthy' => (int) env('GROUP_PORTAL_RATE_HEALTHY', 70),
+        'at_risk' => (int) env('GROUP_PORTAL_RATE_AT_RISK', 50),
     ],
 
     /*
@@ -299,7 +299,7 @@ return [
     |
     */
     'exports' => [
-        'max_pdf_rows' => env('GROUP_PORTAL_MAX_PDF_ROWS', 1000),
-        'max_excel_rows' => env('GROUP_PORTAL_MAX_EXCEL_ROWS', 50000),
+        'max_pdf_rows' => (int) env('GROUP_PORTAL_MAX_PDF_ROWS', 1000),
+        'max_excel_rows' => (int) env('GROUP_PORTAL_MAX_EXCEL_ROWS', 50000),
     ],
 ];
