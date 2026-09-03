@@ -75,6 +75,30 @@ scheduleWithTimestamp(
     'tenant:backup --all --type=full'
 );
 
+// 3bis. Vérification de restauration — chaque dimanche à 05h00
+//
+// Après le backup full de 03h00, et avant le nettoyage. Une sauvegarde jamais
+// restaurée n'est pas une sauvegarde : c'est un fichier dont on espère qu'il
+// contient quelque chose. La clé peut être la mauvaise, l'archive tronquée,
+// le dump vide de lignes — les trois échouent en silence, et ne se découvrent
+// qu'au pire moment.
+//
+// La restauration va dans une base jetable, jamais dans celle d'un
+// établissement. L'échec est journalisé en erreur : c'est le seul de ces
+// travaux dont l'échec signifie « vos sauvegardes ne valent rien ».
+scheduleWithTimestamp(
+    Schedule::command('tenant:verifier-restauration --all')
+        ->weekly()
+        ->sundays()
+        ->at('05:00')
+        ->withoutOverlapping()
+        ->runInBackground()
+        ->onSuccess(fn () => \Log::info('✅ Sauvegardes relues avec succès'))
+        ->onFailure(fn () => \Log::error('❌ Une sauvegarde au moins ne se relit pas')),
+    storage_path('logs/backups.log'),
+    'tenant:verifier-restauration --all'
+);
+
 // 4. Nettoyage des backups expirés — chaque jour à 04h00 (après les backups)
 scheduleWithTimestamp(
     Schedule::command('tenant:cleanup-backups --days=30')
