@@ -45,9 +45,46 @@ abstract class RapportDetail extends TableauReport
         return 'landscape';
     }
 
+    /**
+     * Les filtres que CE document applique reellement.
+     *
+     * Le contrat d'ExportableReport dit qu'un rapport filtre qui tait son
+     * cadrage devient un piege. L'inverse en est un aussi, et il est plus
+     * sournois : afficher « Période : septembre » sur une liste d'inscrits qui
+     * couvre toute l'annee universitaire fait lire un perimetre qui n'existe
+     * pas. Le lecteur ne verifie pas un cadrage qu'on lui a annonce.
+     *
+     * Chaque etat enumere donc les libelles qu'il honore, et le bandeau ne
+     * montre que ceux-la.
+     *
+     * @return array<int, string>
+     */
+    abstract protected function filtresHonores(): array;
+
+    /**
+     * La portee du document quand elle ne vient pas d'une periode choisie.
+     *
+     * Les etats d'etudiants portent sur l'annee universitaire ouverte dans
+     * chaque ecole, pas sur un intervalle de dates. Le dire vaut mieux que de
+     * laisser une ligne muette a la place.
+     */
+    protected function mentionPortee(): ?string
+    {
+        return null;
+    }
+
     public function filters(): array
     {
-        $libelles = $this->filtres->libelles($this->nomsEtablissements);
+        // L'ordre est celui de `libelles()` : `array_intersect_key` conserve
+        // celui du premier tableau.
+        $libelles = array_intersect_key(
+            $this->filtres->libelles($this->nomsEtablissements),
+            array_flip($this->filtresHonores()),
+        );
+
+        if (($portee = $this->mentionPortee()) !== null) {
+            $libelles = ['Portée' => $portee] + $libelles;
+        }
 
         $total = (int) ($this->resultat['total'] ?? 0);
         $repondants = (int) ($this->resultat['repondants'] ?? 0);

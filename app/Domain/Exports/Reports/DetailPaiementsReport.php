@@ -18,6 +18,11 @@ class DetailPaiementsReport extends RapportDetail
         return 'Détail des paiements';
     }
 
+    protected function filtresHonores(): array
+    {
+        return ['Période', 'Établissements', 'Statut du paiement', 'Mode'];
+    }
+
     public function colonnes(): array
     {
         return [

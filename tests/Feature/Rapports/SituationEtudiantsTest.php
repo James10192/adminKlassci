@@ -7,6 +7,7 @@ use App\Services\Group\ReportRegistry;
 use App\Services\Group\TenantBillingContext;
 use App\Services\TenantConnectionManager;
 use App\Support\Filtres\FiltresRapport;
+use App\Support\Period\PeriodFactory;
 use Tests\Feature\Rapports\BaseEcoleSimulee;
 
 /**
@@ -120,4 +121,40 @@ it('compte la répartition par sexe sous les effectifs', function (): void {
 
     expect($totaux[0])->toContain('2 inscrits')
         ->and($totaux[4])->toBe('1 H · 1 F');
+});
+
+it('n\'annonce aucun filtre que le document n\'applique pas', function (): void {
+    $groupe = Group::create(['name' => 'Groupe', 'code' => 'ban1', 'status' => 'active']);
+    BaseEcoleSimulee::ecole($groupe, 'bandeau');
+
+    // Tous les filtres renseignés d'un coup : c'est la situation qui révélait
+    // le défaut. « Effectifs et scolarité » annonçait « Statut du paiement :
+    // Validé », qui n'a rien à voir avec une liste d'inscrits, et « Période :
+    // septembre » alors qu'il couvre toute l'année universitaire. Un lecteur ne
+    // vérifie pas un cadrage qu'on lui a annoncé.
+    $tout = new FiltresRapport(
+        periode: PeriodFactory::make(PeriodFactory::TYPE_CUSTOM_RANGE, ['start' => '2026-09-01', 'end' => '2026-09-30']),
+        statutPaiement: 'validé',
+        modePaiement: 'Espèces',
+        statutInscription: 'active',
+    );
+
+    $registre = app(ReportRegistry::class);
+
+    $attendus = [
+        ReportRegistry::DETAIL_PAIEMENTS => ['Période', 'Statut du paiement', 'Mode'],
+        ReportRegistry::SITUATION_ETUDIANTS => ['Inscription'],
+        ReportRegistry::EFFECTIFS_SCOLARITE => ['Inscription'],
+    ];
+
+    foreach ($attendus as $cle => $honores) {
+        // « Portée » et « Périmètre » sont posés par le document lui-même, pas
+        // par le cadrage : ils ne sont pas des filtres.
+        $montres = array_values(array_diff(
+            array_keys($registre->construire($cle, $groupe, $tout)->filters()),
+            ['Portée', 'Périmètre', 'Établissements'],
+        ));
+
+        expect($montres)->toBe($honores, "Le bandeau de « {$cle} » annonce un cadrage qu'il n'applique pas.");
+    }
 });

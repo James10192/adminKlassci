@@ -17,6 +17,19 @@ class EffectifsScolariteReport extends RapportDetail
         return 'Effectifs et scolarité';
     }
 
+    protected function filtresHonores(): array
+    {
+        // Ni la période ni le statut de paiement : ce document porte sur
+        // l'année universitaire ouverte dans chaque école, et les afficher
+        // ferait lire un cadrage qu'il n'applique pas.
+        return ['Établissements', 'Inscription'];
+    }
+
+    protected function mentionPortee(): ?string
+    {
+        return 'Année universitaire en cours dans chaque école';
+    }
+
     public function colonnes(): array
     {
         return [
