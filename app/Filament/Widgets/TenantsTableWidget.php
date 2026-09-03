@@ -107,6 +107,7 @@ class TenantsTableWidget extends BaseWidget
             ->emptyStateHeading('Aucune alerte active')
             ->emptyStateDescription('Tous les quotas et abonnements sont dans les limites autorisées.')
             ->emptyStateIcon('heroicon-o-check-badge')
-            ->paginated([5, 10, 25]);
+            ->searchable(false)
+            ->paginated(false);
     }
 }

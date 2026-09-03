@@ -16,7 +16,7 @@ class TenantsWithIssues extends BaseWidget
     // Rafraîchissement automatique toutes les 30 secondes
     protected static ?string $pollingInterval = '30s';
 
-    protected static ?string $heading = 'Tenants nécessitant attention';
+    protected static ?string $heading = 'Établissements à regarder';
 
     protected function getTableHeading(): ?string
     {
@@ -44,6 +44,12 @@ class TenantsWithIssues extends BaseWidget
     public function table(Table $table): Table
     {
         return $table
+            // Pas de pagination sur un widget de tableau de bord : une boite
+            // « par page / 10 » sous une seule ligne est du mobilier, pas de
+            // l information. La liste complete vit dans sa ressource.
+            ->paginated(false)
+            // Pas de recherche non plus : au plus huit lignes, toutes visibles.
+            ->searchable(false)
             ->query(
                 TenantHealthCheck::query()
                     ->whereIn('status', ['degraded', 'unhealthy'])

@@ -16,7 +16,7 @@ class SaasAdminResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationLabel = 'Équipe Admin';
+    protected static ?string $navigationLabel = 'Équipe KLASSCI';
 
     protected static ?string $modelLabel = 'administrateur';
 

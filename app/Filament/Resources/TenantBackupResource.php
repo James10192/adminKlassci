@@ -21,7 +21,7 @@ class TenantBackupResource extends Resource
     protected static ?string $navigationLabel = 'Sauvegardes';
     protected static ?string $modelLabel = 'sauvegarde';
     protected static ?string $pluralModelLabel = 'Backups';
-    protected static ?string $navigationGroup = 'Monitoring';
+    protected static ?string $navigationGroup = 'Surveillance';
     protected static ?int $navigationSort = 2;
 
     public static function getNavigationBadge(): ?string

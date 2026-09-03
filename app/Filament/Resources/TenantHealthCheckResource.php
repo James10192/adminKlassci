@@ -25,7 +25,7 @@ class TenantHealthCheckResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Issues détectées';
 
-    protected static ?string $navigationGroup = 'Monitoring';
+    protected static ?string $navigationGroup = 'Surveillance';
 
     protected static ?int $navigationSort = 1;
 

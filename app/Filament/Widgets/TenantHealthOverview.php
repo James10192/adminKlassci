@@ -30,6 +30,8 @@ use Illuminate\Support\Carbon;
  */
 class TenantHealthOverview extends BaseWidget
 {
+    protected ?string $heading = 'Ce qu\'on sait de leur santé';
+
     protected static ?int $sort = 1;
 
     protected static ?string $pollingInterval = '30s';

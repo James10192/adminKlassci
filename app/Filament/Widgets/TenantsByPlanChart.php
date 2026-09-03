@@ -7,15 +7,17 @@ use Filament\Widgets\ChartWidget;
 
 class TenantsByPlanChart extends ChartWidget
 {
-    protected static ?string $heading = 'Répartition par Plan';
+    protected static ?string $heading = 'Répartition par offre';
 
-    protected static ?string $description = 'Distribution des établissements actifs par plan tarifaire';
+    protected static ?string $description = 'Établissements actifs, par offre souscrite';
 
     protected static ?int $sort = 4;
 
-    protected static ?string $maxHeight = '260px';
+    protected static ?string $maxHeight = '210px';
 
-    protected int | string | array $columnSpan = 1;
+    // Pleine largeur : en tiers de ligne, l anneau laissait deux tiers de vide
+    // sous lui. Un bandeau bas et large se lit aussi bien et ferme la page.
+    protected int | string | array $columnSpan = 'full';
 
     protected function getData(): array
     {

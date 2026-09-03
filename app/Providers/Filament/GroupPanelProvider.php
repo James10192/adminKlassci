@@ -62,6 +62,10 @@ class GroupPanelProvider extends PanelProvider
                 ],
                 'gray' => Color::Slate,
             ])
+            // Les initiales sont dessinees en local : le fournisseur par defaut
+            // de Filament envoie le nom de la personne a ui-avatars.com a chaque
+            // affichage, et casse l avatar des que ce tiers est injoignable.
+            ->defaultAvatarProvider(\App\Support\Avatar\InitialesAvatarProvider::class)
             ->renderHook(
                 'panels::styles.after',
                 fn () => '<link rel="preconnect" href="https://fonts.googleapis.com">'

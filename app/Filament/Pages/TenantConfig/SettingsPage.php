@@ -11,8 +11,8 @@ class SettingsPage extends Page
     use TenantConfigTrait;
 
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
-    protected static ?string $navigationLabel = 'Settings PDF';
-    protected static ?string $navigationGroup = 'Configuration Tenants';
+    protected static ?string $navigationLabel = 'Documents PDF';
+    protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 4;
     protected static string $view = 'filament.pages.tenant-config.settings';
     protected static ?string $title = 'Paramètres PDF & Bulletin';

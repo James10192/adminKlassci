@@ -24,7 +24,7 @@ class TenantActivityLogResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Journal d\'activité';
 
-    protected static ?string $navigationGroup = 'Monitoring';
+    protected static ?string $navigationGroup = 'Surveillance';
 
     protected static ?int $navigationSort = 2;
 

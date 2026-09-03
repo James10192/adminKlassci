@@ -20,9 +20,19 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
  * stocke que l'état courant. Une vraie tendance demande un relevé quotidien,
  * qui n'existe pas encore. En attendant, pas de courbe : un chiffre nu est
  * moins beau et infiniment plus honnête.
+ *
+ * La couleur, elle, ne décore pas non plus. « Établissements actifs » était
+ * vert et « Revenus annuels » orange, sans que ni l'un ni l'autre ne dise
+ * quoi que ce soit sur un état : le bandeau posait alors un filet d'alerte
+ * au-dessus d'un chiffre parfaitement sain. Seule la tuile des alertes porte
+ * désormais une couleur, et elle la mérite.
  */
 class StatsOverviewWidget extends BaseWidget
 {
+    // Deux bandeaux titres valent mieux que huit tuiles anonymes : le premier
+    // dit ce que le parc EST, le second ce qu on en SAIT.
+    protected ?string $heading = 'Le parc';
+
     protected static ?int $sort = 0;
 
     protected int | string | array $columnSpan = 'full';
@@ -48,20 +58,23 @@ class StatsOverviewWidget extends BaseWidget
         $totalAlerts = $tenantsOverQuota + $expiringTenants;
 
         return [
-            Stat::make('Établissements Actifs', $activeTenantsCount)
-                ->description($activeTenantsCount . ' / ' . Tenant::count() . ' tenants au total')
+            Stat::make('Établissements actifs', $activeTenantsCount)
+                ->description($activeTenantsCount . ' sur ' . Tenant::count() . ' au total')
                 ->descriptionIcon('heroicon-m-building-office-2')
-                ->color('success'),
+                ->color('gray'),
 
-            Stat::make('Total Étudiants', number_format($totalStudents, 0, ',', ' '))
-                ->description('Inscrits sur tous les établissements')
+            Stat::make('Étudiants', number_format($totalStudents, 0, ',', ' '))
+                ->description('Inscrits, tous établissements confondus')
                 ->descriptionIcon('heroicon-m-academic-cap')
-                ->color('primary'),
+                ->color('gray'),
 
-            Stat::make('Revenus Annuels', number_format($mrr, 0, ',', ' ') . ' FCFA')
-                ->description('Abonnements actifs en cours')
+            // L'unité descend dans la description : « 700 000 FCFA » passait à
+            // la ligne au milieu du bandeau, et un montant coupé en deux se lit
+            // deux fois.
+            Stat::make('Revenus annuels', number_format($mrr, 0, ',', ' '))
+                ->description('FCFA · abonnements en cours')
                 ->descriptionIcon('heroicon-m-banknotes')
-                ->color('warning'),
+                ->color('gray'),
 
             Stat::make('Alertes', $totalAlerts)
                 ->description(
