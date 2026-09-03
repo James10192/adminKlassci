@@ -208,10 +208,17 @@ class GroupDashboard extends Dashboard
                         ->success()
                         ->send();
                 }),
+            // Ce bouton etait orange en permanence, y compris quand il n'y
+            // avait rien a signaler. Sur cet ecran, l'orange dit deja
+            // « quelque chose demande votre attention » — le bandeau
+            // d'abonnement, les pastilles d'alerte. Un bouton orange qui ne
+            // depend de rien use ce signal : quand tout va bien, il crie
+            // quand meme. Il prend donc la couleur de ce qu'il annonce, et
+            // reste gris quand il n'y a rien.
             Action::make('check_alerts')
                 ->label('Vérifier alertes')
                 ->icon('heroicon-o-bell-alert')
-                ->color('warning')
+                ->color(fn (): string => EstablishmentResource::alertesCouleur() ?? 'gray')
                 ->action(function () {
                     $group = auth('group')->user()->group;
                     Artisan::call('group:alert-check', ['--group' => $group->code]);
