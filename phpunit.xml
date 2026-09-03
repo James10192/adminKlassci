@@ -22,8 +22,12 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
-        <!-- <env name="DB_CONNECTION" value="sqlite"/> -->
-        <!-- <env name="DB_DATABASE" value=":memory:"/> -->
+        <!-- La suite tourne sur SQLite en memoire : aucun serveur a lancer,
+             donc la CI joue les tests Feature comme les tests Unit. Les trois
+             migrations qui ont besoin d ALTER ... MODIFY (les ENUM) portent un
+             garde-fou sur le pilote et gardent leur forme MySQL en production. -->
+        <env name="DB_CONNECTION" value="sqlite"/>
+        <env name="DB_DATABASE" value=":memory:"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

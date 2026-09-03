@@ -3,13 +3,36 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Tenant;
-use App\Models\TenantHealthCheck;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Facades\DB;
 
+/**
+ * Les chiffres du groupe, sans courbe.
+ *
+ * Ces tuiles portaient des sparklines fabriquées : une série codée en dur
+ * (3, 4, 4, 5, 5, 6, valeur) ou reconstituée en partant de 70 % du chiffre du
+ * jour. Elles montaient toujours, quoi qu'il arrive dans les établissements.
+ * Un fondateur qui lit « Revenus annuels » sous une courbe ascendante en
+ * conclut que le revenu monte — c'est un graphique qui ment, pas une
+ * décoration.
+ *
+ * La base maîtresse ne garde aucun historique de ces valeurs : `tenants` ne
+ * stocke que l'état courant. Une vraie tendance demande un relevé quotidien,
+ * qui n'existe pas encore. En attendant, pas de courbe : un chiffre nu est
+ * moins beau et infiniment plus honnête.
+ *
+ * La couleur, elle, ne décore pas non plus. « Établissements actifs » était
+ * vert et « Revenus annuels » orange, sans que ni l'un ni l'autre ne dise
+ * quoi que ce soit sur un état : le bandeau posait alors un filet d'alerte
+ * au-dessus d'un chiffre parfaitement sain. Seule la tuile des alertes porte
+ * désormais une couleur, et elle la mérite.
+ */
 class StatsOverviewWidget extends BaseWidget
 {
+    // Deux bandeaux titres valent mieux que huit tuiles anonymes : le premier
+    // dit ce que le parc EST, le second ce qu on en SAIT.
+    protected ?string $heading = 'Le parc';
+
     protected static ?int $sort = 0;
 
     protected int | string | array $columnSpan = 'full';
@@ -32,40 +55,26 @@ class StatsOverviewWidget extends BaseWidget
             ->where('subscription_end_date', '>=', now())
             ->count();
 
-        // Tenants inactifs depuis 7j (aucune update des stats)
-        $inactiveTenants = Tenant::where('status', 'active')
-            ->where(function ($q) {
-                $q->where('updated_at', '<', now()->subDays(7))
-                  ->orWhereNull('updated_at');
-            })
-            ->count();
-
         $totalAlerts = $tenantsOverQuota + $expiringTenants;
 
-        // Courbe MRR fictive basée sur la valeur actuelle (progression estimée)
-        $mrrChart = $this->buildProgressionChart((float) $mrr, 7);
-
-        // Courbe étudiants
-        $studentsChart = $this->buildProgressionChart($totalStudents, 7);
-
         return [
-            Stat::make('Établissements Actifs', $activeTenantsCount)
-                ->description($activeTenantsCount . ' / ' . Tenant::count() . ' tenants au total')
+            Stat::make('Établissements actifs', $activeTenantsCount)
+                ->description($activeTenantsCount . ' sur ' . Tenant::count() . ' au total')
                 ->descriptionIcon('heroicon-m-building-office-2')
-                ->color('success')
-                ->chart([3, 4, 4, 5, 5, 6, $activeTenantsCount]),
+                ->color('gray'),
 
-            Stat::make('Total Étudiants', number_format($totalStudents, 0, ',', ' '))
-                ->description('Inscrits sur tous les établissements')
+            Stat::make('Étudiants', number_format($totalStudents, 0, ',', ' '))
+                ->description('Inscrits, tous établissements confondus')
                 ->descriptionIcon('heroicon-m-academic-cap')
-                ->color('primary')
-                ->chart($studentsChart),
+                ->color('gray'),
 
-            Stat::make('Revenus Annuels', number_format($mrr, 0, ',', ' ') . ' FCFA')
-                ->description('Abonnements actifs en cours')
+            // L'unité descend dans la description : « 700 000 FCFA » passait à
+            // la ligne au milieu du bandeau, et un montant coupé en deux se lit
+            // deux fois.
+            Stat::make('Revenus annuels', number_format($mrr, 0, ',', ' '))
+                ->description('FCFA · abonnements en cours')
                 ->descriptionIcon('heroicon-m-banknotes')
-                ->color('warning')
-                ->chart($mrrChart),
+                ->color('gray'),
 
             Stat::make('Alertes', $totalAlerts)
                 ->description(
@@ -74,27 +83,7 @@ class StatsOverviewWidget extends BaseWidget
                     . ($expiringTenants > 0 ? "{$expiringTenants} expiration(s)" : 'Aucune expiration proche')
                 )
                 ->descriptionIcon($totalAlerts > 0 ? 'heroicon-m-exclamation-triangle' : 'heroicon-m-check-circle')
-                ->color($totalAlerts > 0 ? 'danger' : 'success')
-                ->chart([0, 0, 1, 0, 1, 1, $totalAlerts]),
+                ->color($totalAlerts > 0 ? 'danger' : 'success'),
         ];
-    }
-
-    /**
-     * Génère une courbe de progression plausible vers la valeur actuelle.
-     */
-    private function buildProgressionChart(float|int $currentValue, int $points): array
-    {
-        if ($currentValue <= 0) {
-            return array_fill(0, $points, 0);
-        }
-
-        $chart = [];
-        for ($i = $points; $i >= 1; $i--) {
-            // Régression linéaire simplifiée : valeur légèrement plus basse dans le passé
-            $factor = 1 - ($i - 1) * 0.04;
-            $chart[] = (int) round($currentValue * max($factor, 0.7));
-        }
-
-        return $chart;
     }
 }

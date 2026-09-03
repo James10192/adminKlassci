@@ -4,9 +4,7 @@ use App\Models\Group;
 use App\Models\GroupMember;
 use App\Models\GroupMemberNotificationPreference;
 use App\Services\Group\BounceTracker;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 
-uses(DatabaseTransactions::class);
 
 beforeEach(function () {
     config()->set('group_portal.bounce_auto_disable_enabled', true);

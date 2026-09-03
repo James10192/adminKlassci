@@ -3,10 +3,8 @@
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Services\Group\GroupMemberInvitationService;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Hash;
 
-uses(DatabaseTransactions::class);
 
 beforeEach(function () {
     config()->set('group_portal.invite_flow_enabled', true);

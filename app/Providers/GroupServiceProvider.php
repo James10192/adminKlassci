@@ -4,11 +4,13 @@ namespace App\Providers;
 
 use App\Contracts\Group\GroupFinancialsProviderInterface;
 use App\Contracts\Group\GroupKpiProviderInterface;
+use App\Contracts\Group\GroupPayrollProviderInterface;
 use App\Models\GroupMember;
 use App\Observers\GroupMemberObserver;
 use App\Services\Group\BounceTracker;
 use App\Services\Group\GroupFinancialsProvider;
 use App\Services\Group\GroupKpiProvider;
+use App\Services\Group\GroupPayrollProvider;
 use App\Services\Group\TenantBillingContext;
 use Illuminate\Support\ServiceProvider;
 
@@ -22,6 +24,7 @@ class GroupServiceProvider extends ServiceProvider
         // Interface-to-concrete bindings for dependency inversion.
         $this->app->bind(GroupKpiProviderInterface::class, GroupKpiProvider::class);
         $this->app->bind(GroupFinancialsProviderInterface::class, GroupFinancialsProvider::class);
+        $this->app->bind(GroupPayrollProviderInterface::class, GroupPayrollProvider::class);
 
         // BounceTracker threshold comes from config — autowiring can't resolve scalars.
         $this->app->singleton(BounceTracker::class, fn () => new BounceTracker(

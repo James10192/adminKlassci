@@ -4,6 +4,7 @@ namespace App\Filament\Group\Widgets;
 
 use App\Filament\Group\Concerns\PeriodAwareConcern;
 use App\Services\TenantAggregationService;
+use App\Support\EtatMesure;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Support\Str;
@@ -38,7 +39,23 @@ class GroupAgingWidget extends StatsOverviewWidget
             ['key' => '90+',   'label' => 'Plus de 90 jours', 'color' => 'danger',  'icon' => 'heroicon-o-fire',                 'qualifier' => 'à recouvrer urgemment',  'pluralize_qualifier' => false],
         ];
 
-        return array_map(function (array $b) use ($aging) {
+        // Aucun etablissement mesure : les quatre tranches valent zero, et un
+        // zero non mesure se lisait « aucun impaye ». Gris et tiret, sinon la
+        // panne se deguise en caisse en ordre.
+        $mesure = EtatMesure::estMesure($aging['perimetre']['etat'] ?? EtatMesure::MESURE);
+        $mention = EtatMesure::mentionPerimetre(
+            $aging['perimetre']['repondu'] ?? 0,
+            $aging['perimetre']['total'] ?? 0,
+        );
+
+        return array_map(function (array $b) use ($aging, $mesure, $mention) {
+            if (! $mesure) {
+                return Stat::make($b['label'], EtatMesure::TIRET)
+                    ->description(EtatMesure::absenceGroupe())
+                    ->descriptionIcon('heroicon-o-question-mark-circle')
+                    ->color('gray');
+            }
+
             $count = $aging[$b['key']]['count'] ?? 0;
             $amount = $aging[$b['key']]['amount'] ?? 0;
             $description = $count . ' ' . Str::plural('dossier', $count);
@@ -46,6 +63,10 @@ class GroupAgingWidget extends StatsOverviewWidget
             if ($b['qualifier']) {
                 $suffix = $b['qualifier'] . ($b['pluralize_qualifier'] && $count > 1 ? 's' : '');
                 $description .= ' ' . $suffix;
+            }
+
+            if ($mention) {
+                $description .= ' · ' . $mention;
             }
 
             return Stat::make($b['label'], number_format($amount, 0, ',', ' ') . ' F')

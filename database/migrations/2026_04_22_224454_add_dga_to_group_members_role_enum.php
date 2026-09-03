@@ -1,23 +1,38 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Doctrine DBAL cannot parse an existing ENUM column — Schema::table with
  * ->enum()->change() hangs or drops the column's data. Use a raw ALTER
- * statement instead (MySQL-specific but this project targets MySQL only).
+ * statement instead on MySQL, which is what production runs.
+ *
+ * SQLite has no ENUM: Laravel renders it as a varchar with a CHECK
+ * constraint, so widening the set means lifting that constraint. The driver
+ * guard keeps production byte-identical while letting the test suite run on
+ * an in-memory database.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("ALTER TABLE group_members MODIFY COLUMN role ENUM(
-            'fondateur',
-            'directeur_general',
-            'directeur_general_adjoint',
-            'directeur_financier'
-        ) NOT NULL DEFAULT 'fondateur'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE group_members MODIFY COLUMN role ENUM(
+                'fondateur',
+                'directeur_general',
+                'directeur_general_adjoint',
+                'directeur_financier'
+            ) NOT NULL DEFAULT 'fondateur'");
+
+            return;
+        }
+
+        Schema::table('group_members', function (Blueprint $table) {
+            $table->string('role')->default('fondateur')->change();
+        });
     }
 
     public function down(): void
@@ -35,10 +50,12 @@ return new class extends Migration
             );
         }
 
-        DB::statement("ALTER TABLE group_members MODIFY COLUMN role ENUM(
-            'fondateur',
-            'directeur_general',
-            'directeur_financier'
-        ) NOT NULL DEFAULT 'fondateur'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE group_members MODIFY COLUMN role ENUM(
+                'fondateur',
+                'directeur_general',
+                'directeur_financier'
+            ) NOT NULL DEFAULT 'fondateur'");
+        }
     }
 };

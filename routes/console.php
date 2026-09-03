@@ -194,3 +194,18 @@ scheduleWithTimestamp(
     storage_path('logs/storage-ingestion.log'),
     'tenant:update-storage'
 );
+
+// Rapports programmés — balayage horaire. La commande décide elle-même si une
+// programmation est échue : elle raisonne par semaine ou par mois, pas à
+// l'heure pile, pour qu'un serveur occupé rattrape au lieu de sauter l'envoi.
+scheduleWithTimestamp(
+    Schedule::command('group:send-scheduled-reports')
+        ->hourly()
+        ->withoutOverlapping()
+        ->runInBackground()
+        ->skip(fn () => ! config('group_portal.scheduled_reports_enabled', false))
+        ->onSuccess(fn () => \Log::info('✅ Rapports programmés envoyés'))
+        ->onFailure(fn () => \Log::error('❌ Échec de l\'envoi des rapports programmés')),
+    storage_path('logs/group-scheduled-reports.log'),
+    'group:send-scheduled-reports'
+);

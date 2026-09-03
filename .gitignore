@@ -47,6 +47,11 @@ yarn.lock
 
 # Caches
 bootstrap/cache/*.php
+# Le cache de panel Filament vit dans un sous-dossier : la regle ci-dessus ne
+# l attrapait pas, et bootstrap/cache/filament/panels/admin.php s est retrouve
+# commite, fige sur les chemins d une machine disparue. Filament preferant ce
+# cache a la decouverte, cinq ecrans de l admin etaient absents en production.
+bootstrap/cache/filament/
 !bootstrap/cache/.gitkeep
 storage/framework/cache/*
 !storage/framework/cache/.gitkeep
@@ -54,7 +59,13 @@ storage/framework/sessions/*
 !storage/framework/sessions/.gitkeep
 storage/framework/views/*
 !storage/framework/views/.gitkeep
+# Disques factices ecrits par Storage::fake() pendant la suite de tests
+storage/framework/testing/disks/*
 
 # Tenant-specific (for local development)
 /tenants/
 /tenant-backups/
+
+# Base SQLite locale, montee par GroupPortalDemoSeeder pour rendre le portail.
+database/*.sqlite
+database/*.sqlite-journal

@@ -37,6 +37,34 @@ class AlertsIndex extends Page
      */
     protected ?string $pollingInterval = '300s';
 
+    /**
+     * La pastille d'alertes, a l'endroit qu'elle nomme.
+     *
+     * Elle vivait sur « Etablissements », ou « 3 » se lisait « 3
+     * etablissements » a cote d'un tableau de bord annoncant « Etablissements
+     * 4 ». Ici, le chiffre et le libelle disent la meme chose.
+     */
+    public static function getNavigationBadge(): ?string
+    {
+        $count = \App\Filament\Group\Resources\EstablishmentResource::alertesCount();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return \App\Filament\Group\Resources\EstablishmentResource::alertesCouleur();
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        $count = \App\Filament\Group\Resources\EstablishmentResource::alertesCount();
+
+        return $count > 0
+            ? $count . ' ' . \Illuminate\Support\Str::plural('alerte', $count) . ' en cours sur vos etablissements'
+            : null;
+    }
+
     public function getAlerts(): array
     {
         $health = $this->getHealth();

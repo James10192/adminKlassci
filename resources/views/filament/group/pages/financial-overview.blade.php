@@ -1,4 +1,4 @@
-@php use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
+@php use App\Support\EtatMesure; use App\Support\FcfaFormatter; use App\Support\RateHealth; @endphp
 <x-filament-panels::page>
     @php
         $financials = $this->getFinancials();
@@ -6,6 +6,15 @@
         $rate = (float) ($totals['rate'] ?? 0);
         $outstanding = (float) ($totals['outstanding'] ?? 0);
         $surplus = (float) ($totals['surplus'] ?? 0);
+        $paie = $this->getPayroll();
+        $resultat = $this->getResultat();
+
+        $perimetre = $totals['perimetre'] ?? [];
+        $finMesure = EtatMesure::estMesure($perimetre['etat'] ?? EtatMesure::MESURE);
+        $finMention = EtatMesure::mentionPerimetre(
+            $perimetre['repondu'] ?? 0,
+            $perimetre['total'] ?? 0,
+        );
     @endphp
 
     <x-group-hero
@@ -19,28 +28,75 @@
         </x-slot:badges>
 
         <x-slot:kpis>
-            <div class="gp-hero-kpi">
+            <div class="gp-hero-kpi" data-tone="{{ $finMesure ? '' : 'inconnu' }}">
                 <span class="gp-hero-kpi-label">Revenus attendus</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact((float) ($totals['expected'] ?? 0)) }}</span>
-                <span class="gp-hero-kpi-meta">cross-établissements</span>
+                <span class="gp-hero-kpi-value">{{ $finMesure ? FcfaFormatter::compact((float) ($totals['expected'] ?? 0)) : EtatMesure::TIRET }}</span>
+                <span class="gp-hero-kpi-meta">{{ $finMesure ? ($finMention ?? 'tous établissements confondus') : EtatMesure::absenceGroupe() }}</span>
             </div>
 
-            <div class="gp-hero-kpi" data-tone="success">
+            <div class="gp-hero-kpi" data-tone="{{ $finMesure ? 'success' : 'inconnu' }}">
                 <span class="gp-hero-kpi-label">Encaissés</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact((float) ($totals['collected'] ?? 0)) }}</span>
-                <span class="gp-hero-kpi-meta">paiements validés</span>
+                <span class="gp-hero-kpi-value">{{ $finMesure ? FcfaFormatter::compact((float) ($totals['collected'] ?? 0)) : EtatMesure::TIRET }}</span>
+                <span class="gp-hero-kpi-meta">{{ $finMesure ? ($finMention ?? 'paiements validés') : EtatMesure::absenceGroupe() }}</span>
             </div>
 
-            <div class="gp-hero-kpi" data-tone="{{ $outstanding > 0 ? 'danger' : 'success' }}">
-                <span class="gp-hero-kpi-label">{{ $outstanding > 0 ? 'Impayés' : 'Surplus' }}</span>
-                <span class="gp-hero-kpi-value">{{ FcfaFormatter::compact(max($outstanding, $surplus)) }}</span>
-                <span class="gp-hero-kpi-meta">{{ $outstanding > 0 ? 'à recouvrer' : 'trop-perçu' }}</span>
+            {{-- Un solde nul non mesure se lisait « Surplus », en vert. Le
+                 libelle lui-meme dependait d'un chiffre qu'on n'avait pas. --}}
+            <div class="gp-hero-kpi" data-tone="{{ ! $finMesure ? 'inconnu' : ($outstanding > 0 ? 'danger' : 'success') }}">
+                <span class="gp-hero-kpi-label">{{ ! $finMesure ? 'Impayés' : ($outstanding > 0 ? 'Impayés' : 'Surplus') }}</span>
+                <span class="gp-hero-kpi-value">{{ $finMesure ? FcfaFormatter::compact(max($outstanding, $surplus)) : EtatMesure::TIRET }}</span>
+                <span class="gp-hero-kpi-meta">
+                    {{ ! $finMesure ? EtatMesure::absenceGroupe() : ($outstanding > 0 ? 'à recouvrer' : 'trop-perçu') }}
+                </span>
             </div>
 
-            <div class="gp-hero-kpi" data-tone="{{ RateHealth::tone($rate) }}">
+            <div class="gp-hero-kpi" data-tone="{{ $finMesure ? RateHealth::tone($rate) : 'inconnu' }}">
                 <span class="gp-hero-kpi-label">Taux de recouvrement</span>
-                <span class="gp-hero-kpi-value">{{ number_format($rate, 1, ',', ' ') }}&nbsp;%</span>
-                <span class="gp-hero-kpi-meta">{{ RateHealth::label($rate) }}</span>
+                <span class="gp-hero-kpi-value">{{ $finMesure ? number_format($rate, 1, ',', ' ') . ' %' : EtatMesure::TIRET }}</span>
+                <span class="gp-hero-kpi-meta">{{ $finMesure ? RateHealth::label($rate) : EtatMesure::absenceGroupe() }}</span>
+            </div>
+
+            {{-- « 0 FCFA · 0 enseignant · 0 bulletin » quand aucune base n'a
+                 repondu : le portrait d'un groupe sans personnel, alors que ses
+                 ecoles en emploient des dizaines. --}}
+            <div class="gp-hero-kpi" data-tone="{{ $resultat['cout_mesure'] ? '' : 'inconnu' }}">
+                <span class="gp-hero-kpi-label">Masse salariale</span>
+                <span class="gp-hero-kpi-value">
+                    {{ $resultat['cout_mesure'] ? FcfaFormatter::compact($resultat['cout']) : EtatMesure::TIRET }}
+                </span>
+                <span class="gp-hero-kpi-meta">
+                    @if (! $resultat['cout_mesure'])
+                        {{ EtatMesure::absenceGroupe() }}
+                    @else
+                        {{ $paie['enseignants'] }} enseignant{{ $paie['enseignants'] > 1 ? 's' : '' }} ·
+                        {{ $paie['bulletins'] }} bulletin{{ $paie['bulletins'] > 1 ? 's' : '' }}
+                    @endif
+                </span>
+            </div>
+
+            {{-- Encaisse moins le cout enseignant. Si un etablissement n'a pas
+                 repondu, son cout manque et le resultat parait meilleur qu'il
+                 ne l'est : on le dit plutot que d'afficher un chiffre net.
+                 Et si RIEN n'a repondu, `0 - 0 = 0` n'est pas un resultat
+                 equilibre : c'est une soustraction entre deux inconnues. --}}
+            <div class="gp-hero-kpi" data-tone="{{ ! $resultat['net_mesure'] ? 'inconnu' : (! $resultat['complet'] ? 'warning' : ($resultat['net'] >= 0 ? 'success' : 'danger')) }}">
+                <span class="gp-hero-kpi-label">Reste après paie</span>
+                <span class="gp-hero-kpi-value">
+                    {{ $resultat['net_mesure'] ? FcfaFormatter::compact($resultat['net']) : EtatMesure::TIRET }}
+                </span>
+                <span class="gp-hero-kpi-meta">
+                    @if (! $resultat['net_mesure'])
+                        {{ EtatMesure::absenceGroupe() }}
+                    @elseif (! $resultat['complet'])
+                        {{-- « non consolidé » disait autre chose : en SYSCOHADA
+                             comme en IFRS, c'est « retraitements non effectués »,
+                             pas « manquant ». Devant un banquier, la ligne
+                             affirmait un fait comptable qu'on ne voulait pas dire. --}}
+                        {{ $resultat['manquants'] }} établissement{{ $resultat['manquants'] > 1 ? 's' : '' }} non mesuré{{ $resultat['manquants'] > 1 ? 's' : '' }}
+                    @else
+                        encaissé moins masse salariale
+                    @endif
+                </span>
             </div>
         </x-slot:kpis>
     </x-group-hero>
@@ -70,24 +126,38 @@
             </thead>
             <tbody>
                 @foreach($financials as $code => $data)
-                    @php $rateClass = $data['collection_rate'] >= 70 ? 'success' : ($data['collection_rate'] >= 50 ? 'warning' : 'danger'); @endphp
-                    <tr>
+                    @php
+                        $mesure = EtatMesure::estMesure($data['etat'] ?? EtatMesure::MESURE);
+                        $rateClass = $mesure ? RateHealth::tone((float) $data['collection_rate']) : 'inconnu';
+                    @endphp
+                    <tr @class(['gp-fin-row--inconnu' => ! $mesure])>
                         <td>
                             <div class="cell-name">
                                 <div class="cell-icon blue">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>
                                 </div>
-                                {{ $data['tenant_name'] }}
+                                <span>
+                                    {{ $data['tenant_name'] }}
+                                    @unless($mesure)
+                                        <span class="gp-fin-etat">{{ EtatMesure::libelleMotif($data['motif'] ?? null) }}</span>
+                                    @endunless
+                                </span>
                             </div>
                         </td>
-                        <td>{{ FcfaFormatter::full((float) $data['revenue_expected']) }}</td>
-                        <td class="cell-green">{{ FcfaFormatter::full((float) $data['revenue_collected']) }}</td>
-                        <td class="{{ ($data['outstanding'] ?? 0) > 0 ? 'cell-red' : '' }}">{{ FcfaFormatter::full((float) ($data['outstanding'] ?? 0)) }}</td>
-                        <td style="text-align:center"><span class="gp-rate-badge {{ $rateClass }}">{{ $data['collection_rate'] }}%</span></td>
+                        <td>{{ $mesure ? FcfaFormatter::full((float) $data['revenue_expected']) : EtatMesure::TIRET }}</td>
+                        <td class="{{ $mesure ? 'cell-green' : '' }}">{{ $mesure ? FcfaFormatter::full((float) $data['revenue_collected']) : EtatMesure::TIRET }}</td>
+                        <td class="{{ $mesure && ($data['outstanding'] ?? 0) > 0 ? 'cell-red' : '' }}">{{ $mesure ? FcfaFormatter::full((float) ($data['outstanding'] ?? 0)) : EtatMesure::TIRET }}</td>
                         <td style="text-align:center">
-                            <div class="gp-progress-track">
-                                <div class="gp-progress-bar {{ $rateClass }}" style="width: {{ min($data['collection_rate'], 100) }}%"></div>
-                            </div>
+                            <span class="gp-rate-badge {{ $rateClass }}">{{ $mesure ? $data['collection_rate'] . '%' : EtatMesure::TIRET }}</span>
+                        </td>
+                        <td style="text-align:center">
+                            @if($mesure)
+                                <div class="gp-progress-track">
+                                    <div class="gp-progress-bar {{ $rateClass }}" style="width: {{ min($data['collection_rate'], 100) }}%"></div>
+                                </div>
+                            @else
+                                <div class="gp-progress-track gp-progress-track--inconnu"></div>
+                            @endif
                         </td>
                     </tr>
                 @endforeach
@@ -99,17 +169,28 @@
                             <div class="cell-icon gray">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25V13.5zm0 2.25h.008v.008H8.25v-.008zm0 2.25h.008v.008H8.25V18zm2.498-6.75h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007V13.5zm0 2.25h.007v.008h-.007v-.008zm0 2.25h.007v.008h-.007V18zm2.504-6.75h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V13.5zm0 2.25h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V18zm2.498-6.75h.008v.008H18v-.008zm0 2.25h.008v.008H18V13.5zM9.75 9h4.5" /></svg>
                             </div>
-                            TOTAL GROUPE
+                            <span>
+                                TOTAL GROUPE
+                                @if($finMention)
+                                    <span class="gp-fin-etat">{{ $finMention }}</span>
+                                @endif
+                            </span>
                         </div>
                     </td>
-                    <td>{{ FcfaFormatter::full((float) $totals['expected']) }}</td>
-                    <td class="cell-green">{{ FcfaFormatter::full((float) $totals['collected']) }}</td>
-                    <td>{{ FcfaFormatter::full((float) $totals['outstanding']) }}</td>
-                    <td style="text-align:center"><span class="gp-rate-badge primary">{{ $totals['rate'] }}%</span></td>
+                    <td>{{ $finMesure ? FcfaFormatter::full((float) $totals['expected']) : EtatMesure::TIRET }}</td>
+                    <td class="{{ $finMesure ? 'cell-green' : '' }}">{{ $finMesure ? FcfaFormatter::full((float) $totals['collected']) : EtatMesure::TIRET }}</td>
+                    <td>{{ $finMesure ? FcfaFormatter::full((float) $totals['outstanding']) : EtatMesure::TIRET }}</td>
                     <td style="text-align:center">
-                        <div class="gp-progress-track">
-                            <div class="gp-progress-bar success" style="width: {{ min($totals['rate'], 100) }}%; background: linear-gradient(90deg, var(--gp-primary), #5e91de);"></div>
-                        </div>
+                        <span class="gp-rate-badge {{ $finMesure ? 'primary' : 'inconnu' }}">{{ $finMesure ? $totals['rate'] . '%' : EtatMesure::TIRET }}</span>
+                    </td>
+                    <td style="text-align:center">
+                        @if($finMesure)
+                            <div class="gp-progress-track">
+                                <div class="gp-progress-bar success" style="width: {{ min($totals['rate'], 100) }}%; background: linear-gradient(90deg, var(--gp-primary), #5e91de);"></div>
+                            </div>
+                        @else
+                            <div class="gp-progress-track gp-progress-track--inconnu"></div>
+                        @endif
                     </td>
                 </tr>
             </tfoot>

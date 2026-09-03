@@ -3,9 +3,12 @@
     "description": "KlassCI SaaS Master Application",
     "type": "project",
     "require": {
+        "php": "^8.3",
+        "barryvdh/laravel-dompdf": "^3.0",
         "filament/filament": "^3.3",
         "laravel/framework": "^12.0",
-        "laravel/sanctum": "^4.2"
+        "laravel/sanctum": "^4.2",
+        "maatwebsite/excel": "^4.0"
     },
     "autoload": {
         "psr-4": {
@@ -52,6 +55,7 @@
     "prefer-stable": true,
     "require-dev": {
         "laravel/tinker": "^2.10",
+        "mockery/mockery": "^1.6",
         "pestphp/pest": "^3.0",
         "pestphp/pest-plugin-laravel": "^3.0"
     }

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TenantResource\Pages;
 
 use App\Filament\Resources\TenantResource;
+use App\Support\SubscriptionCountdown;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Notifications\Notification;
@@ -39,13 +40,8 @@ class ViewTenant extends EditRecord
             $parts[] = ucfirst($this->record->plan);
         }
 
-        if ($this->record->subscription_end_date) {
-            $days = now()->diffInDays($this->record->subscription_end_date, false);
-            if ($days < 0) {
-                $parts[] = 'Abonnement expiré';
-            } elseif ($days <= 30) {
-                $parts[] = "Expire dans {$days}j";
-            }
+        if ($note = SubscriptionCountdown::headerNote($this->record->daysRemaining())) {
+            $parts[] = $note;
         }
 
         if ($this->isEditing) {

@@ -25,7 +25,7 @@ class TenantDeploymentResource extends Resource
 
     protected static ?string $pluralModelLabel = 'déploiements';
 
-    protected static ?string $navigationGroup = 'Monitoring';
+    protected static ?string $navigationGroup = 'Surveillance';
 
     protected static ?int $navigationSort = 3;
 

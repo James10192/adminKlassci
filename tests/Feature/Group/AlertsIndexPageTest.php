@@ -47,10 +47,31 @@ it('alerts-index view references the AlertType enum to build labels', function (
         resource_path('views/filament/group/pages/alerts-index.blade.php')
     );
 
+    // Ce test exigeait que la vue recopie CHAQUE cas a la main
+    // (`AlertType::PlanMismatch->value => '...'`). Il figeait donc la
+    // duplication : les libelles vivaient dans cette seule vue, et la tuile
+    // d'alertes du tableau de bord, qui ne les connaissait pas, affichait
+    // l'identifiant brut « QUOTA_CRITICAL » au directeur general.
+    //
+    // Ce qui compte n'est pas que la vue enumere les cas, c'est qu'un libelle
+    // francais existe pour chacun — d'ou qu'il vienne.
     expect($source)->toContain('use App\\Enums\\AlertType;');
-    expect($source)->toContain('AlertType::PlanMismatch->value');
-    expect($source)->toContain('AlertType::SslExpiring->value');
-    expect($source)->toContain('AlertType::EnrollmentDecline->value');
+    expect($source)->toContain('AlertType::libelles()');
+
+    foreach (\App\Enums\AlertType::cases() as $type) {
+        expect(\App\Enums\AlertType::libelles())->toHaveKey($type->value);
+    }
+});
+
+it('la tuile d\'alertes du tableau de bord ne montre plus d\'identifiant technique', function () {
+    $source = file_get_contents(
+        resource_path('views/filament/group/widgets/group-alerts.blade.php')
+    );
+
+    // Elle rendait `{{ $alert['type'] }}` brut, que le CSS passait en
+    // capitales : « QUOTA_CRITICAL », « SUBSCRIPTION_EXPIRING ».
+    expect($source)->not->toContain("{{ \$alert['type'] }}");
+    expect($source)->toContain('AlertType::libelleDe');
 });
 
 it('alerts-index view implements client-side filtering via Alpine', function () {

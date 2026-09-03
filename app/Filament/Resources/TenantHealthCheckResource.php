@@ -19,13 +19,13 @@ class TenantHealthCheckResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-exclamation-triangle';
 
-    protected static ?string $navigationLabel = 'Issues détectées';
+    protected static ?string $navigationLabel = 'Anomalies relevées';
 
-    protected static ?string $modelLabel = 'Issue';
+    protected static ?string $modelLabel = 'anomalie';
 
     protected static ?string $pluralModelLabel = 'Issues détectées';
 
-    protected static ?string $navigationGroup = 'Monitoring';
+    protected static ?string $navigationGroup = 'Surveillance';
 
     protected static ?int $navigationSort = 1;
 
@@ -216,8 +216,8 @@ class TenantHealthCheckResource extends Resource
             ])
             ->defaultSort('checked_at', 'desc')
             ->poll('30s') // Rafraîchissement auto toutes les 30s
-            ->emptyStateHeading('🎉 Aucun problème détecté')
-            ->emptyStateDescription('Tous les tenants sont en bonne santé')
+            ->emptyStateHeading('Rien à signaler')
+            ->emptyStateDescription('Aucune anomalie dans les relevés de la période retenue.')
             ->emptyStateIcon('heroicon-o-check-circle');
     }
 

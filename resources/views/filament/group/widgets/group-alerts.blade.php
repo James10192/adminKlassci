@@ -58,7 +58,9 @@
                                 {{ $alert['tenant_name'] }}
                             </div>
                         </div>
-                        <div class="gp-alert-type">{{ $alert['type'] }}</div>
+                        {{-- Affichait l'identifiant brut : le CSS le passait en
+                             capitales et le fondateur lisait « QUOTA_CRITICAL ». --}}
+                        <div class="gp-alert-type">{{ \App\Enums\AlertType::libelleDe($alert['type'] ?? null) }}</div>
                     </div>
                 @endforeach
             </div>

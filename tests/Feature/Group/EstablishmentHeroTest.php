@@ -90,3 +90,56 @@ it('establishment-view-hero omits the SSO button when tenant is suspended', func
     expect($html)->not->toContain("Ouvrir l'établissement");
     expect($html)->not->toContain('https://test.klassci.com');
 });
+
+it('le hero établissements refuse le zéro et le rouge quand rien n\'est mesuré', function () {
+    // Cet écran affichait « 0 étudiant », « 0 personnel » et surtout
+    // « Recouvrement moyen 0,0 % — critique » dans une tuile ROUGE alors
+    // qu'aucune base n'avait répondu. Un fondateur y lisait un groupe en
+    // détresse financière là où il n'y avait qu'une panne de connexion.
+    $html = view('filament.group.partials.establishments-hero', [
+        'context' => [
+            'total_students' => 0,
+            'total_staff' => 0,
+            'establishment_count' => 4,
+            'avg_rate' => 0.0,
+            'etat_effectifs' => \App\Support\EtatMesure::NON_MESURE,
+            'etat_personnel' => \App\Support\EtatMesure::NON_MESURE,
+            'etat_finances' => \App\Support\EtatMesure::NON_MESURE,
+            'mention_effectifs' => null,
+            'mention_personnel' => null,
+            'mention_finances' => null,
+        ],
+    ])->render();
+
+    expect($html)->toContain(\App\Support\EtatMesure::TIRET);
+    expect($html)->toContain('aucun établissement mesuré');
+    expect($html)->toContain('data-tone="inconnu"');
+
+    // Ni « critique » ni le rouge : un taux qu'on n'a pas n'est pas mauvais.
+    expect($html)->not->toContain('data-tone="danger"');
+    expect($html)->not->toContain('0,0');
+
+    // Le nombre d'établissements, lui, vient de klassci_master et reste su.
+    expect($html)->toContain('4 établissements');
+});
+
+it('le hero établissements affiche le périmètre d\'un total amputé', function () {
+    $html = view('filament.group.partials.establishments-hero', [
+        'context' => [
+            'total_students' => 2140,
+            'total_staff' => 58,
+            'establishment_count' => 4,
+            'avg_rate' => 82.0,
+            'etat_effectifs' => \App\Support\EtatMesure::MESURE,
+            'etat_personnel' => \App\Support\EtatMesure::MESURE,
+            'etat_finances' => \App\Support\EtatMesure::MESURE,
+            'mention_effectifs' => 'sur 2 des 4 établissements',
+            'mention_personnel' => 'sur 2 des 4 établissements',
+            'mention_finances' => 'sur 2 des 4 établissements',
+        ],
+    ])->render();
+
+    // Un total partiel qui ne dit pas qu'il est partiel se lit comme complet.
+    expect($html)->toContain('sur 2 des 4 établissements');
+    expect($html)->toContain('2 140');
+});
