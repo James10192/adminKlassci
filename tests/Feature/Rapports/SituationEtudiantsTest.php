@@ -25,7 +25,7 @@ beforeEach(function (): void {
 
 it('ne compte comme encaissé que les paiements validés', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 's1', 'status' => 'active']);
-    ecole($groupe, 'sitalpha');
+    BaseEcoleSimulee::ecole($groupe, 'sitalpha');
 
     $lignes = app(FournisseurSituationEtudiants::class)
         ->pourGroupe($groupe, new FiltresRapport(statutInscription: 'active'))['lignes'];
@@ -48,7 +48,7 @@ it('ne compte comme encaissé que les paiements validés', function (): void {
 
 it('classe les plus gros restes en tête, pour que la relance se lise', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 's2', 'status' => 'active']);
-    ecole($groupe, 'sitbeta');
+    BaseEcoleSimulee::ecole($groupe, 'sitbeta');
 
     $lignes = app(FournisseurSituationEtudiants::class)
         ->pourGroupe($groupe, new FiltresRapport(statutInscription: 'active'))['lignes'];
@@ -59,7 +59,7 @@ it('classe les plus gros restes en tête, pour que la relance se lise', function
 
 it('ne rend jamais un reste négatif', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 's3', 'status' => 'active']);
-    ecole($groupe, 'sitgamma');
+    BaseEcoleSimulee::ecole($groupe, 'sitgamma');
 
     $lignes = app(FournisseurSituationEtudiants::class)
         ->pourGroupe($groupe, new FiltresRapport(statutInscription: 'active'))['lignes'];
@@ -71,7 +71,7 @@ it('ne rend jamais un reste négatif', function (): void {
 
 it('totalise l\'attendu, l\'encaissé et le reste du groupe', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 's4', 'status' => 'active']);
-    ecole($groupe, 'sitdelta');
+    BaseEcoleSimulee::ecole($groupe, 'sitdelta');
 
     $totaux = app(ReportRegistry::class)
         ->construire(ReportRegistry::SITUATION_ETUDIANTS, $groupe, new FiltresRapport(statutInscription: 'active'))
@@ -84,7 +84,7 @@ it('totalise l\'attendu, l\'encaissé et le reste du groupe', function (): void 
 
 it('liste les effectifs avec leur classe, filière et niveau', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'e1', 'status' => 'active']);
-    ecole($groupe, 'effalpha');
+    BaseEcoleSimulee::ecole($groupe, 'effalpha');
 
     $lignes = app(FournisseurEffectifs::class)
         ->pourGroupe($groupe, new FiltresRapport(statutInscription: 'active'))['lignes'];
@@ -97,7 +97,7 @@ it('liste les effectifs avec leur classe, filière et niveau', function (): void
 
 it('ne fait sortir aucune donnée de contact', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'e2', 'status' => 'active']);
-    ecole($groupe, 'effbeta');
+    BaseEcoleSimulee::ecole($groupe, 'effbeta');
 
     $ligne = app(FournisseurEffectifs::class)
         ->pourGroupe($groupe, new FiltresRapport(statutInscription: 'active'))['lignes'][0];
@@ -112,7 +112,7 @@ it('ne fait sortir aucune donnée de contact', function (): void {
 
 it('compte la répartition par sexe sous les effectifs', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'e3', 'status' => 'active']);
-    ecole($groupe, 'effgamma');
+    BaseEcoleSimulee::ecole($groupe, 'effgamma');
 
     $totaux = app(ReportRegistry::class)
         ->construire(ReportRegistry::EFFECTIFS_SCOLARITE, $groupe, new FiltresRapport(statutInscription: 'active'))

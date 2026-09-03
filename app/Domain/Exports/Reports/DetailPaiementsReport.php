@@ -76,11 +76,15 @@ class DetailPaiementsReport extends RapportDetail
             return null;
         }
 
-        $vides = array_fill(0, 5, null);
+        // Le libellé se répartit sur DEUX cellules : « TOTAL » dans la colonne
+        // Date, le reste dans Établissement. Tout mettre dans la première le
+        // faisait casser sur quatre lignes — c'est la plus étroite du tableau,
+        // et un total illisible dévalue le document entier.
+        $vides = array_fill(0, 4, null);
 
         if ($this->filtres->statutPaiement === null) {
             return array_merge(
-                ['TOTAL — statuts mêlés, non totalisé'],
+                ['TOTAL', 'statuts mêlés, non totalisé'],
                 $vides,
                 [null, null, null],
             );
@@ -88,14 +92,14 @@ class DetailPaiementsReport extends RapportDetail
 
         $somme = array_sum(array_map(static fn (array $p): float => (float) ($p['montant'] ?? 0), $donnees));
 
-        $libelle = sprintf(
-            'TOTAL %s — %d paiement%s',
-            mb_strtoupper(FiltresRapport::libelleStatutPaiement($this->filtres->statutPaiement)),
+        $mention = sprintf(
+            '%s — %d paiement%s',
+            FiltresRapport::libelleStatutPaiement($this->filtres->statutPaiement),
             count($donnees),
             count($donnees) > 1 ? 's' : '',
         );
 
-        return array_merge([$libelle], $vides, [null, $somme, null]);
+        return array_merge(['TOTAL', $mention], $vides, [null, $somme, null]);
     }
 
 }

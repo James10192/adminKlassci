@@ -1,7 +1,6 @@
 <?php
 
 use App\Models\Group;
-use App\Models\Tenant;
 use App\Services\Group\Detail\FournisseurDetailPaiements;
 use App\Services\Group\ReportRegistry;
 use App\Services\TenantConnectionManager;
@@ -17,27 +16,6 @@ use Tests\Feature\Rapports\BaseEcoleSimulee;
  * jointures, les noms de colonnes et les filtres — qui sont précisément la
  * fonctionnalité, ici.
  */
-function ecole(Group $groupe, string $code, bool $repond = true): Tenant
-{
-    $tenant = Tenant::create([
-        'group_id' => $groupe->id,
-        'code' => $code,
-        'name' => mb_strtoupper($code),
-        'subdomain' => $code,
-        'database_name' => "klassci_{$code}",
-        'database_credentials' => ['host' => '127.0.0.1', 'port' => 1, 'username' => 'x', 'password' => 'y'],
-        'git_branch' => 'main',
-        'status' => 'active',
-        'plan' => 'elite',
-    ]);
-
-    if ($repond) {
-        BaseEcoleSimulee::remplir(BaseEcoleSimulee::monter($code));
-    }
-
-    return $tenant;
-}
-
 function periodeCouvrante(): FiltresRapport
 {
     return new FiltresRapport(
@@ -56,7 +34,7 @@ beforeEach(function (): void {
 
 it('remonte les paiements validés, et eux seuls', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'g1', 'status' => 'active']);
-    ecole($groupe, 'alpha');
+    BaseEcoleSimulee::ecole($groupe, 'alpha');
 
     $resultat = app(FournisseurDetailPaiements::class)->pourGroupe($groupe, periodeCouvrante());
 
@@ -70,7 +48,7 @@ it('remonte les paiements validés, et eux seuls', function (): void {
 
 it('exclut le paiement supprimé, qui n\'est pas une recette', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'g2', 'status' => 'active']);
-    ecole($groupe, 'beta');
+    BaseEcoleSimulee::ecole($groupe, 'beta');
 
     $resultat = app(FournisseurDetailPaiements::class)->pourGroupe($groupe, periodeCouvrante());
 
@@ -80,7 +58,7 @@ it('exclut le paiement supprimé, qui n\'est pas une recette', function (): void
 
 it('retombe sur le numéro de reçu quand la référence manque', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'g3', 'status' => 'active']);
-    ecole($groupe, 'gamma');
+    BaseEcoleSimulee::ecole($groupe, 'gamma');
 
     $resultat = app(FournisseurDetailPaiements::class)->pourGroupe($groupe, periodeCouvrante());
 
@@ -89,7 +67,7 @@ it('retombe sur le numéro de reçu quand la référence manque', function (): v
 
 it('compose le nom complet et rattache la classe', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'g4', 'status' => 'active']);
-    ecole($groupe, 'delta');
+    BaseEcoleSimulee::ecole($groupe, 'delta');
 
     $ligne = app(FournisseurDetailPaiements::class)->pourGroupe($groupe, periodeCouvrante())['lignes'][0];
 
@@ -101,8 +79,8 @@ it('compose le nom complet et rattache la classe', function (): void {
 
 it('déclare l\'école qui n\'a pas répondu, au lieu de la taire', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'g5', 'status' => 'active']);
-    ecole($groupe, 'presente');
-    ecole($groupe, 'absente', repond: false);
+    BaseEcoleSimulee::ecole($groupe, 'presente');
+    BaseEcoleSimulee::ecole($groupe, 'absente', repond: false);
 
     $resultat = app(FournisseurDetailPaiements::class)->pourGroupe($groupe, periodeCouvrante());
 
@@ -125,7 +103,7 @@ it('déclare l\'école qui n\'a pas répondu, au lieu de la taire', function ():
 
 it('ne totalise pas quand les statuts sont mêlés', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'g6', 'status' => 'active']);
-    ecole($groupe, 'epsilon');
+    BaseEcoleSimulee::ecole($groupe, 'epsilon');
 
     $melanges = new FiltresRapport(
         periode: PeriodFactory::make(PeriodFactory::TYPE_CUSTOM_RANGE, ['start' => '2026-09-01', 'end' => '2026-09-30']),
@@ -133,12 +111,12 @@ it('ne totalise pas quand les statuts sont mêlés', function (): void {
 
     $rapport = app(ReportRegistry::class)->construire(ReportRegistry::DETAIL_PAIEMENTS, $groupe, $melanges);
 
-    expect($rapport->totaux()[0])->toContain('non totalisé');
+    expect($rapport->totaux()[1])->toContain('non totalisé');
 });
 
 it('totalise quand le statut est unique', function (): void {
     $groupe = Group::create(['name' => 'Groupe', 'code' => 'g7', 'status' => 'active']);
-    ecole($groupe, 'zeta');
+    BaseEcoleSimulee::ecole($groupe, 'zeta');
 
     $rapport = app(ReportRegistry::class)->construire(
         ReportRegistry::DETAIL_PAIEMENTS,
@@ -148,6 +126,8 @@ it('totalise quand le statut est unique', function (): void {
 
     $totaux = $rapport->totaux();
 
-    expect($totaux[0])->toContain('TOTAL VALIDÉ')
+    expect($totaux[0])->toBe('TOTAL')
+        ->and($totaux[1])->toContain('Validé')
+        ->and($totaux[1])->toContain('2 paiements')
         ->and($totaux[7])->toBe(700000.0);
 });

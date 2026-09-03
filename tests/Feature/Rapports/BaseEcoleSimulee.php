@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Rapports;
 
+use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\TenantConnectionManager;
 use Illuminate\Support\Facades\Config;
@@ -44,6 +45,35 @@ class BaseEcoleSimulee extends TenantConnectionManager
     public static function nom(string $code): string
     {
         return "tenant_{$code}";
+    }
+
+    /**
+     * Une école du groupe, avec ou sans base qui répond.
+     *
+     * Vit ici plutôt que dans un fichier de test : une fonction d'aide déclarée
+     * dans un fichier et appelée depuis trois autres passe tant qu'on lance la
+     * suite entière, et disparaît dès qu'on lance un seul fichier — c'est-à-dire
+     * exactement quand on débogue.
+     */
+    public static function ecole(Group $groupe, string $code, bool $repond = true): Tenant
+    {
+        $etablissement = Tenant::create([
+            'group_id' => $groupe->id,
+            'code' => $code,
+            'name' => mb_strtoupper($code),
+            'subdomain' => $code,
+            'database_name' => "klassci_{$code}",
+            'database_credentials' => ['host' => '127.0.0.1', 'port' => 1, 'username' => 'x', 'password' => 'y'],
+            'git_branch' => 'main',
+            'status' => 'active',
+            'plan' => 'elite',
+        ]);
+
+        if ($repond) {
+            self::remplir(self::monter($code));
+        }
+
+        return $etablissement;
     }
 
     /**
