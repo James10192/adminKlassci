@@ -63,6 +63,13 @@ beforeEach(function () {
     // retomberait sur le panneau par defaut et chercherait une route
     // `filament.admin.…` qui n'existe pas.
     Filament::setCurrentPanel(Filament::getPanel('group'));
+
+    // L'ecran est derriere un drapeau : `canAccess()` le refuse quand il est
+    // eteint, et Filament rend une page 403 a la place. Sans cette ligne, le
+    // test ne passait que sur un poste dont le `.env` l'avait allume — il
+    // reussissait pour une raison d'environnement, pas parce que le code est
+    // juste. C'est exactement ce que la CI a attrape.
+    config(['group_portal.scheduled_reports_enabled' => true]);
 });
 
 it('compte les envois, dédoublonne les destinataires et ignore les suspendus', function () {
