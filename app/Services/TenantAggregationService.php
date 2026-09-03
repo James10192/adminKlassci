@@ -16,6 +16,7 @@ use App\Services\Group\TeacherWorkloadResolver;
 use App\Services\Group\TenantAggregator;
 use App\Services\Group\TenantBillingContext;
 use App\Support\Alerts\AlertPayload;
+use App\Support\Duree;
 use App\Support\EtatMesure;
 use App\Support\Period\PeriodFactory;
 use App\Support\Period\PeriodInterface;
@@ -632,18 +633,24 @@ class TenantAggregationService
         $daysUntil = $tenant->daysRemaining();
         $severity = $this->tierResolver->severityForTier($tier);
 
+        // « expire dans 1 jours », « expiré depuis 1 jours » : sur l'alerte la
+        // plus urgente qu'un fondateur verra, un pluriel fautif fait douter du
+        // reste du tableau. Et « dans 0 jours » ne veut rien dire — un
+        // abonnement qui se termine ce soir se dit « aujourd'hui ».
         [$alertType, $message] = match ($tier) {
             SubscriptionTierResolver::TIER_EXPIRED => [
                 AlertType::SubscriptionExpired,
-                'Abonnement expiré depuis ' . abs($daysUntil) . ' jours',
+                'Abonnement expiré depuis ' . Duree::jours(abs($daysUntil)),
             ],
             SubscriptionTierResolver::TIER_URGENT => [
                 AlertType::SubscriptionExpiring,
-                "Abonnement expire dans {$daysUntil} jours (urgent)",
+                $daysUntil === 0
+                    ? "Abonnement expire aujourd'hui (urgent)"
+                    : 'Abonnement expire dans ' . Duree::jours($daysUntil) . ' (urgent)',
             ],
             SubscriptionTierResolver::TIER_WARNING, SubscriptionTierResolver::TIER_INFO => [
                 AlertType::SubscriptionExpiring,
-                "Abonnement expire dans {$daysUntil} jours",
+                'Abonnement expire dans ' . Duree::jours($daysUntil),
             ],
         };
 
@@ -737,13 +744,18 @@ class TenantAggregationService
         if ($tier === HealthCheckAlertResolver::STALE_TIER_UNHEALTHY) {
             $health['unhealthy_tenant_count']++;
             $detail = $tenant->latestHealthCheck?->details ?: 'aucun détail';
-            $message = "Health check échec : {$detail}";
+            // « Health check échec » : ces alertes sont lues par un fondateur,
+            // pas par nous. Le vocabulaire interne n'a rien à y faire — c'est
+            // le même défaut que l'offre imprimée « elite » dans un état.
+            $message = "Contrôle technique en échec : {$detail}";
         } else {
             $health['stale_tenant_count']++;
-            $days = $tenant->last_deployed_at
-                ? (int) $tenant->last_deployed_at->diffInDays(now())
-                : 0;
-            $message = "Tenant inactif depuis {$days} jours (dernier déploiement).";
+            // Jamais déployé donnait `$days = 0`, donc « inactif depuis
+            // 0 jours » : un zéro fabriqué pour dire une absence. Les deux cas
+            // sont désormais distincts.
+            $message = $tenant->last_deployed_at
+                ? 'Sans mise à jour depuis ' . Duree::jours((int) $tenant->last_deployed_at->diffInDays(now())) . '.'
+                : "Aucune mise à jour enregistrée pour cet établissement.";
         }
 
         $health['alerts'][] = $this->buildAlert($tenant, $severity, AlertType::StaleTenant, $message);

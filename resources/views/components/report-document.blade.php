@@ -112,6 +112,13 @@
             border-bottom: none;
         }
         .num { text-align: right; }
+
+        /* Mise en page fixe : les largeurs declarees par le rapport priment sur
+           la repartition automatique. `word-wrap` evite qu'un libelle plus long
+           que sa colonne deborde silencieusement sur la voisine. */
+        table.donnees--fixe { table-layout: fixed; }
+        table.donnees--fixe th,
+        table.donnees--fixe td { word-wrap: break-word; vertical-align: top; }
     </style>
 </head>
 <body>

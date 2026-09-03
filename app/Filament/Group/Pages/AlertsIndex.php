@@ -3,6 +3,8 @@
 namespace App\Filament\Group\Pages;
 
 use App\Filament\Group\Concerns\HasCustomHero;
+use App\Filament\Group\Concerns\HasReportActions;
+use App\Services\Group\ReportRegistry;
 use App\Services\TenantAggregationService;
 use App\Support\Alerts\AlertPayload;
 use Filament\Pages\Page;
@@ -16,6 +18,7 @@ use Filament\Pages\Page;
 class AlertsIndex extends Page
 {
     use HasCustomHero;
+    use HasReportActions;
 
     protected static ?string $navigationIcon = 'heroicon-o-bell-alert';
 
@@ -63,6 +66,35 @@ class AlertsIndex extends Page
         return $count > 0
             ? $count . ' ' . \Illuminate\Support\Str::plural('alerte', $count) . ' en cours sur vos etablissements'
             : null;
+    }
+
+    /**
+     * L'export de ce que la page montre.
+     *
+     * La sante des etablissements et l'echeance des abonnements existaient a
+     * l'ecran et nulle part ailleurs : un fondateur qui prepare un conseil ne
+     * pouvait ni les imprimer, ni les joindre, ni les programmer par e-mail
+     * comme ses trois autres etats.
+     *
+     * Le rapport passe par le registre, donc l'ecran et l'envoi programme
+     * construisent le MEME document — deux fabriques finiraient par diverger.
+     */
+    protected function getHeaderActions(): array
+    {
+        $group = auth('group')->user()?->group;
+
+        if ($group === null) {
+            return [];
+        }
+
+        return [
+            $this->actionsRapport(
+                ReportRegistry::SANTE_ABONNEMENTS,
+                'Santé et abonnements',
+                fn () => app(ReportRegistry::class)->construire(ReportRegistry::SANTE_ABONNEMENTS, $group),
+                'heroicon-o-shield-check',
+            ),
+        ];
     }
 
     public function getAlerts(): array

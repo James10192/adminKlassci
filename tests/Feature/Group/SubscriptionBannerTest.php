@@ -121,3 +121,19 @@ it('TenantAggregationService emits the worst-tier aggregate keys', function () {
     expect($source)->toContain('subscription_info_count');
     expect($source)->toContain('SubscriptionTierResolver');
 });
+
+it('dit l échéance avec les mots de la liste d alertes', function () {
+    // Le bandeau annoncait « expire SOUS 11 jours » pendant que la liste
+    // d'alertes, deux centimetres plus bas sur le meme ecran, disait « expire
+    // DANS 11 jours ». Et l'expiration ne portait aucune duree la ou l'alerte
+    // disait « depuis 12 jours ». Une seule formulation par fait.
+    $source = file_get_contents(
+        resource_path('views/filament/group/partials/subscription-banner.blade.php')
+    );
+
+    expect($source)->toContain("Abonnement expire dans ")
+        ->and($source)->toContain('Abonnement expiré depuis ')
+        ->and($source)->not->toContain('expire sous ')
+        // Le pluriel passe par le seul endroit qui l'accorde.
+        ->and($source)->toContain('Duree::jours');
+});
