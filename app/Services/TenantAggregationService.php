@@ -6,6 +6,7 @@ use App\Contracts\Group\GroupFinancialsProviderInterface;
 use App\Contracts\Group\GroupKpiProviderInterface;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertType;
+use App\Enums\QuotaType;
 use App\Models\Group;
 use App\Models\Tenant;
 use App\Services\Group\EnrollmentTrendAnalyzer;
@@ -565,6 +566,16 @@ class TenantAggregationService
         return $health;
     }
 
+    /**
+     * Un pourcentage tel qu'on l'ecrit en francais : virgule decimale, et pas
+     * de « ,0 » quand le nombre est rond. `round()` rendait « 93.3 » et
+     * « 100.0 » directement dans le texte de l'alerte.
+     */
+    private static function pourcentageFr(float $valeur): string
+    {
+        return rtrim(rtrim(number_format($valeur, 1, ',', ' '), '0'), ',');
+    }
+
     private function buildAlert(Tenant $tenant, AlertSeverity $severity, AlertType $type, string $message): AlertPayload
     {
         return AlertPayload::make($tenant, $severity, $type, $message);
@@ -587,7 +598,13 @@ class TenantAggregationService
                 $tenant,
                 AlertSeverity::Critical,
                 AlertType::QuotaExceeded,
-                "Quota {$quotaPct['max_type']} dépassé ({$quotaPct['max']}%)"
+                // `max_type` est une racine de colonne (`users`, `students`) :
+                // elle n'a rien a faire dans un texte lu par un directeur.
+                sprintf(
+                    'Quota %s dépassé (%s %%)',
+                    QuotaType::libelleDe($quotaPct['max_type']),
+                    self::pourcentageFr($quotaPct['max']),
+                )
             );
         } elseif ($quotaPct['max'] >= QuotaHealth::criticalThreshold()) {
             $health['quota_critical_count']++;
@@ -595,7 +612,11 @@ class TenantAggregationService
                 $tenant,
                 AlertSeverity::Warning,
                 AlertType::QuotaCritical,
-                "Quota {$quotaPct['max_type']} à {$quotaPct['max']}%"
+                sprintf(
+                    'Quota %s à %s %%',
+                    QuotaType::libelleDe($quotaPct['max_type']),
+                    self::pourcentageFr($quotaPct['max']),
+                )
             );
         }
     }

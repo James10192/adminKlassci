@@ -123,7 +123,7 @@
                 <span class="gp-hero-kpi-meta">
                     {{ $nbFinances === 0
                         ? EtatMesure::absenceGroupe()
-                        : (EtatMesure::mentionPerimetre($nbFinances, $total) ?? 'FCFA cross-établissements') }}
+                        : (EtatMesure::mentionPerimetre($nbFinances, $total) ?? 'FCFA, tous établissements confondus') }}
                 </span>
             </div>
         </x-slot:kpis>

@@ -31,7 +31,7 @@
             <div class="gp-hero-kpi" data-tone="{{ $finMesure ? '' : 'inconnu' }}">
                 <span class="gp-hero-kpi-label">Revenus attendus</span>
                 <span class="gp-hero-kpi-value">{{ $finMesure ? FcfaFormatter::compact((float) ($totals['expected'] ?? 0)) : EtatMesure::TIRET }}</span>
-                <span class="gp-hero-kpi-meta">{{ $finMesure ? ($finMention ?? 'cross-établissements') : EtatMesure::absenceGroupe() }}</span>
+                <span class="gp-hero-kpi-meta">{{ $finMesure ? ($finMention ?? 'tous établissements confondus') : EtatMesure::absenceGroupe() }}</span>
             </div>
 
             <div class="gp-hero-kpi" data-tone="{{ $finMesure ? 'success' : 'inconnu' }}">
