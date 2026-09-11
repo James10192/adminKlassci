@@ -3,17 +3,24 @@
 namespace App\Filament\Resources\GroupResource\RelationManagers;
 
 use App\Enums\GroupMemberRole;
+use App\Models\GroupMember;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 
 class MembersRelationManager extends RelationManager
 {
     protected static string $relationship = 'members';
 
     protected static ?string $title = 'Membres du groupe';
+
+    protected static ?string $modelLabel = 'membre';
+
+    protected static ?string $pluralModelLabel = 'membres';
 
     protected static ?string $recordTitleAttribute = 'name';
 
@@ -50,9 +57,15 @@ class MembersRelationManager extends RelationManager
                     ->password()
                     ->revealable()
                     ->dehydrated(fn ($state) => filled($state))
-                    ->helperText(fn () => config('group_portal.invite_flow_enabled')
-                        ? 'Laissez vide — un mot de passe temporaire sera généré et envoyé par email.'
-                        : 'Laisser vide pour ne pas modifier.'),
+                    ->helperText(function (string $operation): string {
+                        if ($operation === 'edit') {
+                            return 'Laissez vide pour conserver le mot de passe actuel.';
+                        }
+
+                        return config('group_portal.invite_flow_enabled')
+                            ? 'Laissez vide : un mot de passe temporaire sera généré et envoyé par email.'
+                            : 'Laissez vide : un mot de passe temporaire sera généré et affiché une seule fois après la création.';
+                    }),
 
                 Forms\Components\Select::make('role')
                     ->label('Rôle')
@@ -103,7 +116,28 @@ class MembersRelationManager extends RelationManager
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Ajouter un membre'),
+                    ->label('Ajouter un membre')
+                    // Sans envoi d'invitation, le mot de passe généré à
+                    // l'insertion n'existe en clair que sur cette instance :
+                    // c'est ici, et nulle part ailleurs, qu'on peut le montrer.
+                    ->after(function (GroupMember $record): void {
+                        if ($record->motDePasseTemporaire === null) {
+                            return;
+                        }
+
+                        Notification::make()
+                            ->warning()
+                            ->persistent()
+                            ->title('Mot de passe temporaire — affiché une seule fois')
+                            ->body(new HtmlString(
+                                '<code style="display:block;margin:.25rem 0 .5rem;padding:.35rem .5rem;'
+                                . 'border-radius:.375rem;background:rgba(0,0,0,.06);font-size:.95em;'
+                                . 'word-break:break-all;">' . e($record->motDePasseTemporaire) . '</code>'
+                                . 'Transmettez-le à ' . e($record->name) . ' par un canal sûr. '
+                                . 'Il devra le changer à sa première connexion.'
+                            ))
+                            ->send();
+                    }),
             ])
             ->actions([
                 Tables\Actions\Action::make('resendInvitation')

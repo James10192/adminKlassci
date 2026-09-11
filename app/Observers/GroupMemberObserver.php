@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\GroupMember;
 use App\Services\Group\GroupMemberInvitationService;
+use App\Services\Group\TemporaryPasswordGenerator;
 use App\Services\Group\UsernameGenerator;
 
 /**
@@ -19,14 +20,31 @@ use App\Services\Group\UsernameGenerator;
 class GroupMemberObserver
 {
     /**
-     * Auto-generate a username before insert when the admin didn't supply
-     * an email. Runs on `creating` (not `created`) so the username lands in
-     * the same INSERT instead of a follow-up UPDATE.
+     * Complète, avant l'INSERT, les deux colonnes qu'un admin peut légitimement
+     * laisser vides dans le formulaire :
+     *
+     *  - `username`, quand il n'y a pas non plus d'email pour se connecter ;
+     *  - `password`, qui est NOT NULL en base. Le mot de passe temporaire est
+     *    conservé en clair sur l'instance (propriété transitoire, jamais
+     *    persistée) pour que l'interface puisse l'afficher une seule fois quand
+     *    aucune invitation par email ne part.
+     *
+     * Le hook `creating` — et non le formulaire Filament — parce que toutes les
+     * voies de création passent par là : panel, tinker, seeder, commande.
      */
     public function creating(GroupMember $member): void
     {
         if (empty($member->username) && empty($member->email)) {
             $member->username = app(UsernameGenerator::class)->generate($member->name ?? '');
+        }
+
+        if (empty($member->getAttribute('password'))) {
+            $motDePasse = app(TemporaryPasswordGenerator::class)->generate();
+
+            // Le cast `hashed` du modèle chiffre la valeur à l'affectation.
+            $member->password = $motDePasse;
+            $member->password_changed_at = null;
+            $member->motDePasseTemporaire = $motDePasse;
         }
     }
 
@@ -49,5 +67,9 @@ class GroupMemberObserver
         }
 
         app(GroupMemberInvitationService::class)->invite($member);
+
+        // L'invitation vient de remplacer le mot de passe généré ci-dessus :
+        // celui qu'on gardait en mémoire ne vaut plus rien, ne l'affichons pas.
+        $member->motDePasseTemporaire = null;
     }
 }

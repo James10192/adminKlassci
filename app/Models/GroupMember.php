@@ -14,6 +14,14 @@ class GroupMember extends Authenticatable implements FilamentUser, HasName
 {
     use Notifiable;
 
+    /**
+     * Mot de passe temporaire généré à la création, gardé en clair le temps de
+     * la requête pour que l'interface puisse l'afficher une seule fois. Vraie
+     * propriété PHP : elle n'est donc ni un attribut Eloquent, ni persistée, ni
+     * sérialisée avec le modèle.
+     */
+    public ?string $motDePasseTemporaire = null;
+
     protected $fillable = [
         'group_id',
         'name',
