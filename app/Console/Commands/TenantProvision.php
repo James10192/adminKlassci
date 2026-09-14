@@ -18,7 +18,8 @@ class TenantProvision extends Command
                             {--branch= : Branche Git (défaut: main)}
                             {--plan=free : Plan tarifaire (free, essentiel, professional, elite)}
                             {--admin-email= : Email de l\'administrateur principal}
-                            {--admin-name= : Nom de l\'administrateur principal}';
+                            {--admin-name= : Nom de l\'administrateur principal}
+                            {--timezone=UTC : Fuseau de l\'etablissement (ex: Africa/Porto-Novo). Ne se change plus sans degats une fois des donnees saisies}';
 
     protected $description = 'Provisionner un nouveau tenant complet (17 étapes: DB, Git, .env, migrations, subdomain, SSL)';
 
@@ -39,6 +40,17 @@ class TenantProvision extends Command
         $plan = $this->option('plan') ?: $this->choice('Plan tarifaire', ['free', 'essentiel', 'professional', 'elite'], 0);
         $adminEmail = $this->option('admin-email') ?: $this->ask('Email administrateur');
         $adminName = $this->option('admin-name') ?: $this->ask('Nom administrateur');
+        $timezone = (string) $this->option('timezone');
+
+        // Le fuseau est le SEUL reglage qui ne se rattrape pas apres coup :
+        // Laravel ecrit les horodatages dedans, donc le changer sur une
+        // instance qui a deja des inscriptions laisse derriere des lignes
+        // ecrites dans l'ancien. On le valide donc ici, pas au deploiement.
+        $decalageBase = $this->decalageBaseDeDonnees($timezone);
+
+        if ($decalageBase === null) {
+            return 1;
+        }
 
         // Vérifier que le tenant n'existe pas déjà
         if (Tenant::where('code', $code)->exists()) {
@@ -55,7 +67,7 @@ class TenantProvision extends Command
         $planConfig = $this->getPlanConfiguration($plan);
 
         // Afficher le résumé
-        $this->displayProvisioningSummary($code, $name, $subdomain, $branch, $plan, $adminEmail, $adminName);
+        $this->displayProvisioningSummary($code, $name, $subdomain, $branch, $plan, $adminEmail, $adminName, $timezone, $decalageBase);
 
         if (!$this->confirm('Confirmer le provisionnement ?', true)) {
             $this->warn('⚠️  Provisionnement annulé.');
@@ -101,7 +113,7 @@ class TenantProvision extends Command
 
             // Étape 7: Créer le fichier .env.production
             $this->step('Création du fichier .env.production');
-            $this->createEnvFile($tenantPath, $code, $name, $databaseName, $dbPassword);
+            $this->createEnvFile($tenantPath, $code, $name, $databaseName, $dbPassword, $timezone, $decalageBase);
 
             // Étape 8: Installer les dépendances Composer
             $this->step('Installation des dépendances Composer');
@@ -282,7 +294,56 @@ class TenantProvision extends Command
         );
     }
 
-    private function createEnvFile(string $path, string $code, string $name, string $database, string $password): void
+    /**
+     * Le decalage a poser sur la session MySQL, deduit du fuseau demande.
+     *
+     * MySQL renseigne lui-meme sept colonnes d'horodatage de l'application
+     * metier (`useCurrent()` dans leur migration, dont l'historique du parcours
+     * d'inscription). Il les ecrit dans le fuseau de SA session : laissee a
+     * celle du serveur, une instance a UTC+1 verrait ces colonnes prendre une
+     * heure de retard sur le `created_at` de la MEME ligne.
+     *
+     * On pose un decalage fixe plutot que le nom du fuseau, parce que les
+     * tables de fuseaux de MySQL ne sont pas chargees sur l'hebergement mutualise
+     * — `SET time_zone='Africa/Porto-Novo'` y echoue. Un decalage fixe est donc
+     * exact tant que le fuseau n'a pas d'heure d'ete, ce qui est le cas des
+     * deux pays servis. Pour tout autre, on REFUSE plutot que de figer un
+     * decalage juste la moitie de l'annee.
+     *
+     * @return string|null Le decalage (`+01:00`), ou null si le fuseau est
+     *                     refuse — le message a alors deja ete affiche.
+     */
+    private function decalageBaseDeDonnees(string $fuseau): ?string
+    {
+        try {
+            $zone = new \DateTimeZone($fuseau);
+        } catch (\Exception $e) {
+            $this->error("❌ Fuseau inconnu : '{$fuseau}'. Utilisez un identifiant IANA (ex: Africa/Abidjan, Africa/Porto-Novo).");
+
+            return null;
+        }
+
+        $maintenant = new \DateTime('now', $zone);
+        $transitions = $zone->getTransitions($maintenant->getTimestamp(), strtotime('+2 years'));
+
+        // La premiere transition rendue est l'etat courant, pas un changement.
+        if (count($transitions) > 1) {
+            $this->error("❌ Le fuseau '{$fuseau}' pratique l'heure d'ete.");
+            $this->line("   Cette commande ne sait poser qu'un decalage fixe pour la base, qui serait");
+            $this->line("   faux la moitie de l'annee. Provisionnez, puis posez DB_TIMEZONE a la main");
+            $this->line("   apres avoir verifie que les tables de fuseaux de MySQL sont chargees.");
+
+            return null;
+        }
+
+        $secondes = $zone->getOffset($maintenant);
+        $signe = $secondes < 0 ? '-' : '+';
+        $secondes = abs($secondes);
+
+        return sprintf('%s%02d:%02d', $signe, intdiv($secondes, 3600), intdiv($secondes % 3600, 60));
+    }
+
+    private function createEnvFile(string $path, string $code, string $name, string $database, string $password, string $timezone, string $decalageBase): void
     {
         $domaine = $this->domaineTenant();
         $envContent = <<<ENV
@@ -291,6 +352,19 @@ APP_ENV=production
 APP_KEY=
 APP_DEBUG=false
 APP_URL=https://{$code}.{$domaine}
+
+# Le fuseau de l'etablissement, et celui de sa session MySQL.
+#
+# C'est MAINTENANT qu'ils se posent : Laravel ecrit les horodatages dans le
+# fuseau de l'application, donc le changer une fois des inscriptions saisies
+# laisse derriere des lignes ecrites dans l'ancien, que les nouvelles ne
+# rejoignent pas. C'est aussi pourquoi APP_TIMEZONE n'est pas dans les cles
+# que le CLI sait modifier a distance.
+#
+# UTC est le defaut, et le comportement historique. Africa/Abidjan vaut
+# UTC+0 sans heure d'ete : les instances ivoiriennes n'ont rien a changer.
+APP_TIMEZONE={$timezone}
+DB_TIMEZONE={$decalageBase}
 
 LOG_CHANNEL=stack
 LOG_LEVEL=error
@@ -430,7 +504,9 @@ ENV;
         string $branch,
         string $plan,
         string $adminEmail,
-        string $adminName
+        string $adminName,
+        string $timezone,
+        string $decalageBase
     ): void {
         $this->newLine();
         $this->table(
@@ -443,6 +519,7 @@ ENV;
                 ['Plan', $plan],
                 ['Admin Email', $adminEmail],
                 ['Admin Nom', $adminName],
+                ['Fuseau', $timezone . ' (base : ' . $decalageBase . ')'],
             ]
         );
         $this->newLine();
