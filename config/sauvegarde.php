@@ -27,4 +27,18 @@ return [
      */
     'disque_hors_site' => env('SAUVEGARDE_DISQUE_HORS_SITE'),
 
+    /*
+     * La base où la vérification hebdomadaire restaure les sauvegardes.
+     *
+     * Sur cPanel, l'utilisateur MySQL d'une instance ne peut pas créer de base :
+     * celle-ci est créée une fois dans le panneau, avec tous les privilèges
+     * pour l'utilisateur des instances, et partagée par toutes — les
+     * vérifications se suivent, et la base est vidée avant et après chacune.
+     *
+     * Son nom doit se terminer par `_verif_restauration` : c'est ce suffixe qui
+     * interdit d'écrire dans la base d'un établissement. Vide, chaque instance
+     * restaure dans `<sa base>_verif_restauration`, qui doit alors exister.
+     */
+    'base_essai' => env('SAUVEGARDE_BASE_ESSAI'),
+
 ];

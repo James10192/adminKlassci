@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Domain\Exploitation\Sauvegarde\CoffreSauvegarde;
 use App\Domain\Exploitation\Sauvegarde\PipelineRestauration;
+use App\Domain\Exploitation\Sauvegarde\PipelineSauvegarde;
 use App\Domain\Exploitation\Sauvegarde\SceauSauvegarde;
 use App\Models\Tenant;
 use App\Models\TenantBackup as TenantBackupModel;
@@ -124,40 +125,42 @@ class TenantVerifierRestauration extends Command
             }
         }
 
-        $baseEssai = PipelineRestauration::baseEssai($instance->database_name);
+        $baseEssai = $this->baseEssai($instance);
+        $refusCible = $this->raisonDeRefuserLaCible($baseEssai);
 
-        // La ceinture, en plus des bretelles. `baseEssai` produit toujours un
-        // nom d'essai ; on le revérifie avant d'écrire quoi que ce soit, parce
-        // qu'entre les deux il n'y a qu'une refactorisation.
-        if (! PipelineRestauration::estBaseEssai($baseEssai)) {
-            return $this->conclure($instance, $sauvegarde, 'echouee', "cible refusée : {$baseEssai}", 0, [], 0);
+        if ($refusCible !== null) {
+            return $this->conclure($instance, $sauvegarde, 'echouee', $refusCible, 0, [], 0);
         }
 
         $debut = microtime(true);
         $fichierOptions = null;
         $fichierCle = null;
+        $baseVidee = false;
 
         try {
+            try {
+                $this->viderBaseEssai($instance, $baseEssai);
+                $baseVidee = true;
+            } catch (\Throwable $e) {
+                return $this->conclure($instance, $sauvegarde, 'echouee', sprintf(
+                    'base d\'essai « %s » inaccessible : créez-la dans cPanel et donnez tous les privilèges à l\'utilisateur de l\'instance (%s)',
+                    $baseEssai,
+                    $e->getMessage(),
+                ), 0, [], (int) (microtime(true) - $debut));
+            }
+
             $fichierOptions = CoffreSauvegarde::fichierSecret(
-                \App\Domain\Exploitation\Sauvegarde\PipelineSauvegarde::fichierOptions(
-                    $instance->database_credentials ?? [],
-                ),
+                PipelineSauvegarde::fichierOptions($instance->database_credentials ?? []),
             );
 
             if ($chiffree) {
                 $fichierCle = CoffreSauvegarde::fichierSecret(CoffreSauvegarde::cle());
             }
 
-            exec(PipelineRestauration::commandePreparerBase($fichierOptions, $baseEssai) . ' 2>&1', $s1, $c1);
+            exec(PipelineRestauration::commande($archive, $fichierOptions, $baseEssai, $fichierCle) . ' 2>&1', $sortie, $code);
 
-            if ($c1 !== 0) {
-                return $this->conclure($instance, $sauvegarde, 'echouee', 'base d\'essai impossible à créer : ' . implode(' ', $s1), 0, [], (int) (microtime(true) - $debut));
-            }
-
-            exec(PipelineRestauration::commande($archive, $fichierOptions, $baseEssai, $fichierCle) . ' 2>&1', $s2, $c2);
-
-            if ($c2 !== 0) {
-                return $this->conclure($instance, $sauvegarde, 'echouee', 'la restauration a échoué : ' . implode(' ', array_slice($s2, 0, 3)), 0, [], (int) (microtime(true) - $debut));
+            if ($code !== 0) {
+                return $this->conclure($instance, $sauvegarde, 'echouee', 'la restauration a échoué : ' . self::erreurUtile($sortie), 0, [], (int) (microtime(true) - $debut));
             }
 
             [$tables, $lignes] = $this->relire($instance, $baseEssai);
@@ -168,13 +171,126 @@ class TenantVerifierRestauration extends Command
 
             return $this->conclure($instance, $sauvegarde, 'reussie', $avertissement, $tables, $lignes, (int) (microtime(true) - $debut));
         } finally {
-            if ($fichierOptions !== null && ! $this->option('garder')) {
-                exec(PipelineRestauration::commandeSupprimerBase($fichierOptions, $baseEssai) . ' 2>&1');
+            // Vider après coup rend la place disque, et ne laisse pas traîner
+            // la copie des données d'une école dans une base partagée.
+            if ($baseVidee && ! $this->option('garder')) {
+                try {
+                    $this->viderBaseEssai($instance, $baseEssai);
+                } catch (\Throwable $e) {
+                    \Log::warning("[sauvegarde] base d'essai {$baseEssai} non vidée après vérification", ['erreur' => $e->getMessage()]);
+                }
             }
 
             CoffreSauvegarde::effacerSecret($fichierOptions);
             CoffreSauvegarde::effacerSecret($fichierCle);
         }
+    }
+
+    /** La base d'essai configurée, ou celle qu'on dérive de l'instance. */
+    private function baseEssai(Tenant $instance): string
+    {
+        $configuree = trim((string) config('sauvegarde.base_essai', ''));
+
+        return $configuree !== '' ? $configuree : PipelineRestauration::baseEssai($instance->database_name);
+    }
+
+    /**
+     * Pourquoi refuser d'écrire dans cette base, ou `null`.
+     *
+     * Cette commande supprime toutes les tables de la base qu'on lui nomme,
+     * sur le serveur de production. Trois verrous, parce qu'un seul faux pas
+     * viderait la base d'une école : un nom sans caractère douteux, le suffixe
+     * d'essai, et aucune instance déclarée sur cette base.
+     */
+    private function raisonDeRefuserLaCible(string $baseEssai): ?string
+    {
+        try {
+            PipelineRestauration::nomSur($baseEssai);
+        } catch (\InvalidArgumentException) {
+            return "cible refusée : nom de base invalide ({$baseEssai})";
+        }
+
+        if (! PipelineRestauration::estBaseEssai($baseEssai)) {
+            return "cible refusée : {$baseEssai} ne se termine pas par " . PipelineRestauration::SUFFIXE_ESSAI;
+        }
+
+        if (Tenant::withTrashed()->where('database_name', $baseEssai)->exists()) {
+            return "cible refusée : {$baseEssai} est la base d'une instance";
+        }
+
+        return null;
+    }
+
+    /** Supprime toutes les tables et vues de la base d'essai. */
+    private function viderBaseEssai(Tenant $instance, string $baseEssai): void
+    {
+        $connexion = $this->connexionEssai($instance, $baseEssai);
+
+        try {
+            $objets = array_map(function ($ligne) {
+                $valeurs = array_values((array) $ligne);
+
+                return ['nom' => (string) $valeurs[0], 'type' => (string) ($valeurs[1] ?? 'BASE TABLE')];
+            }, DB::connection($connexion)->select('SHOW FULL TABLES'));
+
+            foreach (PipelineRestauration::instructionsVidage($objets) as $instruction) {
+                DB::connection($connexion)->statement($instruction);
+            }
+        } finally {
+            DB::purge($connexion);
+        }
+    }
+
+    /** La connexion vers la base d'essai, avec les identifiants de l'instance. */
+    private function connexionEssai(Tenant $instance, string $baseEssai): string
+    {
+        $connexion = 'verif_restauration';
+        $identifiants = $instance->database_credentials ?? [];
+
+        config(['database.connections.' . $connexion => [
+            'driver' => 'mysql',
+            'host' => $identifiants['host'] ?? 'localhost',
+            'port' => $identifiants['port'] ?? 3306,
+            'database' => $baseEssai,
+            'username' => $identifiants['username'] ?? '',
+            'password' => $identifiants['password'] ?? '',
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+        ]]);
+
+        DB::purge($connexion);
+
+        return $connexion;
+    }
+
+    /**
+     * La sortie d'un client MySQL, sans l'avertissement de nom obsolète.
+     *
+     * MariaDB préfixe chaque appel à `mysql` ou `mysqldump` d'une ligne qui
+     * annonce son renommage. Elle occupait la raison enregistrée au point d'en
+     * chasser l'erreur réelle.
+     */
+    private static function sansBruit(array $lignes): array
+    {
+        return array_values(array_filter(
+            $lignes,
+            fn (string $ligne) => ! str_contains($ligne, 'Deprecated program name'),
+        ));
+    }
+
+    /**
+     * La ligne qui dit ce qui a échoué.
+     *
+     * En cas d'erreur, le client MySQL recopie d'abord l'instruction fautive
+     * entre deux lignes de tirets, puis la ligne `ERROR`. Garder les premières
+     * lignes enregistrait la requête et perdait la cause.
+     */
+    private static function erreurUtile(array $lignes): string
+    {
+        $lignes = self::sansBruit($lignes);
+        $erreurs = array_values(array_filter($lignes, fn (string $l) => str_contains($l, 'ERROR')));
+
+        return implode(' ', array_slice($erreurs !== [] ? $erreurs : $lignes, 0, 2));
     }
 
     /**
@@ -210,21 +326,7 @@ class TenantVerifierRestauration extends Command
      */
     private function relire(Tenant $instance, string $baseEssai): array
     {
-        $connexion = 'verif_restauration';
-        $identifiants = $instance->database_credentials ?? [];
-
-        config(['database.connections.' . $connexion => [
-            'driver' => 'mysql',
-            'host' => $identifiants['host'] ?? 'localhost',
-            'port' => $identifiants['port'] ?? 3306,
-            'database' => $baseEssai,
-            'username' => $identifiants['username'] ?? '',
-            'password' => $identifiants['password'] ?? '',
-            'charset' => 'utf8mb4',
-            'collation' => 'utf8mb4_unicode_ci',
-        ]]);
-
-        DB::purge($connexion);
+        $connexion = $this->connexionEssai($instance, $baseEssai);
 
         $tables = count(DB::connection($connexion)->select('SHOW TABLES'));
         $lignes = [];
@@ -256,7 +358,10 @@ class TenantVerifierRestauration extends Command
             'tenant_id' => $instance->id,
             'tenant_backup_id' => $sauvegarde?->id,
             'verdict' => $verdict,
-            'raison' => $raison,
+            // La colonne tient 255 caractères. Une raison plus longue faisait
+            // échouer l'enregistrement du verdict lui-même : l'échec de la
+            // vérification devenait une exception, et ne laissait aucune trace.
+            'raison' => $raison === null ? null : mb_strimwidth($raison, 0, 255, '…'),
             'tables_restaurees' => $tables,
             'lignes_par_table' => $lignes === [] ? null : $lignes,
             'duree_secondes' => $duree,

@@ -9,6 +9,15 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 ## Septembre 2026
 
 ### Corrections
+- `tenant:verifier-restauration` n'avait jamais abouti en production : sur cPanel, l'utilisateur MySQL
+  d'une instance ne peut pas créer de base, et la commande commençait par `DROP/CREATE DATABASE`.
+  La base d'essai est désormais créée une fois dans cPanel (`SAUVEGARDE_BASE_ESSAI`, partagée par toutes
+  les instances) et vidée table par table avant et après chaque essai. Trois verrous avant d'y toucher :
+  nom sûr, suffixe `_verif_restauration`, aucune instance déclarée sur cette base.
+- La restauration d'essai retire les clauses `DEFINER` du dump : une vue créée par un autre compte
+  faisait échouer la restauration faute de privilège SUPER.
+- La raison d'un échec de vérification est tronquée à la taille de sa colonne et garde la ligne
+  `ERROR` du client MySQL. Une raison trop longue faisait échouer l'enregistrement du verdict lui-même.
 - `tenant:cleanup-backups` ne supprime plus le dossier de sauvegardes d'une instance. `backup_path`
   désigne ce dossier, et le nettoyage le supprimait en entier pour une seule archive expirée :
   celle de la nuit partait avec. Seuls les fichiers de la sauvegarde expirée (et leur sceau) sont retirés.
