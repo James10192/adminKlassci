@@ -47,6 +47,16 @@ class Tenant extends Model
         'api_token_created_at',
     ];
 
+    /**
+     * Secrets exclus de toArray() / JSON. Les pages Filament qui les editent
+     * les reinjectent explicitement (trait ReinjecteLesSecretsDuTenant),
+     * puisque fillForm() passe par attributesToArray(), qui respecte $hidden.
+     */
+    protected $hidden = [
+        'api_token',
+        'database_credentials',
+    ];
+
     protected $casts = [
         'database_credentials' => 'array',
         'metadata' => 'array',

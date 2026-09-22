@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TenantResource\Pages;
 
 use App\Filament\Resources\TenantResource;
+use App\Filament\Resources\TenantResource\Concerns\ReinjecteLesSecretsDuTenant;
 use App\Support\SubscriptionCountdown;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
@@ -10,6 +11,8 @@ use Filament\Notifications\Notification;
 
 class ViewTenant extends EditRecord
 {
+    use ReinjecteLesSecretsDuTenant;
+
     protected static string $resource = TenantResource::class;
 
     /**
