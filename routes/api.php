@@ -26,3 +26,24 @@ Route::middleware(['tenant.api'])->group(function () {
 
 // Deploy Webhook — appelé par GitHub Actions (pas de CSRF, auth par Bearer token)
 Route::post('/deploy', DeployWebhookController::class)->name('api.deploy');
+
+/*
+|--------------------------------------------------------------------------
+| KLASSCI Care — API instances v1 (docs/support/KLASSCI_CARE_BLUEPRINT.md §13)
+|--------------------------------------------------------------------------
+| Authentification par identifiant dedie et porte (care.instance:<portee>),
+| jamais par tenants.api_token. Aucune route ne porte de code d'instance.
+*/
+Route::prefix('v1/support')->name('api.care.')->group(function () {
+    Route::post('/tickets', [\App\Http\Controllers\API\Care\TicketController::class, 'store'])
+        ->middleware(['care.instance:support:create', 'throttle:care-ecriture'])
+        ->name('tickets.store');
+
+    Route::middleware(['care.instance:support:read', 'throttle:care-lecture'])->group(function () {
+        Route::get('/bootstrap', \App\Http\Controllers\API\Care\BootstrapController::class)->name('bootstrap');
+        Route::get('/tickets', [\App\Http\Controllers\API\Care\TicketController::class, 'index'])->name('tickets.index');
+        Route::get('/tickets/{reference}', [\App\Http\Controllers\API\Care\TicketController::class, 'show'])
+            ->where('reference', 'KC-\d{4}-\d{6,}')
+            ->name('tickets.show');
+    });
+});
