@@ -10,7 +10,7 @@ class SupportTicketContext extends Model
     protected $table = 'support_ticket_contexts';
 
     protected $fillable = [
-        'ticket_id', 'route_name', 'url_path', 'module', 'page_title',
+        'ticket_id', 'route_name', 'url_path', 'module',
         'entity_type', 'entity_id', 'academic_year_id', 'class_id',
         'app_commit_sha', 'git_branch', 'deployment_id',
         'browser_family', 'browser_version', 'os_family', 'device_type',

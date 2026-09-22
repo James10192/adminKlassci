@@ -6,6 +6,7 @@ use App\Domain\Care\Tickets\Enums\CategorieClient;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 /**
@@ -27,7 +28,6 @@ class CreerTicketRequest extends FormRequest
         $l = config('care.limites');
 
         return [
-            'api_version' => ['nullable', 'integer', 'min:1'],
             'report' => ['required', 'array'],
             'report.category' => ['required', Rule::in(CategorieClient::values())],
             'report.description' => ['required', 'string', 'min:'.$l['description_min'], 'max:'.$l['description_max']],
@@ -44,7 +44,6 @@ class CreerTicketRequest extends FormRequest
             'context.route_name' => ['nullable', 'string', 'max:160'],
             'context.url_path' => ['nullable', 'string', 'max:255'],
             'context.module' => ['nullable', 'string', 'max:64'],
-            'context.page_title' => ['nullable', 'string', 'max:160'],
             'context.entity' => ['nullable', 'array'],
             'context.entity.type' => ['nullable', 'string', Rule::in(config('care.contexte.types_entite'))],
             'context.entity.id' => ['nullable', 'integer', 'min:1'],
@@ -71,7 +70,14 @@ class CreerTicketRequest extends FormRequest
 
         $extras = array_intersect_key($v['context']['extras'] ?? [], array_flip(config('care.contexte.extras_autorises')));
         $extras = array_filter($extras, fn ($x) => is_scalar($x) || $x === null);
-        if (strlen(json_encode($extras)) > config('care.limites.extras_octets_max')) {
+        $octets = strlen(json_encode($extras));
+        if ($octets > config('care.limites.extras_octets_max')) {
+            // Ecartes plutot que refuses : un signalement vaut mieux sans ses
+            // details qu'absent. Mais un rattrapage muet ne se cherche jamais.
+            Log::warning('care.contexte.extras_ecartes', [
+                'instance' => $this->attributes->get('care_tenant')?->code,
+                'octets' => $octets,
+            ]);
             $extras = [];
         }
 

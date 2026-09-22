@@ -31,7 +31,6 @@ return new class extends Migration
             $table->string('last_used_ip', 45)->nullable();
             $table->timestamp('expires_at')->nullable();
             $table->timestamp('revoked_at')->nullable();
-            $table->unsignedBigInteger('created_by')->nullable();
             $table->timestamps();
 
             $table->index(['tenant_id', 'revoked_at']);

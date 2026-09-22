@@ -10,6 +10,7 @@ use App\Domain\Care\Tickets\Exceptions\TransitionRefusee;
 use App\Domain\Care\Tickets\Models\SupportTicket;
 use App\Domain\Care\Tickets\Services\Acteur;
 use App\Domain\Care\Tickets\Services\Journal;
+use App\Domain\Care\Tickets\Services\TicketStateMachine;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -38,37 +39,43 @@ class ClasserTicket
         $acteur = Acteur::personnel($auteur);
         $motif = $motif !== null ? trim($motif) : null;
 
-        $changeSeverite = $ticket->severity !== null && $ticket->severity !== $severite;
-        $changePriorite = $ticket->priority !== null && $ticket->priority !== $priorite;
-        if (($changeSeverite || $changePriorite) && ($motif === null || mb_strlen($motif) < 10)) {
-            throw new TransitionRefusee('Modifier une sévérité ou une priorité déjà posée demande un motif d\'au moins 10 caractères.');
-        }
-
         return DB::transaction(function () use ($ticket, $acteur, $categorie, $severite, $priorite, $domaine, $motif) {
+            // Le motif se juge contre l'etat relu sous verrou : une page perimee
+            // ne doit pas « poser » une severite qu'un autre agent a deja posee.
+            $courant = SupportTicket::whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
+
+            $changeSeverite = $courant->severity !== null && $courant->severity !== $severite;
+            $changePriorite = $courant->priority !== null && $courant->priority !== $priorite;
+            if (($changeSeverite || $changePriorite) && ! TicketStateMachine::motifSuffisant($motif)) {
+                throw new TransitionRefusee('Modifier une sévérité ou une priorité déjà posée demande un motif d\'au moins '.TicketStateMachine::motifMin().' caractères.');
+            }
+
             $avant = [
-                'severite' => $ticket->severity?->value,
-                'priorite' => $ticket->priority?->value,
-                'categorie' => $ticket->internal_category?->value,
-                'domaine' => $ticket->product_area,
+                'severite' => $courant->severity?->value,
+                'priorite' => $courant->priority?->value,
+                'categorie' => $courant->internal_category?->value,
+                'domaine' => $courant->product_area,
             ];
 
-            $ticket->forceFill([
+            $courant->forceFill([
                 'internal_category' => $categorie,
                 'severity' => $severite,
                 'priority' => $priorite,
                 'product_area' => $domaine !== null && trim($domaine) !== '' ? trim($domaine) : null,
             ])->save();
 
-            if ($avant['categorie'] !== $categorie?->value || $avant['domaine'] !== $ticket->product_area) {
-                $this->journal->consigner($ticket, TypeEvenement::Classe, $acteur, $avant['categorie'], $categorie?->value,
-                    details: ['domaine' => $ticket->product_area]);
+            if ($avant['categorie'] !== $categorie?->value || $avant['domaine'] !== $courant->product_area) {
+                $this->journal->consigner($courant, TypeEvenement::Classe, $acteur, $avant['categorie'], $categorie?->value,
+                    details: ['domaine' => $courant->product_area]);
             }
             if ($avant['severite'] !== $severite?->value) {
-                $this->journal->consigner($ticket, TypeEvenement::SeveriteChangee, $acteur, $avant['severite'], $severite?->value, $motif);
+                $this->journal->consigner($courant, TypeEvenement::SeveriteChangee, $acteur, $avant['severite'], $severite?->value, $motif);
             }
             if ($avant['priorite'] !== $priorite?->value) {
-                $this->journal->consigner($ticket, TypeEvenement::PrioriteChangee, $acteur, $avant['priorite'], $priorite?->value, $motif);
+                $this->journal->consigner($courant, TypeEvenement::PrioriteChangee, $acteur, $avant['priorite'], $priorite?->value, $motif);
             }
+
+            $ticket->setRawAttributes($courant->getAttributes(), true);
 
             return $ticket;
         });

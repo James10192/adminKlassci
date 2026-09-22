@@ -25,7 +25,6 @@ return [
         'support.tickets.reply' => "Répondre à l'école",
         'support.internal_notes' => 'Lire et écrire les notes internes',
         'support.security.view' => 'Voir les demandes restreintes (sécurité)',
-        'support.credentials.manage' => 'Émettre et révoquer les identifiants des instances',
     ],
 
     'capacites_par_role' => [
@@ -50,6 +49,9 @@ return [
 
     'limites' => [
         'description_min' => 10,
+        // Motif ecrit exige pour rejeter, marquer en doublon, ou changer une
+        // severite ou une priorite deja posee.
+        'motif_min' => 10,
         'description_max' => 5000,
         'titre_max' => 160,
         'request_ids_max' => 10,

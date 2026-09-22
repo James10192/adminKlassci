@@ -5,6 +5,7 @@ namespace App\Filament\Resources\SupportTicketResource\Pages;
 use App\Domain\Care\Tickets\Actions\AssignerTicket;
 use App\Domain\Care\Tickets\Actions\ClasserTicket;
 use App\Domain\Care\Tickets\Actions\RepondreTicket;
+use App\Domain\Care\Tickets\Actions\RestreindreTicket;
 use App\Domain\Care\Tickets\Enums\CategorieInterne;
 use App\Domain\Care\Tickets\Enums\Priorite;
 use App\Domain\Care\Tickets\Enums\Severite;
@@ -39,106 +40,147 @@ class ViewSupportTicket extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('prendre')
-                ->label('Prendre en charge')
-                ->icon('heroicon-o-hand-raised')
-                ->visible(fn () => Gate::allows('support.tickets.manage') && $this->record->assigned_admin_id !== auth()->id())
-                ->action(function () {
-                    app(AssignerTicket::class)->executer($this->record, auth()->user(), auth()->user());
-                    Notification::make()->success()->title('Demande assignée à vous.')->send();
-                }),
-
-            Actions\Action::make('repondre')
-                ->label('Répondre')
-                ->icon('heroicon-o-chat-bubble-left-right')
-                ->color('primary')
-                ->visible(fn () => Gate::allows('support.tickets.reply') || Gate::allows('support.internal_notes'))
-                ->form([
-                    // Pas de valeur par defaut : choisir qui lira ce message est un geste explicite.
-                    Forms\Components\ToggleButtons::make('visibilite')
-                        ->label('Qui verra ce message ?')
-                        ->required()
-                        ->inline()
-                        ->options(fn () => collect($this->visibilitesAutorisees())->mapWithKeys(fn ($v) => [$v->value => $v->libelle()]))
-                        ->colors([VisibiliteMessage::PublicClient->value => 'warning']),
-                    Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
-                ])
-                ->action(function (array $data) {
-                    $visibilite = VisibiliteMessage::from($data['visibilite']);
-                    abort_unless(in_array($visibilite, $this->visibilitesAutorisees(), true), 403);
-                    app(RepondreTicket::class)->executer($this->record, auth()->user(), $data['corps'], $visibilite);
-                    Notification::make()->success()->title($visibilite === VisibiliteMessage::PublicClient
-                        ? "Réponse envoyée à l'école." : 'Note enregistrée.')->send();
-                }),
-
-            Actions\Action::make('statut')
-                ->label('Changer le statut')
-                ->icon('heroicon-o-arrow-path')
-                ->visible(fn () => Gate::allows('support.tickets.manage'))
-                ->form([
-                    Forms\Components\Select::make('vers')
-                        ->label('Nouveau statut')
-                        ->required()
-                        ->options(fn () => collect(app(TicketStateMachine::class)->suivants($this->record->status))
-                            ->mapWithKeys(fn (StatutTicket $s) => [$s->value => $s->libelle()])),
-                    Forms\Components\Textarea::make('motif')
-                        ->label('Motif')
-                        ->helperText('Obligatoire (10 caractères minimum) pour un rejet ou un doublon.')
-                        ->rows(3),
-                ])
-                ->action(fn (array $data) => $this->tenter(fn () => app(TicketStateMachine::class)->franchir(
-                    $this->record, StatutTicket::from($data['vers']), Acteur::personnel(auth()->user()), $data['motif'] ?? null,
-                ), 'Statut mis à jour.')),
-
-            Actions\Action::make('qualifier')
-                ->label('Qualifier')
-                ->icon('heroicon-o-tag')
-                ->visible(fn () => Gate::allows('support.tickets.manage'))
-                ->fillForm(fn () => [
-                    'categorie' => $this->record->internal_category?->value,
-                    'severite' => $this->record->severity?->value,
-                    'priorite' => $this->record->priority?->value,
-                    'domaine' => $this->record->product_area,
-                ])
-                ->form([
-                    Forms\Components\Select::make('categorie')->label('Qualification')
-                        ->options(collect(CategorieInterne::cases())->mapWithKeys(fn ($c) => [$c->value => $c->libelle()])),
-                    Forms\Components\Select::make('severite')->label('Sévérité')
-                        ->options(collect(Severite::cases())->mapWithKeys(fn ($s) => [$s->value => $s->libelle()])),
-                    Forms\Components\Select::make('priorite')->label('Priorité')
-                        ->options(collect(Priorite::cases())->mapWithKeys(fn ($p) => [$p->value => $p->value])),
-                    Forms\Components\TextInput::make('domaine')->label('Domaine produit')->maxLength(64)
-                        ->placeholder('Notes, Paiements, Inscriptions…'),
-                    Forms\Components\Textarea::make('motif')->label('Motif')
-                        ->helperText('Requis pour modifier une sévérité ou une priorité déjà posée.')->rows(2),
-                ])
-                ->action(fn (array $data) => $this->tenter(fn () => app(ClasserTicket::class)->executer(
-                    $this->record,
-                    auth()->user(),
-                    CategorieInterne::tryFrom((string) ($data['categorie'] ?? '')),
-                    Severite::tryFrom((string) ($data['severite'] ?? '')),
-                    Priorite::tryFrom((string) ($data['priorite'] ?? '')),
-                    $data['domaine'] ?? null,
-                    $data['motif'] ?? null,
-                ), 'Qualification enregistrée.')),
-
-            Actions\Action::make('assigner')
-                ->label('Assigner')
-                ->icon('heroicon-o-user-plus')
-                ->color('gray')
-                ->visible(fn () => Gate::allows('support.tickets.manage'))
-                ->form([
-                    Forms\Components\Select::make('admin')->label('Assigner à')
-                        ->options(fn () => User::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
-                        ->searchable()
-                        ->placeholder('Personne'),
-                ])
-                ->action(function (array $data) {
-                    app(AssignerTicket::class)->executer($this->record, auth()->user(),
-                        isset($data['admin']) ? User::find($data['admin']) : null);
-                    Notification::make()->success()->title('Assignation mise à jour.')->send();
-                }),
+            $this->actionPrendre(),
+            $this->actionRepondre(),
+            $this->actionStatut(),
+            $this->actionQualifier(),
+            $this->actionAssigner(),
+            $this->actionRestreindre(),
         ];
+    }
+
+    private function actionPrendre(): Actions\Action
+    {
+        return Actions\Action::make('prendre')
+            ->label('Prendre en charge')
+            ->icon('heroicon-o-hand-raised')
+            ->visible(fn () => Gate::allows('support.tickets.manage') && $this->record->assigned_admin_id !== auth()->id())
+            ->action(function () {
+                app(AssignerTicket::class)->executer($this->record, auth()->user(), auth()->user());
+                Notification::make()->success()->title('Demande assignée à vous.')->send();
+            });
+    }
+
+    private function actionRepondre(): Actions\Action
+    {
+        return Actions\Action::make('repondre')
+            ->label('Répondre')
+            ->icon('heroicon-o-chat-bubble-left-right')
+            ->color('primary')
+            ->visible(fn () => Gate::allows('support.tickets.reply') || Gate::allows('support.internal_notes'))
+            ->form([
+                // Pas de valeur par defaut : choisir qui lira ce message est un geste explicite.
+                Forms\Components\ToggleButtons::make('visibilite')
+                    ->label('Qui verra ce message ?')
+                    ->required()
+                    ->inline()
+                    ->options(fn () => collect($this->visibilitesAutorisees())->mapWithKeys(fn ($v) => [$v->value => $v->libelle()]))
+                    ->colors([VisibiliteMessage::PublicClient->value => 'warning']),
+                Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
+            ])
+            ->action(function (array $data) {
+                $visibilite = VisibiliteMessage::from($data['visibilite']);
+                abort_unless(in_array($visibilite, $this->visibilitesAutorisees(), true), 403);
+                app(RepondreTicket::class)->executer($this->record, auth()->user(), $data['corps'], $visibilite);
+                Notification::make()->success()->title($visibilite === VisibiliteMessage::PublicClient
+                    ? "Réponse envoyée à l'école." : 'Note enregistrée.')->send();
+            });
+    }
+
+    private function actionStatut(): Actions\Action
+    {
+        return Actions\Action::make('statut')
+            ->label('Changer le statut')
+            ->icon('heroicon-o-arrow-path')
+            ->visible(fn () => Gate::allows('support.tickets.manage'))
+            ->form([
+                Forms\Components\Select::make('vers')
+                    ->label('Nouveau statut')
+                    ->required()
+                    ->options(fn () => collect(app(TicketStateMachine::class)->suivants($this->record->status))
+                        ->mapWithKeys(fn (StatutTicket $s) => [$s->value => $s->libelle()])),
+                Forms\Components\Textarea::make('motif')
+                    ->label('Motif')
+                    ->helperText('Obligatoire ('.TicketStateMachine::motifMin().' caractères minimum) pour un rejet ou un doublon.')
+                    ->rows(3),
+            ])
+            ->action(fn (array $data) => $this->tenter(fn () => app(TicketStateMachine::class)->franchir(
+                $this->record, StatutTicket::from($data['vers']), Acteur::personnel(auth()->user()), $data['motif'] ?? null,
+            ), 'Statut mis à jour.'));
+    }
+
+    private function actionQualifier(): Actions\Action
+    {
+        return Actions\Action::make('qualifier')
+            ->label('Qualifier')
+            ->icon('heroicon-o-tag')
+            ->visible(fn () => Gate::allows('support.tickets.manage'))
+            ->fillForm(fn () => [
+                'categorie' => $this->record->internal_category?->value,
+                'severite' => $this->record->severity?->value,
+                'priorite' => $this->record->priority?->value,
+                'domaine' => $this->record->product_area,
+            ])
+            ->form([
+                Forms\Components\Select::make('categorie')->label('Qualification')
+                    ->options(collect(CategorieInterne::cases())->mapWithKeys(fn ($c) => [$c->value => $c->libelle()])),
+                Forms\Components\Select::make('severite')->label('Sévérité')
+                    ->options(collect(Severite::cases())->mapWithKeys(fn ($s) => [$s->value => $s->libelle()])),
+                Forms\Components\Select::make('priorite')->label('Priorité')
+                    ->options(collect(Priorite::cases())->mapWithKeys(fn ($p) => [$p->value => $p->value])),
+                Forms\Components\TextInput::make('domaine')->label('Domaine produit')->maxLength(64)
+                    ->placeholder('Notes, Paiements, Inscriptions…'),
+                Forms\Components\Textarea::make('motif')->label('Motif')
+                    ->helperText('Requis pour modifier une sévérité ou une priorité déjà posée.')->rows(2),
+            ])
+            ->action(fn (array $data) => $this->tenter(fn () => app(ClasserTicket::class)->executer(
+                $this->record,
+                auth()->user(),
+                CategorieInterne::tryFrom((string) ($data['categorie'] ?? '')),
+                Severite::tryFrom((string) ($data['severite'] ?? '')),
+                Priorite::tryFrom((string) ($data['priorite'] ?? '')),
+                $data['domaine'] ?? null,
+                $data['motif'] ?? null,
+            ), 'Qualification enregistrée.'));
+    }
+
+    private function actionAssigner(): Actions\Action
+    {
+        return Actions\Action::make('assigner')
+            ->label('Assigner')
+            ->icon('heroicon-o-user-plus')
+            ->color('gray')
+            ->visible(fn () => Gate::allows('support.tickets.manage'))
+            ->form([
+                Forms\Components\Select::make('admin')->label('Assigner à')
+                    ->options(fn () => User::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
+                    ->searchable()
+                    ->placeholder('Personne'),
+            ])
+            ->action(function (array $data) {
+                app(AssignerTicket::class)->executer($this->record, auth()->user(),
+                    isset($data['admin']) ? User::find($data['admin']) : null);
+                Notification::make()->success()->title('Assignation mise à jour.')->send();
+            });
+    }
+
+    private function actionRestreindre(): Actions\Action
+    {
+        return Actions\Action::make('restreindre')
+            ->label(fn () => $this->record->is_security_restricted ? 'Lever la restriction' : 'Restreindre (sécurité)')
+            ->icon('heroicon-o-lock-closed')
+            ->color('danger')
+            ->visible(fn () => Gate::allows('support.security.view'))
+            ->modalDescription(fn () => $this->record->is_security_restricted
+                ? 'La demande redeviendra visible de toute l\'équipe support et de l\'école.'
+                : 'La demande ne sera plus visible que des personnes habilitées à la sécurité, ni côté école.')
+            ->form([
+                Forms\Components\Textarea::make('motif')->label('Motif')->required()
+                    ->minLength(TicketStateMachine::motifMin())->rows(3),
+            ])
+            ->action(fn (array $data) => $this->tenter(fn () => app(RestreindreTicket::class)->executer(
+                $this->record, auth()->user(), ! $this->record->is_security_restricted, $data['motif'],
+            ), 'Restriction mise à jour.'));
     }
 
     public function infolist(Infolist $infolist): Infolist

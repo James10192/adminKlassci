@@ -22,10 +22,6 @@ enum StatutTicket: string
     case EscalatedProduct = 'ESCALATED_PRODUCT';
     case EscalatedEngineering = 'ESCALATED_ENGINEERING';
     case InProgress = 'IN_PROGRESS';
-    case InReview = 'IN_REVIEW';
-    case FixReady = 'FIX_READY';
-    case Deployed = 'DEPLOYED';
-    case Verifying = 'VERIFYING';
     case Resolved = 'RESOLVED';
     case Closed = 'CLOSED';
     case Rejected = 'REJECTED';
@@ -44,10 +40,6 @@ enum StatutTicket: string
             self::EscalatedProduct => 'Escaladée produit',
             self::EscalatedEngineering => 'Escaladée technique',
             self::InProgress => 'En cours',
-            self::InReview => 'En revue',
-            self::FixReady => 'Correctif prêt',
-            self::Deployed => 'Déployée',
-            self::Verifying => 'En vérification',
             self::Resolved => 'Résolue',
             self::Closed => 'Fermée',
             self::Rejected => 'Rejetée',
@@ -78,8 +70,7 @@ enum StatutTicket: string
             self::Triaged, self::WaitingSupport, self::Confirmed, self::LinkedToKnownIssue,
             self::EscalatedProduct, self::EscalatedEngineering => StatutClient::EnAnalyse,
             self::WaitingCustomer => StatutClient::ActionRequise,
-            self::InProgress, self::InReview, self::FixReady => StatutClient::EnResolution,
-            self::Deployed, self::Verifying => StatutClient::CorrectionDeployee,
+            self::InProgress => StatutClient::EnResolution,
             self::Resolved => StatutClient::Resolu,
             self::Closed, self::Rejected, self::Duplicate => StatutClient::Ferme,
         };

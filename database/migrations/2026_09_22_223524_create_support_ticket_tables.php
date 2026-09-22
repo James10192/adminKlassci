@@ -69,7 +69,6 @@ return new class extends Migration
             $table->string('route_name', 160)->nullable();
             $table->string('url_path', 255)->nullable();
             $table->string('module', 64)->nullable();
-            $table->string('page_title', 160)->nullable();
             $table->string('entity_type', 32)->nullable();
             $table->unsignedBigInteger('entity_id')->nullable();
             $table->unsignedBigInteger('academic_year_id')->nullable();

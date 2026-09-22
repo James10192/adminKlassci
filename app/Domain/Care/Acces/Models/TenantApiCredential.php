@@ -30,7 +30,7 @@ class TenantApiCredential extends Model
 
     protected $table = 'tenant_api_credentials';
 
-    protected $fillable = ['tenant_id', 'key_id', 'secret_hash', 'scopes', 'label', 'expires_at', 'created_by'];
+    protected $fillable = ['tenant_id', 'key_id', 'secret_hash', 'scopes', 'label', 'expires_at'];
 
     protected $hidden = ['secret_hash'];
 
@@ -55,7 +55,7 @@ class TenantApiCredential extends Model
      * @param  list<string>  $scopes
      * @return array{0: self, 1: string}
      */
-    public static function emettre(Tenant $tenant, array $scopes, ?string $label = null, ?int $createdBy = null, ?\DateTimeInterface $expiresAt = null): array
+    public static function emettre(Tenant $tenant, array $scopes, ?string $label = null, ?\DateTimeInterface $expiresAt = null): array
     {
         $inconnues = array_diff($scopes, self::PORTEES);
         if ($scopes === [] || $inconnues !== []) {
@@ -72,7 +72,6 @@ class TenantApiCredential extends Model
             'scopes' => array_values(array_unique($scopes)),
             'label' => $label,
             'expires_at' => $expiresAt,
-            'created_by' => $createdBy,
         ]);
 
         return [$credential, self::PREFIXE.$keyId.'_'.$secret];

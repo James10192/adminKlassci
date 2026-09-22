@@ -32,7 +32,6 @@ final class Support
     public static function soumission(array $surcharge = []): array
     {
         return array_replace_recursive([
-            'api_version' => 1,
             'report' => ['category' => 'PROBLEME', 'description' => 'La moyenne de la classe ne s’affiche plus après validation.'],
             'reporter' => ['external_id' => 42, 'name' => 'Awa Koné', 'email' => 'awa@ecole.ci', 'roles' => ['secretaire']],
             'context' => [

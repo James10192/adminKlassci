@@ -113,7 +113,6 @@ class CreerTicket
             'route_name' => $c['route_name'] ?? null,
             'url_path' => $c['url_path'] ?? null,
             'module' => $c['module'] ?? null,
-            'page_title' => $c['page_title'] ?? null,
             'entity_type' => $c['entity']['type'] ?? null,
             'entity_id' => $c['entity']['id'] ?? null,
             'academic_year_id' => $c['academic_year_id'] ?? null,

@@ -15,7 +15,6 @@ enum StatutClient: string
     case EnAnalyse = 'EN_ANALYSE';
     case ActionRequise = 'ACTION_REQUISE';
     case EnResolution = 'EN_RESOLUTION';
-    case CorrectionDeployee = 'CORRECTION_DEPLOYEE';
     case Resolu = 'RESOLU';
     case Ferme = 'FERME';
 
@@ -26,7 +25,6 @@ enum StatutClient: string
             self::EnAnalyse => 'En analyse',
             self::ActionRequise => 'Action requise de votre part',
             self::EnResolution => 'En cours de résolution',
-            self::CorrectionDeployee => 'Correction déployée',
             self::Resolu => 'Résolue',
             self::Ferme => 'Fermée',
         };

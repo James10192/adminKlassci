@@ -2,6 +2,7 @@
 
 namespace App\Domain\Care\Tickets\Services;
 
+use App\Domain\Care\Tickets\Enums\TypeActeur;
 use App\Domain\Care\Tickets\Models\SupportTicket;
 use App\Domain\Care\Tickets\Models\SupportTicketMessage;
 
@@ -46,8 +47,8 @@ class ProjectionClient
     private function message(SupportTicketMessage $m): array
     {
         return [
-            'auteur' => $m->author_type->value === 'CUSTOMER' ? 'ECOLE' : 'SUPPORT',
-            'nom' => $m->author_type->value === 'CUSTOMER' ? $m->author_name : 'Support KLASSCI',
+            'auteur' => $m->author_type === TypeActeur::Client ? 'ECOLE' : 'SUPPORT',
+            'nom' => $m->author_type === TypeActeur::Client ? $m->author_name : 'Support KLASSCI',
             'corps' => $m->body,
             'le' => $m->created_at?->toIso8601String(),
         ];

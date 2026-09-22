@@ -52,25 +52,21 @@ final class SoumissionTicket
     }
 
     /**
-     * Empreinte du contenu. Deux envois de la meme cle d'idempotence doivent
-     * porter la meme empreinte, sinon la cle a ete reutilisee pour autre chose.
+     * Empreinte de ce que la personne a signale, et de qui.
+     *
+     * Deux envois de la meme cle doivent porter la meme empreinte, sinon la cle
+     * a ete reutilisee pour autre chose. Le contexte en est volontairement
+     * exclu : il est recapte a chaque envoi (taille de fenetre, identifiants de
+     * requete), et un renvoi legitime apres coupure finirait sinon en refus
+     * definitif au lieu de retrouver sa demande.
      */
     public function empreinte(): string
     {
-        $donnees = get_object_vars($this);
-        $donnees['categorie'] = $this->categorie->value;
-        self::trierRecursivement($donnees);
-
-        return hash('sha256', json_encode($donnees, JSON_UNESCAPED_UNICODE));
-    }
-
-    private static function trierRecursivement(array &$tableau): void
-    {
-        ksort($tableau);
-        foreach ($tableau as &$valeur) {
-            if (is_array($valeur)) {
-                self::trierRecursivement($valeur);
-            }
-        }
+        return hash('sha256', json_encode([
+            'categorie' => $this->categorie->value,
+            'description' => $this->description,
+            'titre' => $this->titre,
+            'rapporteur' => $this->rapporteurId,
+        ], JSON_UNESCAPED_UNICODE));
     }
 }

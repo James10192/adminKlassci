@@ -31,8 +31,18 @@ it('franchit une transition permise, date le tri et journalise', function () {
 });
 
 it('refuse une transition non permise', function () {
-    $this->etats->franchir($this->ticket, S::Deployed, Acteur::personnel($this->staff));
+    $this->etats->franchir($this->ticket, S::Closed, Acteur::personnel($this->staff));
 })->throws(TransitionRefusee::class);
+
+it('juge la transition contre l etat en base, pas contre une page perimee', function () {
+    $perimee = SupportTicket::findOrFail($this->ticket->id);
+    $staff = Acteur::personnel($this->staff);
+    $this->etats->franchir($this->ticket, S::Resolved, $staff);
+
+    // L'autre agent croit encore la demande en tri : RESOLVED -> IN_PROGRESS n'existe pas.
+    expect(fn () => $this->etats->franchir($perimee, S::InProgress, $staff))->toThrow(TransitionRefusee::class)
+        ->and($this->ticket->fresh()->status)->toBe(S::Resolved);
+});
 
 it('exige un motif pour rejeter', function () {
     $this->etats->franchir($this->ticket, S::Rejected, Acteur::personnel($this->staff), 'non');
@@ -82,3 +92,19 @@ it('accorde les capacites par role depuis la configuration', function () {
         ->and(Gate::forUser($billing)->allows('support.tickets.manage'))->toBeFalse()
         ->and(Gate::forUser($inactif)->allows('support.tickets.view'))->toBeFalse();
 });
+
+it('restreint une demande avec motif et la retire de la vue de l ecole', function () {
+    app(\App\Domain\Care\Tickets\Actions\RestreindreTicket::class)
+        ->executer($this->ticket, $this->staff, true, 'Fuite de données possible, à isoler.');
+
+    expect($this->ticket->fresh()->is_security_restricted)->toBeTrue()
+        ->and($this->ticket->events()->reorder()->latest('id')->first()->type->value)->toBe('SECURITY_RESTRICTION_CHANGED');
+
+    $this->withToken(Support::jeton(\App\Models\Tenant::where('code', 'presentation')->first()))
+        ->getJson('/api/v1/support/tickets?reporter=42')
+        ->assertOk()->assertJsonCount(0, 'data');
+});
+
+it('refuse une restriction sans motif', function () {
+    app(\App\Domain\Care\Tickets\Actions\RestreindreTicket::class)->executer($this->ticket, $this->staff, true, 'court');
+})->throws(TransitionRefusee::class);

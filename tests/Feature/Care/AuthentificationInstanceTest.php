@@ -117,3 +117,11 @@ it('emet un identifiant par la commande, affiche une seule fois, et le revoque',
     $this->artisan("care:identifiant presentation --revoquer={$credential->key_id}")->assertSuccessful();
     expect($credential->fresh()->revoked_at)->not->toBeNull();
 });
+
+it('emet un identifiant a duree limitee depuis la commande', function () {
+    $this->artisan('care:identifiant', ['tenant' => $this->ecole->code, '--expire' => 30])->assertSuccessful();
+    $this->artisan('care:identifiant', ['tenant' => $this->ecole->code, '--expire' => 'zero'])->assertFailed();
+
+    $emis = TenantApiCredential::where('tenant_id', $this->ecole->id)->latest('id')->first();
+    expect($emis->expires_at->isBetween(now()->addDays(29), now()->addDays(31)))->toBeTrue();
+});

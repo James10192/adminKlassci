@@ -11,6 +11,7 @@ use Illuminate\Console\Command;
  * Emet l'identifiant qu'une instance presentera a KLASSCI Care.
  *
  *   php artisan care:identifiant presentation
+ *   php artisan care:identifiant presentation --expire=90
  *   php artisan care:identifiant presentation --revoquer=abc123def456
  *
  * Le jeton ne s'affiche qu'ici, une fois. Il se pose dans le .env de
@@ -22,6 +23,7 @@ class EmettreIdentifiantInstance extends Command
         {tenant : Code de l\'instance}
         {--portees=support:create,support:read : Portées, séparées par des virgules}
         {--libelle= : Libellé libre (ex. « rotation septembre »)}
+        {--expire= : Durée de validité en jours (sans option : n\'expire pas)}
         {--revoquer= : key_id d\'un identifiant à révoquer au lieu d\'en émettre un}';
 
     protected $description = 'Émettre ou révoquer l\'identifiant KLASSCI Care d\'une instance';
@@ -41,8 +43,16 @@ class EmettreIdentifiantInstance extends Command
 
         $portees = array_values(array_filter(array_map('trim', explode(',', (string) $this->option('portees')))));
 
+        $jours = $this->option('expire');
+        if ($jours !== null && (! ctype_digit((string) $jours) || (int) $jours < 1)) {
+            $this->error('--expire attend un nombre de jours positif.');
+
+            return self::FAILURE;
+        }
+        $expireLe = $jours !== null ? now()->addDays((int) $jours) : null;
+
         try {
-            [$credential, $jeton] = TenantApiCredential::emettre($tenant, $portees, $this->option('libelle'));
+            [$credential, $jeton] = TenantApiCredential::emettre($tenant, $portees, $this->option('libelle'), $expireLe);
         } catch (\InvalidArgumentException $e) {
             $this->error($e->getMessage());
 
@@ -50,9 +60,10 @@ class EmettreIdentifiantInstance extends Command
         }
 
         TenantActivityLog::log($tenant->id, 'care_credential_issued',
-            "Identifiant KLASSCI Care émis ({$credential->key_id})", null, ['scopes' => $credential->scopes]);
+            "Identifiant KLASSCI Care émis ({$credential->key_id})", null, ['scopes' => $credential->scopes, 'expires_at' => $expireLe?->toIso8601String()]);
 
-        $this->info("Identifiant émis pour {$tenant->code} (key_id {$credential->key_id}).");
+        $this->info("Identifiant émis pour {$tenant->code} (key_id {$credential->key_id})"
+            .($expireLe ? ', valable jusqu\'au '.$expireLe->format('d/m/Y').'.' : ', sans expiration.'));
         $this->line('À poser dans le .env de l\'instance — il ne sera plus affiché :');
         $this->newLine();
         $this->line("MASTER_SUPPORT_TOKEN={$jeton}");

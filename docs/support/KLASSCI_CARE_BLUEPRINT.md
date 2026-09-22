@@ -1,6 +1,9 @@
 # KLASSCI CARE — Architecture Audit & Implementation Blueprint v1
 
-> Status: **draft for review, no code written yet.** Nothing in this document is implemented.
+> Status: **tranche 1 implemented** (Master `5186399`, KLASSCIv2 `c8ff5f8`): instance
+> credentials, ticket creation and reading, the support queue, the school's report
+> dialog and its outbox. Tranche 2 (conversation, attachments, screenshot) is next.
+> Sections below describe the design; where the code chose a different name, the code wins.
 > Date: 2026-09-22. Branch: `claude/klassci-care-support-platform-1x9wwy` (both repos).
 >
 > Every statement is tagged:
@@ -181,9 +184,9 @@ Fixing the legacy endpoints is tracked separately (ticket 000a) so it can ship i
 | `key_id` | public, 12 chars, indexed. Token format `kc_<key_id>_<secret>` |
 | `secret_hash` | `hash('sha256', $secret)`. High-entropy secrets need no bcrypt; `hash_equals` on lookup by `key_id` |
 | `scopes` (json) | `support:create`, `support:read`, `support:update`, `telemetry:send`, `health:read` |
-| `last_used_at`, `last_used_ip`, `expires_at`, `revoked_at`, `created_by` | |
+| `last_used_at`, `last_used_ip`, `expires_at`, `revoked_at` | |
 
-- **Middleware** `AuthentifierInstanceSupport`:
+- **Middleware** `AuthentifierInstance`:
   - parses the Bearer token;
   - looks up by `key_id`, compares the hash, checks revocation, expiry and tenant status;
   - attaches `tenant` and the scopes to the request.
@@ -191,7 +194,7 @@ Fixing the legacy endpoints is tracked separately (ticket 000a) so it can ship i
   controller checks (a weakness of the tenant's `cli:*` routes).
 - **Rotation:** two credentials can be active for one tenant. You create the new one, deploy it
   to the tenant `.env` as `MASTER_SUPPORT_TOKEN`, then revoke the old one.
-- **Provisioning:** `php artisan care:credential {tenant} --scopes=…` prints the token once,
+- **Provisioning:** `php artisan care:identifiant {tenant} --portees=… [--expire=jours]` prints the token once,
   logs a `TenantActivityLog`, and never stores the token in clear.
 
 **[NEEDS_DECISION]** Should Sanctum `personal_access_tokens` (the table already exists, but
@@ -385,7 +388,7 @@ index(tenant_id,status), index(status,severity), index(product_area), index(crea
 `support_ticket_contexts` keeps searchable columns normalized and the rest in `extras` JSON:
 
 ```
-ticket_id, route_name, url_path (no query string), module, page_title,
+ticket_id, route_name, url_path (no query string), module,
 entity_type, entity_id, academic_year_id, class_id,
 app_commit_sha, git_branch, deployment_id FK tenant_deployments (Master-stamped),
 browser_family, browser_version, os_family, device_type, viewport, locale, timezone,
@@ -429,12 +432,11 @@ the jury PV numbering.
 
 ```jsonc
 {
-  "api_version": 1,
   "report": { "category": "PROBLEME", "description": "…", "title": null },
   "reporter": { "external_id": 42, "name": "…", "email": "…", "roles": ["secretaire"] },
   "context": {
     "route_name": "esbtp.notes.index", "url_path": "/esbtp/notes", "module": "notes_evaluations",
-    "page_title": "…", "entity": { "type": "evaluation", "id": 622 },
+    "entity": { "type": "evaluation", "id": 622 },
     "academic_year_id": 4, "class_id": 17,
     "browser": { "family": "Chrome", "version": "128" }, "os": "Android",
     "device": "mobile", "viewport": "390x844", "locale": "fr", "timezone": "Africa/Abidjan",

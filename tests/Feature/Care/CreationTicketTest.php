@@ -65,6 +65,16 @@ it('retrouve la demande deja creee quand la meme cle revient', function () {
     expect(SupportTicket::count())->toBe(1);
 });
 
+it('retrouve la demande quand seul le contexte a change entre deux envois', function () {
+    $premiere = soumettre($this, Support::soumission())->json('reference');
+
+    soumettre($this, Support::soumission(['context' => ['viewport' => '1280x800', 'request_ids' => ['autre-requete']]]))
+        ->assertOk()->assertHeader('Idempotent-Replayed', 'true')
+        ->assertJsonPath('reference', $premiere);
+
+    expect(SupportTicket::count())->toBe(1);
+});
+
 it('refuse une cle reutilisee pour un autre contenu', function () {
     soumettre($this, Support::soumission());
 

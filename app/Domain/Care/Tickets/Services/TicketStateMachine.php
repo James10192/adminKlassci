@@ -6,15 +6,18 @@ use App\Domain\Care\Tickets\Enums\StatutTicket as S;
 use App\Domain\Care\Tickets\Enums\TypeEvenement;
 use App\Domain\Care\Tickets\Exceptions\TransitionRefusee;
 use App\Domain\Care\Tickets\Models\SupportTicket;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Les transitions permises d'une demande, ecrites une seule fois.
  *
  * Un statut ne se pose pas : il se franchit. Chaque franchissement est verifie
  * contre cette table, date les jalons (tri, resolution, fermeture) et laisse
- * une ligne dans le journal. Les etats de la chaine technique (IN_REVIEW,
- * FIX_READY, DEPLOYED, VERIFYING) sont deja declares ici ; ce sont les
- * tranches GitHub et deploiement qui les emprunteront.
+ * une ligne dans le journal.
+ *
+ * Un statut n'entre dans cette table que le jour ou un ecran sait le servir.
+ * WAITING_CUSTOMER, par exemple, montre a l'ecole « Action requise » : il
+ * n'est une cible qu'a partir du moment ou l'ecole peut repondre.
  */
 class TicketStateMachine
 {
@@ -28,7 +31,7 @@ class TicketStateMachine
     /** @return array<string, list<S>> */
     public static function transitions(): array
     {
-        $traitement = [S::Triaged, S::WaitingSupport, S::WaitingCustomer, S::Confirmed,
+        $traitement = [S::Triaged, S::WaitingSupport, S::Confirmed,
             S::LinkedToKnownIssue, S::EscalatedProduct, S::EscalatedEngineering,
             S::InProgress, S::Resolved, S::Rejected, S::Duplicate];
 
@@ -41,12 +44,8 @@ class TicketStateMachine
             S::Confirmed->value => $traitement,
             S::LinkedToKnownIssue->value => $traitement,
             S::EscalatedProduct->value => $traitement,
-            S::EscalatedEngineering->value => [S::InProgress, S::WaitingCustomer, S::Rejected, S::Duplicate, S::Resolved],
-            S::InProgress->value => [S::InReview, S::FixReady, S::WaitingCustomer, S::Resolved, S::Rejected],
-            S::InReview->value => [S::InProgress, S::FixReady],
-            S::FixReady->value => [S::Deployed, S::InProgress],
-            S::Deployed->value => [S::Verifying, S::Resolved, S::InProgress],
-            S::Verifying->value => [S::Resolved, S::InProgress],
+            S::EscalatedEngineering->value => [S::InProgress, S::Rejected, S::Duplicate, S::Resolved],
+            S::InProgress->value => [S::Resolved, S::Rejected],
             S::Resolved->value => [S::Closed, S::Triaged],
             S::Closed->value => [S::Triaged],
             S::Rejected->value => [S::Triaged],
@@ -65,24 +64,43 @@ class TicketStateMachine
         return in_array($vers, $this->suivants($depuis), true);
     }
 
+    /**
+     * La regle se verifie contre l'etat relu sous verrou, pas contre celui que
+     * l'appelant a charge : deux agents sur le meme dossier ne peuvent pas
+     * s'ecraser, et le journal consigne l'etat de depart reel.
+     */
     public function franchir(SupportTicket $ticket, S $vers, Acteur $acteur, ?string $motif = null): SupportTicket
     {
-        $depuis = $ticket->status;
-
-        if (! $this->peut($depuis, $vers)) {
-            throw new TransitionRefusee("Transition refusée : {$depuis->value} → {$vers->value}.");
-        }
-
         $motif = $motif !== null ? trim($motif) : null;
-        if (in_array($vers, self::MOTIF_REQUIS, true) && ($motif === null || mb_strlen($motif) < 10)) {
-            throw new TransitionRefusee("Un motif d'au moins 10 caractères est requis pour passer à « {$vers->libelle()} ».");
+        if (in_array($vers, self::MOTIF_REQUIS, true) && ! self::motifSuffisant($motif)) {
+            throw new TransitionRefusee('Un motif d\'au moins '.self::motifMin()." caractères est requis pour passer à « {$vers->libelle()} ».");
         }
 
-        $ticket->forceFill(['status' => $vers] + $this->jalons($ticket, $depuis, $vers))->save();
+        return DB::transaction(function () use ($ticket, $vers, $acteur, $motif) {
+            $courant = SupportTicket::whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
+            $depuis = $courant->status;
 
-        $this->journal->consigner($ticket, TypeEvenement::StatutChange, $acteur, $depuis->value, $vers->value, $motif);
+            if (! $this->peut($depuis, $vers)) {
+                throw new TransitionRefusee("Transition refusée : {$depuis->value} → {$vers->value}.");
+            }
 
-        return $ticket;
+            $courant->forceFill(['status' => $vers] + $this->jalons($courant, $depuis, $vers))->save();
+            $this->journal->consigner($courant, TypeEvenement::StatutChange, $acteur, $depuis->value, $vers->value, $motif);
+
+            $ticket->setRawAttributes($courant->getAttributes(), true);
+
+            return $ticket;
+        });
+    }
+
+    public static function motifMin(): int
+    {
+        return (int) config('care.limites.motif_min');
+    }
+
+    public static function motifSuffisant(?string $motif): bool
+    {
+        return $motif !== null && mb_strlen(trim($motif)) >= self::motifMin();
     }
 
     /** Dates des jalons. Une reouverture efface la date de resolution et de fermeture. */
