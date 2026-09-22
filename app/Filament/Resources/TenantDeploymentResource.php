@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\TenantDeploymentResource\Pages;
 use App\Models\Tenant;
 use App\Models\TenantDeployment;
+use App\Rules\NomDeBrancheGit;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -204,7 +205,9 @@ class TenantDeploymentResource extends Resource
                         Forms\Components\TextInput::make('branch')
                             ->label('Branche Git (optionnel)')
                             ->placeholder('Laisser vide = branche configurée du tenant')
-                            ->helperText('Ex: main, presentation, esbtp-abidjan'),
+                            ->helperText('Ex: main, presentation, esbtp-abidjan')
+                            ->maxLength(100)
+                            ->rules([new NomDeBrancheGit()]),
 
                         Forms\Components\Toggle::make('skip_backup')
                             ->label('Passer le backup pré-déploiement')

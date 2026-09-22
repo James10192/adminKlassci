@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Models\TenantDeployment;
+use App\Support\Git\NomDeBranche;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
 
@@ -25,6 +26,13 @@ class TenantDeploy extends Command
         $skipBackup = $this->option('skip-backup');
         $skipMigrations = $this->option('skip-migrations');
         $deployAll = $this->option('all');
+
+        // Avant toute autre chose, et surtout avant tout processus : ce nom finit
+        // dans un appel a git sur le serveur qui heberge tous les tenants.
+        if ($branchOverride !== null && ($motif = NomDeBranche::motifDeRefus($branchOverride)) !== null) {
+            $this->error("❌ Branche refusée : {$motif}");
+            return 1;
+        }
 
         // Validate required env variables
         $productionPath = config('app.production_path', env('PRODUCTION_PATH'));
@@ -101,10 +109,26 @@ class TenantDeploy extends Command
             $this->newLine();
         }
 
+        // La branche configuree (tenants.git_branch) passe la meme garde que --branch :
+        // elle s'ecrit aussi depuis Filament et depuis tenant:discover.
+        if (($motif = NomDeBranche::motifDeRefus($branch)) !== null) {
+            $this->error("❌ Branche refusée pour '{$tenant->code}' : {$motif}");
+            \Log::warning("Déploiement refusé : branche invalide pour {$tenant->code}", ['motif' => $motif]);
+            return 1;
+        }
+
         // Verify directory exists before proceeding
         if (!is_dir($tenantPath)) {
             $this->error("❌ Répertoire introuvable : {$tenantPath}");
             $this->line("   Vérifiez que PRODUCTION_PATH est correct et que le tenant a été provisionné.");
+            return 1;
+        }
+
+        // La branche doit exister sur origin — verifie avant la mise en maintenance,
+        // pour ne pas couper un site sur une faute de frappe.
+        if (!$this->brancheExisteSurOrigin($tenantPath, $branch)) {
+            $this->error("❌ Branche '{$branch}' introuvable sur origin pour '{$tenant->code}'.");
+            \Log::warning("Déploiement refusé : branche absente d'origin pour {$tenant->code}", ['branch' => $branch]);
             return 1;
         }
 
@@ -115,7 +139,7 @@ class TenantDeploy extends Command
 
         if ($verbose) {
             $this->line("   PHP : {$phpBin}");
-            $this->line("   Composer : {$composerBin}");
+            $this->line('   Composer : ' . implode(' ', $composerBin));
         }
 
         $deployment = TenantDeployment::create([
@@ -143,7 +167,7 @@ class TenantDeploy extends Command
             // Step 2: Maintenance mode ON
             if ($verbose) $this->line('🔧 Activation du mode maintenance...');
             $t = microtime(true);
-            $out = $this->runProcess($tenantPath, "{$phpBin} artisan down --retry=60 --secret=klassci-deploy", true);
+            $out = $this->runProcess($tenantPath, [$phpBin, 'artisan', 'down', '--retry=60', '--secret=klassci-deploy'], true);
             $steps[] = ['step' => 'maintenance_on', 'status' => 'ok', 'output' => trim($out) ?: 'Mode maintenance activé.', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
@@ -152,14 +176,18 @@ class TenantDeploy extends Command
             // pour éviter un merge cross-branch (ex: git pull origin presentation dans hetec/).
             if ($verbose) $this->line('📥 Git checkout + pull...');
             $t = microtime(true);
-            $checkoutOut = $this->runProcess($tenantPath, "git fetch origin 2>&1 && git checkout {$branch} 2>&1", true);
-            $out = $this->runProcess($tenantPath, "git pull origin {$branch} 2>&1", true);
+            // argv, jamais une chaine : aucun shell ne relit le nom de branche.
+            // Pas de `--` apres la branche : il couperait le DWIM qui cree la branche
+            // locale de suivi au premier deploiement. Un nom en `-…` est refuse plus haut.
+            $checkoutOut = $this->runProcess($tenantPath, ['git', 'fetch', 'origin'], true)
+                . $this->runProcess($tenantPath, ['git', 'checkout', $branch], true);
+            $out = $this->runProcess($tenantPath, ['git', 'pull', 'origin', $branch], true);
             $steps[] = ['step' => 'git_pull', 'status' => 'ok', 'output' => trim($checkoutOut . "\n" . $out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
             // Get commit info
-            $commitHash = trim($this->runProcess($tenantPath, 'git rev-parse HEAD', true));
-            $commitInfo = trim($this->runProcess($tenantPath, 'git log -1 --format="%H|%an|%ae|%s|%ai"', true));
+            $commitHash = trim($this->runProcess($tenantPath, ['git', 'rev-parse', 'HEAD'], true));
+            $commitInfo = trim($this->runProcess($tenantPath, ['git', 'log', '-1', '--format=%H|%an|%ae|%s|%ai'], true));
             $commitParts = explode('|', $commitInfo);
             $steps[] = [
                 'step' => 'commit_info',
@@ -179,7 +207,7 @@ class TenantDeploy extends Command
             // Step 4: Composer install
             if ($verbose) $this->line('📦 Composer install...');
             $t = microtime(true);
-            $out = $this->runProcess($tenantPath, "{$composerBin} install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs 2>&1", true);
+            $out = $this->runProcess($tenantPath, [...$composerBin, 'install', '--no-dev', '--optimize-autoloader', '--no-interaction', '--ignore-platform-reqs'], true);
             $steps[] = ['step' => 'composer_install', 'status' => 'ok', 'output' => trim($out), 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
@@ -200,7 +228,7 @@ class TenantDeploy extends Command
             if ($verbose) $this->line('🧹 Nettoyage des caches...');
             $t = microtime(true);
             foreach (['config:clear', 'cache:clear', 'view:clear', 'route:clear', 'event:clear'] as $cmd) {
-                $this->runProcess($tenantPath, "{$phpBin} artisan {$cmd} 2>&1");
+                $this->runProcess($tenantPath, [$phpBin, 'artisan', $cmd]);
             }
             $steps[] = ['step' => 'cache_clear', 'status' => 'ok', 'output' => 'config:clear, cache:clear, view:clear, route:clear, event:clear', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
@@ -217,14 +245,14 @@ class TenantDeploy extends Command
             // Step 8: Fix permissions
             if ($verbose) $this->line('🔐 Correction des permissions...');
             $t = microtime(true);
-            $this->runProcess($tenantPath, 'chmod -R 775 storage bootstrap/cache 2>&1');
+            $this->runProcess($tenantPath, ['chmod', '-R', '775', 'storage', 'bootstrap/cache']);
             $steps[] = ['step' => 'permissions', 'status' => 'ok', 'output' => 'chmod -R 775 storage bootstrap/cache', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
             // Step 9: Maintenance mode OFF
             if ($verbose) $this->line('✅ Désactivation du mode maintenance...');
             $t = microtime(true);
-            $out = $this->runProcess($tenantPath, "{$phpBin} artisan up 2>&1", true);
+            $out = $this->runProcess($tenantPath, [$phpBin, 'artisan', 'up'], true);
             $steps[] = ['step' => 'maintenance_off', 'status' => 'ok', 'output' => trim($out) ?: 'Site remis en ligne.', 'duration_ms' => (int)((microtime(true) - $t) * 1000)];
             $deployment->update(['deployment_log' => $steps]);
 
@@ -253,7 +281,7 @@ class TenantDeploy extends Command
         } catch (\Exception $e) {
             // Always try to bring the site back up
             try {
-                $this->runProcess($tenantPath, "{$phpBin} artisan up 2>&1");
+                $this->runProcess($tenantPath, [$phpBin, 'artisan', 'up']);
             } catch (\Exception) {
                 // Ignore — site may already be up or path wrong
             }
@@ -292,13 +320,8 @@ class TenantDeploy extends Command
      */
     private function runMigrations(string $directory, string $phpBin): array
     {
-        $env = [];
-        if (!getenv('HOME')) {
-            $env['HOME'] = posix_getpwuid(posix_geteuid())['dir'] ?? '/tmp';
-        }
-
-        $result = Process::path($directory)->env($env)->run("{$phpBin} artisan migrate --force 2>&1");
-        $output = trim($result->output());
+        $result = Process::path($directory)->env($this->environnement())->run([$phpBin, 'artisan', 'migrate', '--force']);
+        $output = trim($result->output() . $result->errorOutput());
 
         if ($result->successful()) {
             return ['ok', $output];
@@ -314,29 +337,53 @@ class TenantDeploy extends Command
     }
 
     /**
-     * Run a shell command in the given directory.
+     * Run a command in the given directory, as an argv array: no shell parses it,
+     * so no argument can inject another command. stdout and stderr are both
+     * returned (git writes its progress to stderr, which `2>&1` used to merge).
      * Throws an exception if the command fails.
+     *
+     * @param list<string> $command
      */
-    private function runProcess(string $directory, string $command, bool $returnOutput = false): string
+    private function runProcess(string $directory, array $command, bool $returnOutput = false): string
     {
-        // HOME doit être défini pour Composer (absent quand lancé via web/Artisan::call)
-        $env = [];
-        if (!getenv('HOME')) {
-            $env['HOME'] = posix_getpwuid(posix_geteuid())['dir'] ?? '/tmp';
-        }
-
-        $result = Process::path($directory)->env($env)->run($command);
+        $result = Process::path($directory)->env($this->environnement())->run($command);
 
         if (!$result->successful()) {
             throw new \Exception(
                 "Commande échouée dans {$directory}:\n"
-                . "  CMD : {$command}\n"
+                . '  CMD : ' . implode(' ', $command) . "\n"
                 . "  STDOUT : " . trim($result->output()) . "\n"
                 . "  STDERR : " . trim($result->errorOutput())
             );
         }
 
-        return $returnOutput ? $result->output() : '';
+        return $returnOutput ? $result->output() . $result->errorOutput() : '';
+    }
+
+    /**
+     * `git ls-remote --exit-code` rend 2 quand aucune reference ne correspond.
+     * On passe la reference complete : un motif nu matcherait aussi un suffixe
+     * (`main` trouverait `feat/main`).
+     */
+    private function brancheExisteSurOrigin(string $directory, string $branch): bool
+    {
+        return Process::path($directory)->env($this->environnement())
+            ->run(['git', 'ls-remote', '--exit-code', '--heads', 'origin', "refs/heads/{$branch}"])
+            ->successful();
+    }
+
+    /**
+     * HOME doit être défini pour Composer (absent quand lancé via web/Artisan::call).
+     *
+     * @return array<string, string>
+     */
+    private function environnement(): array
+    {
+        if (getenv('HOME')) {
+            return [];
+        }
+
+        return ['HOME' => posix_getpwuid(posix_geteuid())['dir'] ?? '/tmp'];
     }
 
     /**
@@ -370,24 +417,23 @@ class TenantDeploy extends Command
 
     /**
      * Detect Composer binary: prefer composer.phar in tenant dir, then system.
+     * Returned as argv (the tenant path is never re-read by a shell).
+     *
+     * @return list<string>
      */
-    private function detectComposerBinary(string $tenantPath): string
+    private function detectComposerBinary(string $tenantPath): array
     {
-        $phpBin = $this->detectPhpBinary();
+        if (file_exists("{$tenantPath}/composer.phar")) {
+            return [$this->detectPhpBinary(), "{$tenantPath}/composer.phar"];
+        }
 
-        $candidates = [
-            "{$tenantPath}/composer.phar" => "{$phpBin} {$tenantPath}/composer.phar",
-            '/usr/local/bin/composer'     => '/usr/local/bin/composer',
-            '/usr/bin/composer'           => '/usr/bin/composer',
-        ];
-
-        foreach ($candidates as $file => $command) {
+        foreach (['/usr/local/bin/composer', '/usr/bin/composer'] as $file) {
             if (file_exists($file)) {
-                return $command;
+                return [$file];
             }
         }
 
-        return 'composer'; // PATH fallback
+        return ['composer']; // PATH fallback
     }
 
     private function displayDeploymentInfo(TenantDeployment $deployment, Tenant $tenant): void

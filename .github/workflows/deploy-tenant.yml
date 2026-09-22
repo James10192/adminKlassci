@@ -43,44 +43,60 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # Les entrees du formulaire passent par `env:`, jamais par `${{ }}` dans le
+      # script : une expression est collee dans le shell AVANT execution, donc une
+      # branche comme `x"; curl …|sh; "` s'y executait (et lisait le jeton).
       - name: "📋 Afficher les paramètres"
+        env:
+          TENANT_CODE: ${{ inputs.tenant_code }}
+          BRANCH: ${{ inputs.branch }}
+          SKIP_BACKUP: ${{ inputs.skip_backup }}
+          SKIP_MIGRATIONS: ${{ inputs.skip_migrations }}
+          ACTOR: ${{ github.actor }}
         run: |
           echo "==========================================="
           echo "  KLASSCI — Déploiement tenant (webhook)"
           echo "==========================================="
-          echo "  Tenant     : ${{ inputs.tenant_code || '(tous les tenants actifs)' }}"
-          echo "  Branche    : ${{ inputs.branch || '(branche configurée du tenant)' }}"
-          echo "  Skip backup: ${{ inputs.skip_backup }}"
-          echo "  Skip migr. : ${{ inputs.skip_migrations }}"
-          echo "  Déclenché par: ${{ github.actor }}"
+          echo "  Tenant     : ${TENANT_CODE:-(tous les tenants actifs)}"
+          echo "  Branche    : ${BRANCH:-(branche configurée du tenant)}"
+          echo "  Skip backup: $SKIP_BACKUP"
+          echo "  Skip migr. : $SKIP_MIGRATIONS"
+          echo "  Déclenché par: $ACTOR"
           echo "  Date       : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "==========================================="
 
       - name: "🚀 Appeler le webhook de déploiement"
+        env:
+          TENANT_CODE: ${{ inputs.tenant_code }}
+          BRANCH: ${{ inputs.branch }}
+          SKIP_BACKUP: ${{ inputs.skip_backup }}
+          SKIP_MIGRATIONS: ${{ inputs.skip_migrations }}
+          ACTOR: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          DEPLOY_WEBHOOK_TOKEN: ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}
         run: |
-          # Construire le payload JSON
-          PAYLOAD=$(cat <<EOF
-          {
-            "tenant_code": "${{ inputs.tenant_code }}",
-            "branch": "${{ inputs.branch }}",
-            "skip_backup": ${{ inputs.skip_backup }},
-            "skip_migrations": ${{ inputs.skip_migrations }}
-          }
-          EOF
-          )
+          # jq echappe les chaines : la charge utile reste du JSON valide
+          # quel que soit le contenu saisi. Le serveur valide ensuite la branche.
+          PAYLOAD=$(jq -n \
+            --arg tenant_code "$TENANT_CODE" \
+            --arg branch "$BRANCH" \
+            --argjson skip_backup "$SKIP_BACKUP" \
+            --argjson skip_migrations "$SKIP_MIGRATIONS" \
+            '{tenant_code: $tenant_code, branch: $branch, skip_backup: $skip_backup, skip_migrations: $skip_migrations}')
 
-          echo "Envoi du webhook vers ${{ secrets.DEPLOY_WEBHOOK_URL }}..."
+          echo "Envoi du webhook..."
           echo "---"
 
           RESPONSE=$(curl --silent --show-error \
             --max-time 30 \
             --retry 2 \
             --retry-delay 3 \
-            -X POST "${{ secrets.DEPLOY_WEBHOOK_URL }}" \
-            -H "Authorization: Bearer ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}" \
+            -X POST "$DEPLOY_WEBHOOK_URL" \
+            -H "Authorization: Bearer $DEPLOY_WEBHOOK_TOKEN" \
             -H "Content-Type: application/json" \
-            -H "X-GitHub-Actor: ${{ github.actor }}" \
-            -H "X-GitHub-Run-ID: ${{ github.run_id }}" \
+            -H "X-GitHub-Actor: $ACTOR" \
+            -H "X-GitHub-Run-ID: $RUN_ID" \
             -d "$PAYLOAD" \
             -w "\n%{http_code}")
 

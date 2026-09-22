@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\DeployWebhookRequest;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 
@@ -18,33 +18,11 @@ class DeployWebhookController extends Controller
      * Headers : Authorization: Bearer {DEPLOY_WEBHOOK_TOKEN}
      * Body JSON : { tenant_code, branch, skip_backup, skip_migrations }
      */
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(DeployWebhookRequest $request): JsonResponse
     {
-        // Vérification du token secret
-        $expectedToken = config('app.deploy_webhook_token');
-
-        if (empty($expectedToken)) {
-            Log::error('DeployWebhook: DEPLOY_WEBHOOK_TOKEN non configuré dans .env');
-            return response()->json(['error' => 'Webhook non configuré côté serveur.'], 500);
-        }
-
-        $token = $request->bearerToken();
-
-        if (!$token || !hash_equals($expectedToken, $token)) {
-            Log::warning('DeployWebhook: Tentative non autorisée', [
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-            ]);
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-
-        // Validation du payload
-        $validated = $request->validate([
-            'tenant_code'      => 'nullable|string|max:100|regex:/^[a-z0-9\-]+$/',
-            'branch'           => 'nullable|string|max:100',
-            'skip_backup'      => 'nullable|boolean',
-            'skip_migrations'  => 'nullable|boolean',
-        ]);
+        // Jeton et forme de la charge utile : DeployWebhookRequest.
+        // Le nom de branche y passe NomDeBrancheGit, et TenantDeploy le revérifie.
+        $validated = $request->validated();
 
         $tenantCode     = $validated['tenant_code'] ?? null;
         $branch         = $validated['branch'] ?? null;

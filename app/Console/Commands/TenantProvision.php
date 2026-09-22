@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Models\TenantActivityLog;
+use App\Support\Git\NomDeBranche;
+use App\Support\Shell\CommandeDistante;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
@@ -41,6 +43,14 @@ class TenantProvision extends Command
         $adminEmail = $this->option('admin-email') ?: $this->ask('Email administrateur');
         $adminName = $this->option('admin-name') ?: $this->ask('Nom administrateur');
         $timezone = (string) $this->option('timezone');
+
+        // Ces valeurs finissent dans un chemin, un nom de base (CREATE DATABASE),
+        // une commande git, ssh, et le .env de l'ecole. On les refuse ici, avant
+        // la moindre ecriture et le moindre processus.
+        if (($motif = $this->motifDeRefus($code, $subdomain, $branch, $name)) !== null) {
+            $this->error("❌ Provisionnement refusé : {$motif}");
+            return 1;
+        }
 
         // Le fuseau est le SEUL reglage qui ne se rattrape pas apres coup :
         // Laravel ecrit les horodatages dedans, donc le changer sur une
@@ -117,38 +127,38 @@ class TenantProvision extends Command
 
             // Étape 8: Installer les dépendances Composer
             $this->step('Installation des dépendances Composer');
-            $this->executeRemoteCommand($tenantPath, 'composer install --no-dev --optimize-autoloader --no-interaction');
+            $this->executeRemoteCommand($tenantPath, ['composer', 'install', '--no-dev', '--optimize-autoloader', '--no-interaction']);
 
             // Étape 9: Générer la clé d'application
             $this->step('Génération de la clé d\'application Laravel');
-            $this->executeRemoteCommand($tenantPath, 'php artisan key:generate --force');
+            $this->executeRemoteCommand($tenantPath, ['php', 'artisan', 'key:generate', '--force']);
 
             // Étape 10: Créer le lien symbolique storage
             $this->step('Création du lien symbolique storage');
-            $this->executeRemoteCommand($tenantPath, 'php artisan storage:link');
+            $this->executeRemoteCommand($tenantPath, ['php', 'artisan', 'storage:link']);
 
             // Étape 11: Exécuter les migrations
             $this->step('Exécution des migrations de base de données');
-            $this->executeRemoteCommand($tenantPath, 'php artisan migrate --force');
+            $this->executeRemoteCommand($tenantPath, ['php', 'artisan', 'migrate', '--force']);
 
             // Étape 12: Exécuter les seeders (si disponibles)
             $this->step('Exécution des seeders (optionnel)');
             try {
-                $this->executeRemoteCommand($tenantPath, 'php artisan db:seed --class=InitialDataSeeder --force');
+                $this->executeRemoteCommand($tenantPath, ['php', 'artisan', 'db:seed', '--class=InitialDataSeeder', '--force']);
             } catch (\Exception $e) {
                 $this->warn('⚠️  Aucun seeder trouvé ou erreur lors du seeding (ignoré)');
             }
 
             // Étape 13: Configurer les permissions
             $this->step('Configuration des permissions des fichiers');
-            $this->executeRemoteCommand($tenantPath, 'chmod -R 775 storage');
-            $this->executeRemoteCommand($tenantPath, 'chmod -R 775 bootstrap/cache');
-            $this->executeRemoteCommand($tenantPath, 'chown -R c2569688c:c2569688c .');
+            $this->executeRemoteCommand($tenantPath, ['chmod', '-R', '775', 'storage']);
+            $this->executeRemoteCommand($tenantPath, ['chmod', '-R', '775', 'bootstrap/cache']);
+            $this->executeRemoteCommand($tenantPath, ['chown', '-R', 'c2569688c:c2569688c', '.']);
 
             // Étape 14: Cache des configurations
             $this->step('Mise en cache des configurations');
-            $this->executeRemoteCommand($tenantPath, 'php artisan config:cache');
-            $this->executeRemoteCommand($tenantPath, 'php artisan route:cache');
+            $this->executeRemoteCommand($tenantPath, ['php', 'artisan', 'config:cache']);
+            $this->executeRemoteCommand($tenantPath, ['php', 'artisan', 'route:cache']);
 
             // Étape 15: Créer le sous-domaine via cPanel UAPI (simulé)
             $this->step("Création du sous-domaine '{$subdomain}.{$this->domaineTenant()}'");
@@ -167,7 +177,7 @@ class TenantProvision extends Command
             ]);
 
             // Récupérer le commit hash
-            $commitHash = trim($this->executeRemoteCommand($tenantPath, 'git rev-parse HEAD', true));
+            $commitHash = trim($this->executeRemoteCommand($tenantPath, ['git', 'rev-parse', 'HEAD'], true));
             $tenant->update([
                 'git_commit_hash' => $commitHash,
                 'last_deployed_at' => now(),
@@ -290,7 +300,7 @@ class TenantProvision extends Command
 
         $this->executeRemoteCommand(
             dirname($path),
-            "git clone -b {$branch} {$repoUrl} " . basename($path)
+            ['git', 'clone', '-b', $branch, '--', $repoUrl, basename($path)]
         );
     }
 
@@ -438,33 +448,68 @@ ENV;
         // exec($certbot);
     }
 
-    private function executeRemoteCommand(string $path, string $command, bool $returnOutput = false): string
+    /**
+     * @param list<string> $command argv — jamais une chaine relue par un shell.
+     */
+    private function executeRemoteCommand(string $path, array $command, bool $returnOutput = false): string
     {
-        $fullCommand = "cd {$path} && {$command}";
+        $libelle = implode(' ', $command);
 
-        // En local (développement)
+        // En local (développement) : argv direct, aucun shell.
         if (app()->environment('local')) {
-            $result = Process::run($fullCommand);
+            $result = Process::path($path)->run($command);
 
             if (!$result->successful()) {
-                throw new \Exception("Commande échouée: {$command}\n{$result->errorOutput()}");
+                throw new \Exception("Commande échouée: {$libelle}\n{$result->errorOutput()}");
             }
 
             return $returnOutput ? $result->output() : '';
         }
 
-        // En production (via SSH)
+        // En production (via SSH) : le shell distant relit une chaine, donc chaque
+        // mot y est cite (CommandeDistante). Le `--` empeche ssh de lire la
+        // destination comme une option.
         $host = env('PRODUCTION_HOST');
         $user = env('PRODUCTION_USER');
-        $sshCommand = "ssh {$user}@{$host} '{$fullCommand}'";
 
-        $result = Process::run($sshCommand);
+        $result = Process::run(['ssh', '--', "{$user}@{$host}", CommandeDistante::construire($path, $command)]);
 
         if (!$result->successful()) {
-            throw new \Exception("Commande SSH échouée: {$command}\n{$result->errorOutput()}");
+            throw new \Exception("Commande SSH échouée: {$libelle}\n{$result->errorOutput()}");
         }
 
         return $returnOutput ? $result->output() : '';
+    }
+
+    /**
+     * Rend null si les identifiants sont admissibles, sinon la raison du refus.
+     *
+     * Le code devient un repertoire, un nom de base `c2569688c_{code}` (64
+     * caracteres max en MySQL, d'ou 54 ici) et l'APP_URL ; le sous-domaine est
+     * une etiquette DNS. Le nom de l'ecole est ecrit entre guillemets dans le
+     * .env : un guillemet ou un saut de ligne y ajouterait des cles (APP_DEBUG=true…).
+     */
+    private function motifDeRefus(mixed $code, mixed $subdomain, mixed $branch, mixed $name): ?string
+    {
+        $etiquette = '/\A[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\z/';
+
+        if (!is_string($code) || strlen($code) > 54 || preg_match($etiquette, $code) !== 1) {
+            return 'code invalide (minuscules, chiffres et tirets, sans tiret en bordure, 54 caractères au plus).';
+        }
+
+        if (!is_string($subdomain) || strlen($subdomain) > 63 || preg_match($etiquette, $subdomain) !== 1) {
+            return 'sous-domaine invalide (minuscules, chiffres et tirets, sans tiret en bordure, 63 caractères au plus).';
+        }
+
+        if (($motif = NomDeBranche::motifDeRefus($branch)) !== null) {
+            return "branche : {$motif}";
+        }
+
+        if (!is_string($name) || trim($name) === '' || preg_match('/["\\\\$\p{Cc}]/u', $name) === 1) {
+            return 'nom d\'établissement invalide (vide, ou contenant « " », « \\ », « $ » ou un caractère de contrôle).';
+        }
+
+        return null;
     }
 
     private function getPlanConfiguration(string $plan): array
