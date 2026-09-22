@@ -1,6 +1,6 @@
 # KLASSCI CARE — Architecture Audit & Implementation Blueprint v1
 
-> Status: **tranche 1 implemented** (Master `5186399`, KLASSCIv2 `c8ff5f8`): instance
+> Status: **tranche 1 implemented** (Master `5186399`…`2d8df92`, KLASSCIv2 `c8ff5f8`…`937a58a`): instance
 > credentials, ticket creation and reading, the support queue, the school's report
 > dialog and its outbox. Tranche 2 (conversation, attachments, screenshot) is next.
 > Sections below describe the design; where the code chose a different name, the code wins.
@@ -17,6 +17,33 @@
 > holds the tenant-side notes.
 
 ---
+
+## Tranche 1 deviations from this blueprint
+
+The sections below are the original design. Tranche 1 departed from it in these places; where
+the two disagree, **this list and the code are right**.
+
+- **Idempotency (§12, §13.3).** No separate `support_idempotency_keys` table and no 7-day purge.
+  The key lives on `support_tickets` itself (`idempotency_key`, `request_hash`), unique on
+  `(tenant_id, idempotency_key)`, kept as long as the ticket. The hash covers category,
+  description, title and reporter id only, **not the context**: a legitimate resend from another
+  page must find its ticket. Same key and same hash replays with 200 and
+  `Idempotent-Replayed: true`; same key and a different hash answers 422
+  `idempotency_key_reused`, which the school turns into a fresh key.
+- **Statuses (§6, §20).** `IN_REVIEW`, `FIX_READY`, `DEPLOYED` and `VERIFYING` are removed: they
+  need the GitHub and deployment integration of later slices. The school-facing status
+  `CORRECTION_DEPLOYEE` goes with them, so the school sees six statuses. A status enters
+  `TicketStateMachine` only when a screen can serve it: `WAITING_CUSTOMER` becomes reachable
+  with tranche 2 (the school can reply).
+- **Transitions (§6).** Transitions are a flat table checked under a row lock. Rejected and
+  Duplicate require a written reason (10 characters, `config/care.php`). Rejected, Duplicate and
+  Closed reopen to `TRIAGED`, not to a separate `REOPENED` status.
+- **Credential scopes (§4.2).** Only `support:create`, `support:read` and `support:update` are
+  issued. `telemetry:send` and `health:read` arrive with the routes that read them.
+- **Security restriction.** `is_security_restricted` is set by the `RestreindreTicket` action
+  (reason required, journaled). Restricted tickets are hidden from the school API and from staff
+  without `support.security.view`, the navigation badge included.
+- **Page title.** Not collected: it can carry a student's name.
 
 ## 0. Executive summary
 
@@ -183,7 +210,7 @@ Fixing the legacy endpoints is tracked separately (ticket 000a) so it can ship i
 | `id`, `tenant_id` | FK tenants |
 | `key_id` | public, 12 chars, indexed. Token format `kc_<key_id>_<secret>` |
 | `secret_hash` | `hash('sha256', $secret)`. High-entropy secrets need no bcrypt; `hash_equals` on lookup by `key_id` |
-| `scopes` (json) | `support:create`, `support:read`, `support:update`, `telemetry:send`, `health:read` |
+| `scopes` (json) | `support:create`, `support:read`, `support:update` (tranche 1; `telemetry:send`, `health:read` later) |
 | `last_used_at`, `last_used_ip`, `expires_at`, `revoked_at` | |
 
 - **Middleware** `AuthentifierInstance`:

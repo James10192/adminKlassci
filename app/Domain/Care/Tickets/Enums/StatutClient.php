@@ -5,7 +5,7 @@ namespace App\Domain\Care\Tickets\Enums;
 /**
  * Ce que l'ecole voit de sa demande.
  *
- * Sept etats, pas vingt : une secretaire n'a pas a savoir qu'une demande est
+ * Six etats, pas vingt : une secretaire n'a pas a savoir qu'une demande est
  * « ESCALATED_ENGINEERING » plutot que « TRIAGED ». Elle a besoin de savoir si
  * on s'en occupe, et si on attend quelque chose d'elle.
  */

@@ -12,8 +12,8 @@ use Illuminate\Validation\Rule;
 /**
  * Valide une soumission d'instance, puis reduit le contexte a sa liste blanche.
  *
- * Les champs connus sont valides strictement ; les cles inconnues du contexte
- * sont ecartees en silence (config/care.php → contexte). L'instance n'est
+ * Les champs connus sont valides strictement ; les extras hors liste blanche
+ * (config/care.php → contexte) sont ecartes, et l'ecart est journalise. L'instance n'est
  * jamais lue ici : elle vient de l'identifiant (AuthentifierInstance).
  */
 class CreerTicketRequest extends FormRequest
@@ -68,17 +68,26 @@ class CreerTicketRequest extends FormRequest
     {
         $v = $this->validated();
 
-        $extras = array_intersect_key($v['context']['extras'] ?? [], array_flip(config('care.contexte.extras_autorises')));
-        $extras = array_filter($extras, fn ($x) => is_scalar($x) || $x === null);
+        // Ecartes plutot que refuses : un signalement vaut mieux sans ses details
+        // qu'absent. Mais un rattrapage muet ne se cherche jamais, donc chaque
+        // ecart laisse une trace (les cles, jamais les valeurs).
+        $bruts = (array) ($v['context']['extras'] ?? []);
+        $extras = array_filter(
+            array_intersect_key($bruts, array_flip(config('care.contexte.extras_autorises'))),
+            fn ($x) => is_scalar($x) || $x === null,
+        );
+        $ecartees = array_keys(array_diff_key($bruts, $extras));
         $octets = strlen(json_encode($extras));
         if ($octets > config('care.limites.extras_octets_max')) {
-            // Ecartes plutot que refuses : un signalement vaut mieux sans ses
-            // details qu'absent. Mais un rattrapage muet ne se cherche jamais.
+            $ecartees = array_keys($bruts);
+            $extras = [];
+        }
+        if ($ecartees !== []) {
             Log::warning('care.contexte.extras_ecartes', [
                 'instance' => $this->attributes->get('care_tenant')?->code,
+                'cles' => array_map(fn ($k) => mb_substr((string) $k, 0, 64), array_slice($ecartees, 0, 20)),
                 'octets' => $octets,
             ]);
-            $extras = [];
         }
 
         if (isset($v['context'])) {

@@ -112,6 +112,17 @@ it('ecarte les cles de contexte hors liste blanche', function () {
     expect(SupportTicket::firstOrFail()->context->extras)->toBe(['semestre' => 1, 'etat_affiche' => 'NO_EVALUATION']);
 });
 
+it('journalise les extras ecartes par leur cle, jamais par leur valeur', function () {
+    \Illuminate\Support\Facades\Log::spy();
+
+    soumettre($this, Support::soumission(['context' => ['extras' => [
+        'semestre' => ['imbrique'], 'cookie' => 'secret',
+    ]]]))->assertCreated();
+
+    \Illuminate\Support\Facades\Log::shouldHaveReceived('warning')->withArgs(fn ($m, $c) => $m === 'care.contexte.extras_ecartes'
+        && $c['cles'] === ['semestre', 'cookie'] && ! str_contains(json_encode($c), 'secret'));
+});
+
 it('valide la soumission', function (array $surcharge, string $champ) {
     soumettre($this, Support::soumission($surcharge))->assertStatus(422)->assertJsonValidationErrors($champ);
 })->with([

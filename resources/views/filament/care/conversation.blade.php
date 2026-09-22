@@ -3,7 +3,7 @@
 @endphp
 <div class="space-y-3">
     @forelse ($messages as $m)
-        @php $public = $m->visibility->value === 'PUBLIC_TO_CUSTOMER'; @endphp
+        @php $public = $m->visibility === \App\Domain\Care\Tickets\Enums\VisibiliteMessage::PublicClient; @endphp
         <div class="rounded-lg border p-3 {{ $public ? 'border-gray-200 bg-white dark:border-white/10 dark:bg-white/5' : 'border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10' }}">
             <div class="mb-1 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                 <span class="font-medium text-gray-700 dark:text-gray-200">{{ $m->author_name ?? 'Système' }}</span>

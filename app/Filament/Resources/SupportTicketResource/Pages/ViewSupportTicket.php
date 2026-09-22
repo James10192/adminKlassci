@@ -55,10 +55,9 @@ class ViewSupportTicket extends ViewRecord
             ->label('Prendre en charge')
             ->icon('heroicon-o-hand-raised')
             ->visible(fn () => Gate::allows('support.tickets.manage') && $this->record->assigned_admin_id !== auth()->id())
-            ->action(function () {
-                app(AssignerTicket::class)->executer($this->record, auth()->user(), auth()->user());
-                Notification::make()->success()->title('Demande assignée à vous.')->send();
-            });
+            ->action(fn () => $this->tenter(
+                fn () => app(AssignerTicket::class)->executer($this->record, auth()->user(), auth()->user()),
+                'Demande assignée à vous.'));
     }
 
     private function actionRepondre(): Actions\Action
@@ -81,9 +80,9 @@ class ViewSupportTicket extends ViewRecord
             ->action(function (array $data) {
                 $visibilite = VisibiliteMessage::from($data['visibilite']);
                 abort_unless(in_array($visibilite, $this->visibilitesAutorisees(), true), 403);
-                app(RepondreTicket::class)->executer($this->record, auth()->user(), $data['corps'], $visibilite);
-                Notification::make()->success()->title($visibilite === VisibiliteMessage::PublicClient
-                    ? "Réponse envoyée à l'école." : 'Note enregistrée.')->send();
+                $this->tenter(
+                    fn () => app(RepondreTicket::class)->executer($this->record, auth()->user(), $data['corps'], $visibilite),
+                    $visibilite === VisibiliteMessage::PublicClient ? "Réponse envoyée à l'école." : 'Note enregistrée.');
             });
     }
 
@@ -157,11 +156,10 @@ class ViewSupportTicket extends ViewRecord
                     ->searchable()
                     ->placeholder('Personne'),
             ])
-            ->action(function (array $data) {
-                app(AssignerTicket::class)->executer($this->record, auth()->user(),
-                    isset($data['admin']) ? User::find($data['admin']) : null);
-                Notification::make()->success()->title('Assignation mise à jour.')->send();
-            });
+            ->action(fn (array $data) => $this->tenter(
+                fn () => app(AssignerTicket::class)->executer($this->record, auth()->user(),
+                    isset($data['admin']) ? User::find($data['admin']) : null),
+                'Assignation mise à jour.'));
     }
 
     private function actionRestreindre(): Actions\Action
@@ -266,6 +264,8 @@ class ViewSupportTicket extends ViewRecord
     {
         try {
             $action();
+            // refresh() recharge aussi les relations deja lues (conversation,
+            // assignee) : sans lui, le dossier montre l'etat d'avant l'action.
             $this->record->refresh();
             Notification::make()->success()->title($succes)->send();
         } catch (TransitionRefusee $e) {

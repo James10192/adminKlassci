@@ -78,7 +78,8 @@ class SupportTicketResource extends Resource
         if (! static::canViewAny()) {
             return null;
         }
-        $n = SupportTicket::where('status', StatutTicket::TriagePending->value)->count();
+        // Par la requete de la ressource : une demande restreinte ne se trahit pas par le badge.
+        $n = static::getEloquentQuery()->where('status', StatutTicket::TriagePending->value)->count();
 
         return $n > 0 ? (string) $n : null;
     }

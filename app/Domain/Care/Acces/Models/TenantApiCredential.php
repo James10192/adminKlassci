@@ -19,13 +19,15 @@ class TenantApiCredential extends Model
 {
     public const PREFIXE = 'kc_';
 
-    /** Les portees connues. Une portee absente de cette liste est refusee a l'emission. */
+    /**
+     * Les portees connues. Une portee absente de cette liste est refusee a l'emission.
+     * Une portee n'y entre que le jour ou une route la lit : telemetry:send et
+     * health:read arriveront avec la telemetrie et le diagnostic.
+     */
     public const PORTEES = [
         'support:create',
         'support:read',
         'support:update',
-        'telemetry:send',
-        'health:read',
     ];
 
     protected $table = 'tenant_api_credentials';

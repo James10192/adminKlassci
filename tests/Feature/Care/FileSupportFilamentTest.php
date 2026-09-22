@@ -43,6 +43,23 @@ it('repond a l ecole depuis le dossier en choisissant la visibilite', function (
     expect($this->ticket->messages()->first()->visibility)->toBe(VisibiliteMessage::PublicClient);
 });
 
+it('montre la reponse dans le dossier sans rechargement', function () {
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->callAction('repondre', ['visibilite' => VisibiliteMessage::PublicClient->value, 'corps' => 'Réponse visible tout de suite.'])
+        ->assertSee('Réponse visible tout de suite.');
+});
+
+it('ne trahit pas une demande restreinte par le badge de navigation', function () {
+    $this->actingAs($this->support);
+    expect(SupportTicketResource::getNavigationBadge())->toBe('1');
+
+    $this->ticket->forceFill(['is_security_restricted' => true])->save();
+
+    expect(SupportTicketResource::getNavigationBadge())->toBeNull();
+});
+
 it('refuse une reponse sans visibilite choisie', function () {
     $this->actingAs($this->support);
 
