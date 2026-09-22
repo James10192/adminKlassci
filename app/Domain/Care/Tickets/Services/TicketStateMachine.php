@@ -16,8 +16,9 @@ use Illuminate\Support\Facades\DB;
  * une ligne dans le journal.
  *
  * Un statut n'entre dans cette table que le jour ou un ecran sait le servir.
- * WAITING_CUSTOMER, par exemple, montre a l'ecole « Action requise » : il
- * n'est une cible qu'a partir du moment ou l'ecole peut repondre.
+ * WAITING_CUSTOMER montre a l'ecole « Action requise » : il est une cible
+ * depuis que l'ecole peut repondre (RepondreParLEcole), et sa reponse le
+ * ramene en WAITING_SUPPORT.
  */
 class TicketStateMachine
 {
@@ -31,7 +32,7 @@ class TicketStateMachine
     /** @return array<string, list<S>> */
     public static function transitions(): array
     {
-        $traitement = [S::Triaged, S::WaitingSupport, S::Confirmed,
+        $traitement = [S::Triaged, S::WaitingSupport, S::WaitingCustomer, S::Confirmed,
             S::LinkedToKnownIssue, S::EscalatedProduct, S::EscalatedEngineering,
             S::InProgress, S::Resolved, S::Rejected, S::Duplicate];
 

@@ -60,6 +60,17 @@ it('ne trahit pas une demande restreinte par le badge de navigation', function (
     expect(SupportTicketResource::getNavigationBadge())->toBeNull();
 });
 
+it('pose la demande en attente de l ecole quand le support lui pose une question', function () {
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->callAction('repondre', ['visibilite' => VisibiliteMessage::PublicClient->value, 'corps' => 'Quelle classe ?', 'attendre_ecole' => true])
+        ->assertHasNoActionErrors();
+
+    expect($this->ticket->fresh()->status)->toBe(StatutTicket::WaitingCustomer);
+    Livewire::test(ListSupportTickets::class)->set('activeTab', 'attente_client')->assertCanSeeTableRecords([$this->ticket]);
+});
+
 it('refuse une reponse sans visibilite choisie', function () {
     $this->actingAs($this->support);
 

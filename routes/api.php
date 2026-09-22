@@ -39,6 +39,11 @@ Route::prefix('v1/support')->name('api.care.')->group(function () {
         ->middleware(['care.instance:support:create', 'throttle:care-ecriture'])
         ->name('tickets.store');
 
+    Route::post('/tickets/{reference}/messages', [\App\Http\Controllers\API\Care\TicketController::class, 'repondre'])
+        ->where('reference', 'KC-\d{4}-\d{6,}')
+        ->middleware(['care.instance:support:update', 'throttle:care-ecriture'])
+        ->name('tickets.messages.store');
+
     Route::middleware(['care.instance:support:read', 'throttle:care-lecture'])->group(function () {
         Route::get('/bootstrap', \App\Http\Controllers\API\Care\BootstrapController::class)->name('bootstrap');
         Route::get('/tickets', [\App\Http\Controllers\API\Care\TicketController::class, 'index'])->name('tickets.index');

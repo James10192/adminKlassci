@@ -22,6 +22,7 @@ use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -74,15 +75,28 @@ class ViewSupportTicket extends ViewRecord
                     ->required()
                     ->inline()
                     ->options(fn () => collect($this->visibilitesAutorisees())->mapWithKeys(fn ($v) => [$v->value => $v->libelle()]))
-                    ->colors([VisibiliteMessage::PublicClient->value => 'warning']),
+                    ->colors([VisibiliteMessage::PublicClient->value => 'warning'])
+                    ->live(),
                 Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
+                // Une question posee a l'ecole : la demande passe en « Action requise » chez elle,
+                // et sa reponse la ramene d'elle-meme en attente support.
+                Forms\Components\Toggle::make('attendre_ecole')
+                    ->label("J'attends une réponse de l'école")
+                    ->visible(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
+                        && Gate::allows('support.tickets.manage')
+                        && app(TicketStateMachine::class)->peut($this->record->status, StatutTicket::WaitingCustomer)),
             ])
             ->action(function (array $data) {
                 $visibilite = VisibiliteMessage::from($data['visibilite']);
                 abort_unless(in_array($visibilite, $this->visibilitesAutorisees(), true), 403);
-                $this->tenter(
-                    fn () => app(RepondreTicket::class)->executer($this->record, auth()->user(), $data['corps'], $visibilite),
-                    $visibilite === VisibiliteMessage::PublicClient ? "Réponse envoyée à l'école." : 'Note enregistrée.');
+                $attendre = $visibilite === VisibiliteMessage::PublicClient && ! empty($data['attendre_ecole'])
+                    && Gate::allows('support.tickets.manage');
+                $this->tenter(fn () => DB::transaction(function () use ($data, $visibilite, $attendre) {
+                    app(RepondreTicket::class)->executer($this->record, auth()->user(), $data['corps'], $visibilite);
+                    if ($attendre) {
+                        app(TicketStateMachine::class)->franchir($this->record, StatutTicket::WaitingCustomer, Acteur::personnel(auth()->user()));
+                    }
+                }), $visibilite === VisibiliteMessage::PublicClient ? "Réponse envoyée à l'école." : 'Note enregistrée.');
             });
     }
 

@@ -11,7 +11,7 @@ class SupportTicketMessage extends Model
 {
     protected $table = 'support_ticket_messages';
 
-    protected $fillable = ['ticket_id', 'author_type', 'author_ref', 'author_name', 'visibility', 'body'];
+    protected $fillable = ['ticket_id', 'author_type', 'author_ref', 'author_name', 'visibility', 'body', 'client_key'];
 
     protected function casts(): array
     {

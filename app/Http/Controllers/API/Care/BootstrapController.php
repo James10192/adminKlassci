@@ -34,9 +34,12 @@ class BootstrapController extends Controller
             'api_version' => config('care.api_version'),
             'instance' => $tenant->code,
             'fonctionnalites' => collect($connues)->mapWithKeys(fn ($f) => [$f => in_array($f, $actives, true)]),
+            // L'instance masque ce que son identifiant ne permet pas (repondre sans support:update).
+            'portees' => array_values($request->attributes->get('care_credential')->scopes ?? []),
             'limites' => [
                 'description_min' => $l['description_min'],
                 'description_max' => $l['description_max'],
+                'reponse_min' => $l['reponse_min'],
             ],
         ]);
     }

@@ -21,7 +21,7 @@ class EmettreIdentifiantInstance extends Command
 {
     protected $signature = 'care:identifiant
         {tenant : Code de l\'instance}
-        {--portees=support:create,support:read : Portées, séparées par des virgules}
+        {--portees=support:create,support:read,support:update : Portées, séparées par des virgules}
         {--libelle= : Libellé libre (ex. « rotation septembre »)}
         {--expire= : Durée de validité en jours (sans option : n\'expire pas)}
         {--revoquer= : key_id d\'un identifiant à révoquer au lieu d\'en émettre un}';

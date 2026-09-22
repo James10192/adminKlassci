@@ -49,6 +49,8 @@ return [
 
     'limites' => [
         'description_min' => 10,
+        // Une reponse peut etre courte (« Oui, en 2A. ») : pas le minimum d'un signalement.
+        'reponse_min' => 2,
         // Motif ecrit exige pour rejeter, marquer en doublon, ou changer une
         // severite ou une priorite deja posee.
         'motif_min' => 10,

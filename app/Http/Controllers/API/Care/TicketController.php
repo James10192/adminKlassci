@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\API\Care;
 
 use App\Domain\Care\Tickets\Actions\CreerTicket;
+use App\Domain\Care\Tickets\Actions\RepondreParLEcole;
 use App\Domain\Care\Tickets\DTO\SoumissionTicket;
 use App\Domain\Care\Tickets\Exceptions\CleIdempotenceReutilisee;
+use App\Domain\Care\Tickets\Exceptions\DemandeClose;
 use App\Domain\Care\Tickets\Models\SupportTicket;
 use App\Domain\Care\Tickets\Services\ProjectionClient;
 use App\Http\Controllers\Controller;
@@ -31,12 +33,9 @@ class TicketController extends Controller
 
     public function store(CreerTicketRequest $request, CreerTicket $creer): JsonResponse
     {
-        $cle = (string) $request->header('Idempotency-Key', '');
-        if (! preg_match('/^[A-Za-z0-9._:-]{8,64}$/', $cle)) {
-            return response()->json([
-                'error' => 'idempotency_key_required',
-                'message' => 'En-tête Idempotency-Key requis (8 à 64 caractères).',
-            ], 400);
+        $cle = $this->cle($request);
+        if ($cle === null) {
+            return $this->cleRequise();
         }
 
         try {
@@ -79,6 +78,55 @@ class TicketController extends Controller
         abort_if($ticket === null, 404);
 
         return response()->json($this->projection->detail($ticket));
+    }
+
+    /**
+     * L'ecole repond sur une demande qu'elle a le droit de lire : meme bornage
+     * que show(), donc une reference d'une autre ecole rend 404.
+     */
+    public function repondre(Request $request, string $reference, RepondreParLEcole $repondre): JsonResponse
+    {
+        $cle = $this->cle($request);
+        if ($cle === null) {
+            return $this->cleRequise();
+        }
+        $l = config('care.limites');
+        $v = $request->validate([
+            'body' => ['required', 'string', 'min:'.$l['reponse_min'], 'max:'.$l['description_max']],
+            // Le nom affiche sous la reponse ; qui repond est le rapporteur de la requete.
+            'author_name' => ['nullable', 'string', 'max:160'],
+        ]);
+        $filtres = $this->filtres($request);
+
+        $ticket = $this->requete($request, $filtres)->where('reference', $reference)->first();
+        abort_if($ticket === null, 404);
+
+        try {
+            $rejoue = $repondre->executer($ticket, (int) $filtres['reporter'], $v['author_name'] ?? null, $v['body'], $cle);
+        } catch (CleIdempotenceReutilisee $e) {
+            return response()->json(['error' => 'idempotency_key_reused', 'message' => $e->getMessage()], 422);
+        } catch (DemandeClose $e) {
+            return response()->json(['error' => 'ticket_closed', 'message' => $e->getMessage()], 409);
+        }
+
+        return response()
+            ->json($this->projection->detail($ticket->fresh('messagesPublics')), $rejoue ? 200 : 201)
+            ->header('Idempotent-Replayed', $rejoue ? 'true' : 'false');
+    }
+
+    private function cle(Request $request): ?string
+    {
+        $cle = (string) $request->header('Idempotency-Key', '');
+
+        return preg_match('/^[A-Za-z0-9._:-]{8,64}$/', $cle) ? $cle : null;
+    }
+
+    private function cleRequise(): JsonResponse
+    {
+        return response()->json([
+            'error' => 'idempotency_key_required',
+            'message' => 'En-tête Idempotency-Key requis (8 à 64 caractères).',
+        ], 400);
     }
 
     private function filtres(Request $request): array

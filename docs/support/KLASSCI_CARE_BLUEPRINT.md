@@ -18,9 +18,9 @@
 
 ---
 
-## Tranche 1 deviations from this blueprint
+## Deviations from this blueprint (tranches 1 and 2)
 
-The sections below are the original design. Tranche 1 departed from it in these places; where
+The sections below are the original design. The implementation departed from it in these places; where
 the two disagree, **this list and the code are right**.
 
 - **Idempotency (§12, §13.3).** No separate `support_idempotency_keys` table and no 7-day purge.
@@ -44,6 +44,13 @@ the two disagree, **this list and the code are right**.
   (reason required, journaled). Restricted tickets are hidden from the school API and from staff
   without `support.security.view`, the navigation badge included.
 - **Page title.** Not collected: it can carry a student's name.
+- **School reply (tranche 2).** `POST /tickets/{reference}/messages?reporter=<id>&scope=`,
+  `Idempotency-Key` required, body `{body, author_name}`. Same scoping as reading, so a
+  reference the school cannot read answers 404. Replying on `WAITING_CUSTOMER` moves the
+  ticket to `WAITING_SUPPORT`; on `RESOLVED` it reopens to `TRIAGED`; on a closed, rejected or
+  duplicate ticket it answers 409 `ticket_closed`. Staff set `WAITING_CUSTOMER` with the
+  « J'attends une réponse de l'école » toggle when replying. `/bootstrap` also returns the
+  credential's `portees`, so the school hides what its credential cannot do.
 
 ## 0. Executive summary
 
