@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Domain\Exploitation\Sauvegarde\CoffreSauvegarde;
 use App\Domain\Exploitation\Sauvegarde\PipelineRestauration;
+use App\Domain\Exploitation\Sauvegarde\SceauSauvegarde;
 use App\Models\Tenant;
 use App\Models\TenantBackup as TenantBackupModel;
 use App\Models\VerificationRestauration;
@@ -105,6 +106,24 @@ class TenantVerifierRestauration extends Command
             return $this->conclure($instance, $sauvegarde, 'echouee', 'archive chiffrée mais aucune clé configurée', 0, [], 0);
         }
 
+        // Le sceau d'abord, avant d'écrire la moindre ligne. Une archive
+        // modifiée se déchiffre quand même : sans cette vérification, on
+        // injecterait dans une base ce qu'un tiers a voulu y mettre.
+        $avertissement = null;
+
+        if ($chiffree) {
+            $refus = $this->raisonDeRefuserLeSceau($sauvegarde, $archive);
+
+            if ($refus !== null) {
+                return $this->conclure($instance, $sauvegarde, 'echouee', $refus, 0, [], 0);
+            }
+
+            if (! SceauSauvegarde::existe($archive)) {
+                $avertissement = 'archive antérieure au scellement : son intégrité n\'a pas pu être vérifiée';
+                $this->line("    <fg=yellow>{$avertissement}</>");
+            }
+        }
+
         $baseEssai = PipelineRestauration::baseEssai($instance->database_name);
 
         // La ceinture, en plus des bretelles. `baseEssai` produit toujours un
@@ -147,7 +166,7 @@ class TenantVerifierRestauration extends Command
                 return $this->conclure($instance, $sauvegarde, 'echouee', 'la restauration a abouti sur une base vide', 0, [], (int) (microtime(true) - $debut));
             }
 
-            return $this->conclure($instance, $sauvegarde, 'reussie', null, $tables, $lignes, (int) (microtime(true) - $debut));
+            return $this->conclure($instance, $sauvegarde, 'reussie', $avertissement, $tables, $lignes, (int) (microtime(true) - $debut));
         } finally {
             if ($fichierOptions !== null && ! $this->option('garder')) {
                 exec(PipelineRestauration::commandeSupprimerBase($fichierOptions, $baseEssai) . ' 2>&1');
@@ -156,6 +175,29 @@ class TenantVerifierRestauration extends Command
             CoffreSauvegarde::effacerSecret($fichierOptions);
             CoffreSauvegarde::effacerSecret($fichierCle);
         }
+    }
+
+    /**
+     * Pourquoi refuser de relire une archive chiffrée, ou `null`.
+     *
+     * Trois cas. Un sceau présent doit tenir. Un sceau absent sur une
+     * sauvegarde marquée scellée à sa création veut dire qu'on l'a retiré —
+     * supprimer le fichier ne doit pas suffire à faire passer une archive
+     * modifiée pour une archive ancienne. Reste la sauvegarde prise avant le
+     * scellement : on la relit, parce qu'une restauration impossible coûte
+     * plus cher qu'une restauration non vérifiée, mais on le dit.
+     */
+    private function raisonDeRefuserLeSceau(TenantBackupModel $sauvegarde, string $archive): ?string
+    {
+        if (SceauSauvegarde::existe($archive)) {
+            $refus = SceauSauvegarde::raisonDeRefuser($archive, CoffreSauvegarde::cle());
+
+            return $refus === null ? null : "archive refusée : {$refus}";
+        }
+
+        return $sauvegarde->est_authentifie === true
+            ? 'archive refusée : le sceau posé à sa création a disparu'
+            : null;
     }
 
     /**

@@ -22,6 +22,7 @@ class TenantBackup extends Model
         'expires_at',
         'created_by_user_id',
         'est_chiffre',
+        'est_authentifie',
         'copie_hors_site',
         'copie_hors_site_at',
     ];
@@ -33,6 +34,8 @@ class TenantBackup extends Model
         // colonne n'ont jamais ete ni chiffrees ni copiees, et les marquer
         // `false` serait aussi faux que les marquer `true`. Nul ne sait.
         'est_chiffre' => 'boolean',
+        // Meme logique : `null` pour une sauvegarde prise avant le scellement.
+        'est_authentifie' => 'boolean',
         'copie_hors_site_at' => 'datetime',
     ];
 
