@@ -18,3 +18,8 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 - `tenant:deploy` vérifie que la branche existe sur origin (`git ls-remote`) avant la mise en maintenance.
 - Workflow GitHub `deploy-tenant.yml` : les entrées du formulaire ne sont plus collées dans le script
   (passage par `env:`, charge utile construite par `jq`).
+- `tenant:provision` ne relit plus aucune valeur dans un shell local : commandes en argv. En production,
+  la commande transmise à ssh est citée mot par mot (`App\Support\Shell\CommandeDistante`).
+- `tenant:provision` refuse avant toute écriture un code ou un sous-domaine hors étiquette DNS
+  (code limité à 54 caractères pour tenir dans un nom de base MySQL), et un nom d'établissement contenant
+  `"`, `\`, `$` ou un caractère de contrôle, qui aurait pu ajouter des clés au `.env` de l'école.
