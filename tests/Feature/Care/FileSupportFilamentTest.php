@@ -59,3 +59,15 @@ it('change le statut par la machine a etats', function () {
 
     expect($this->ticket->fresh()->status)->toBe(StatutTicket::Triaged);
 });
+
+it('affiche tout le contexte capte dans le dossier, pas seulement les colonnes de la liste', function () {
+    // La liste ne charge que quatre colonnes du contexte. Le dossier reutilisait
+    // cette requete : page, navigateur et ecran s'affichaient vides alors qu'ils
+    // etaient en base.
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->assertSee('/esbtp/notes')
+        ->assertSee('390x844')
+        ->assertSee('Chrome 128');
+});

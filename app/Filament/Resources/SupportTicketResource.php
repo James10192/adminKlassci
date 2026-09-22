@@ -69,7 +69,7 @@ class SupportTicketResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->with(['tenant:id,code,name', 'assignee:id,name', 'context:id,ticket_id,module,route_name'])
+            ->with(['tenant:id,code,name', 'assignee:id,name'])
             ->when(! Gate::allows('support.security.view'), fn ($q) => $q->where('is_security_restricted', false));
     }
 
@@ -101,6 +101,9 @@ class SupportTicketResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            // Le contexte est reduit aux colonnes de la file, et ici seulement :
+            // pose dans getEloquentQuery(), il vidait aussi le dossier.
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('context:id,ticket_id,module,route_name'))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('reference')->label('Réf.')->searchable()->copyable()->fontFamily('mono'),
