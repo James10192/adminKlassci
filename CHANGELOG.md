@@ -23,3 +23,11 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 - `tenant:provision` refuse avant toute écriture un code ou un sous-domaine hors étiquette DNS
   (code limité à 54 caractères pour tenir dans un nom de base MySQL), et un nom d'établissement contenant
   `"`, `\`, `$` ou un caractère de contrôle, qui aurait pu ajouter des clés au `.env` de l'école.
+- Archives de sauvegarde authentifiées. Le chiffrement AES-256-CBC n'empêchait pas de modifier une
+  archive sans la clé : elle se déchiffrait quand même. Chaque archive chiffrée reçoit désormais un
+  sceau HMAC-SHA256 (fichier `.sceau`, copié hors site avec elle), calculé avec une clé dérivée de
+  `SAUVEGARDE_CLE` et lié au nom du fichier (`App\Domain\Exploitation\Sauvegarde\SceauSauvegarde`).
+- `tenant:verifier-restauration` vérifie le sceau avant de déchiffrer, et refuse une archive modifiée
+  ou une sauvegarde scellée dont le sceau a disparu (colonne `tenant_backups.est_authentifie`).
+  Les archives prises avant le scellement se relisent encore, avec un avertissement.
+

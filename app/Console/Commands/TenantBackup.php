@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Tenant;
 use App\Domain\Exploitation\Sauvegarde\CoffreSauvegarde;
 use App\Domain\Exploitation\Sauvegarde\PipelineSauvegarde;
+use App\Domain\Exploitation\Sauvegarde\SceauSauvegarde;
 use App\Models\TenantBackup as TenantBackupModel;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -137,6 +138,12 @@ class TenantBackup extends Command
                 if ($depot !== null) {
                     $horsSite[] = $depot;
                 }
+
+                // Le sceau voyage avec l'archive : une copie hors site qu'on ne
+                // peut pas authentifier est une copie qu'on relirait à l'aveugle.
+                if (SceauSauvegarde::existe($fichier)) {
+                    CoffreSauvegarde::deposer(SceauSauvegarde::chemin($fichier), $tenant->code);
+                }
             }
 
             $backup->update([
@@ -144,6 +151,10 @@ class TenantBackup extends Command
                 'storage_backup_path' => $storageBackupPath,
                 'size_bytes' => $totalSize,
                 'est_chiffre' => CoffreSauvegarde::cle() !== null,
+                // Chaque archive chiffrée est scellée dans la foulée : les deux
+                // vont ensemble, et une archive en clair n'a pas de clé pour
+                // être scellée.
+                'est_authentifie' => CoffreSauvegarde::cle() !== null,
                 'copie_hors_site' => $horsSite === [] ? null : implode(', ', $horsSite),
                 'copie_hors_site_at' => $horsSite === [] ? null : now(),
                 'status' => 'completed',
@@ -233,6 +244,10 @@ class TenantBackup extends Command
             throw new \Exception("Sauvegarde de la base inutilisable : {$doute}");
         }
 
+        if ($chiffre) {
+            SceauSauvegarde::sceller($backupFile, $cle);
+        }
+
         return $backupFile;
     }
 
@@ -274,6 +289,10 @@ class TenantBackup extends Command
 
         if ($doute !== null) {
             throw new \Exception("Sauvegarde des fichiers inutilisable : {$doute}");
+        }
+
+        if ($chiffre) {
+            SceauSauvegarde::sceller($backupFile, $cle);
         }
 
         return $backupFile;

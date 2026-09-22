@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Domain\Exploitation\Sauvegarde\SceauSauvegarde;
 use App\Models\TenantBackup;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
@@ -127,6 +128,12 @@ class CleanupOldBackups extends Command
             $backup->database_backup_path,
             $backup->storage_backup_path,
         ]);
+
+        // Le sceau d'une archive part avec elle : laissé seul, il ne scelle
+        // plus rien et encombre le dossier.
+        foreach (array_filter([$backup->database_backup_path, $backup->storage_backup_path]) as $archive) {
+            $paths[] = SceauSauvegarde::chemin($archive);
+        }
 
         foreach ($paths as $path) {
             if (!file_exists($path) && !is_dir($path)) {
