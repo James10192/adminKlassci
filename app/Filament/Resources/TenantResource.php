@@ -45,6 +45,25 @@ class TenantResource extends Resource
         return 'success';
     }
 
+    /**
+     * Les secrets masques par Tenant::$hidden, a reinjecter dans le formulaire.
+     *
+     * Filament remplit ses formulaires via attributesToArray(), qui respecte
+     * $hidden : sans ce complement, le champ credentials (requis) s'afficherait
+     * vide et le token API disparaitrait de la page de detail.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function secretsPourFormulaire(Tenant $tenant, array $data): array
+    {
+        return [
+            ...$data,
+            'database_credentials' => $tenant->database_credentials,
+            'api_token' => $tenant->api_token,
+        ];
+    }
+
     public static function form(Form $form): Form
     {
         return $form

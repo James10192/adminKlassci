@@ -17,6 +17,14 @@ class ViewTenant extends EditRecord
      */
     public bool $isEditing = false;
 
+    /**
+     * Voir TenantResource::secretsPourFormulaire() : $hidden les retire du remplissage.
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        return TenantResource::secretsPourFormulaire($this->getRecord(), $data);
+    }
+
     public function getTitle(): string
     {
         return $this->record->name;

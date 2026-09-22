@@ -10,6 +10,14 @@ class EditTenant extends EditRecord
 {
     protected static string $resource = TenantResource::class;
 
+    /**
+     * Voir TenantResource::secretsPourFormulaire() : $hidden les retire du remplissage.
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        return TenantResource::secretsPourFormulaire($this->getRecord(), $data);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
