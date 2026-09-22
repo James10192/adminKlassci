@@ -49,7 +49,7 @@ class Tenant extends Model
 
     /**
      * Secrets exclus de toArray() / JSON. Les pages Filament qui les editent
-     * les reinjectent explicitement (TenantResource::secretsPourFormulaire()),
+     * les reinjectent explicitement (trait ReinjecteLesSecretsDuTenant),
      * puisque fillForm() passe par attributesToArray(), qui respecte $hidden.
      */
     protected $hidden = [

@@ -23,11 +23,14 @@ class TenantConnectionManager
         // Récupérer les credentials depuis le tenant
         $credentials = $tenant->database_credentials;
 
-        // Jamais les identifiants eux-memes dans le journal : ni mot de passe,
-        // ni nom d'utilisateur. Le code, l'hote et la base suffisent a situer
-        // le probleme ; la presence des champs dit ce qui manque.
+        // Cette ligne ne journalise jamais les identifiants eux-memes : ni mot
+        // de passe, ni nom d'utilisateur. Le code, l'hote et la base situent le
+        // probleme ; le type distingue un tableau d'une chaine JSON doublement
+        // encodee (incident Filament Textarea) ; la presence des champs dit ce
+        // qui manque.
         Log::debug("Checking credentials for tenant {$tenant->code}", [
             'tenant' => $tenant->code,
+            'credentials_type' => gettype($credentials),
             'host' => is_array($credentials) ? ($credentials['host'] ?? null) : null,
             'database' => $tenant->database_name,
             'has_host' => isset($credentials['host']),

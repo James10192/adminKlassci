@@ -3,20 +3,15 @@
 namespace App\Filament\Resources\TenantResource\Pages;
 
 use App\Filament\Resources\TenantResource;
+use App\Filament\Resources\TenantResource\Concerns\ReinjecteLesSecretsDuTenant;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
 
 class EditTenant extends EditRecord
 {
-    protected static string $resource = TenantResource::class;
+    use ReinjecteLesSecretsDuTenant;
 
-    /**
-     * Voir TenantResource::secretsPourFormulaire() : $hidden les retire du remplissage.
-     */
-    protected function mutateFormDataBeforeFill(array $data): array
-    {
-        return TenantResource::secretsPourFormulaire($this->getRecord(), $data);
-    }
+    protected static string $resource = TenantResource::class;
 
     protected function getHeaderActions(): array
     {

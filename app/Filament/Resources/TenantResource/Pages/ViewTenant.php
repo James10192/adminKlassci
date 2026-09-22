@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TenantResource\Pages;
 
 use App\Filament\Resources\TenantResource;
+use App\Filament\Resources\TenantResource\Concerns\ReinjecteLesSecretsDuTenant;
 use App\Support\SubscriptionCountdown;
 use Filament\Actions;
 use Filament\Resources\Pages\EditRecord;
@@ -10,20 +11,14 @@ use Filament\Notifications\Notification;
 
 class ViewTenant extends EditRecord
 {
+    use ReinjecteLesSecretsDuTenant;
+
     protected static string $resource = TenantResource::class;
 
     /**
      * Mode édition inline : false = lecture seule, true = édition active
      */
     public bool $isEditing = false;
-
-    /**
-     * Voir TenantResource::secretsPourFormulaire() : $hidden les retire du remplissage.
-     */
-    protected function mutateFormDataBeforeFill(array $data): array
-    {
-        return TenantResource::secretsPourFormulaire($this->getRecord(), $data);
-    }
 
     public function getTitle(): string
     {

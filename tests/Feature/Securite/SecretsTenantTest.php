@@ -6,8 +6,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\TenantConnectionManager;
 use Filament\Facades\Filament;
-use Illuminate\Log\Events\MessageLogged;
-use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Livewire\Livewire;
 
 /**
@@ -55,23 +54,25 @@ it('n expose ni api_token ni database_credentials a la serialisation', function 
 });
 
 it('ne journalise ni le mot de passe ni l utilisateur de la base', function () {
-    // On ecoute ce qui part reellement vers les canaux, quel que soit le niveau
-    // configure : MessageLogged est emis pour chaque appel, meme filtre ensuite.
-    $journalise = [];
-    Event::listen(MessageLogged::class, function (MessageLogged $e) use (&$journalise) {
-        $journalise[] = $e->message.' '.json_encode($e->context);
-    });
+    // Log::spy() plutot qu'un ecouteur MessageLogged : Laravel n'emet pas
+    // l'evenement pour un niveau que le canal ne traite pas. Avec LOG_LEVEL=info,
+    // la ligne debug visee ne serait jamais captee et le test passerait sur
+    // l'ancien code.
+    Log::spy();
 
     app(TenantConnectionManager::class)->createConnection(tenantAvecSecrets());
 
-    $journalise = implode("\n", $journalise);
+    // On vise la ligne debug elle-meme, pas « un journal quelconque » : le
+    // Log::info de connexion porte aussi le code et l'hote.
+    Log::shouldHaveReceived('debug')->once()->withArgs(function ($message, $contexte = []) {
+        $tout = $message.' '.json_encode($contexte);
 
-    // Le journal doit avoir ete ecrit : un test qui ne capte rien ne prouve rien.
-    expect($journalise)->toContain('secret-test')->toContain('db.example.test');
-
-    expect($journalise)
-        ->not->toContain('mot-de-passe-sensible')
-        ->not->toContain('utilisateur-sensible');
+        return str_contains($message, 'Checking credentials')
+            && str_contains($tout, 'secret-test')
+            && str_contains($tout, 'db.example.test')
+            && ! str_contains($tout, 'mot-de-passe-sensible')
+            && ! str_contains($tout, 'utilisateur-sensible');
+    });
 });
 
 it('garde les secrets dans les formulaires Filament malgre $hidden', function (string $page) {
