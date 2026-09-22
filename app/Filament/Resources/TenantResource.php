@@ -9,6 +9,7 @@ use App\Filament\Resources\TenantResource\RelationManagers;
 use App\Models\Group;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
+use App\Rules\NomDeBrancheGit;
 use App\Support\SubscriptionCountdown;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -179,6 +180,7 @@ class TenantResource extends Resource
                                                 ->mapWithKeys(fn ($b) => [$b => $b])
                                                 ->toArray())
                                             ->helperText('Branches chargées depuis GitHub · KLASSCIv2')
+                                            ->rules([new NomDeBrancheGit()])
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
 
                                         Forms\Components\TextInput::make('git_commit_hash')

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Models\TenantActivityLog;
+use App\Support\Git\NomDeBranche;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Process;
@@ -41,6 +42,13 @@ class TenantProvision extends Command
         $adminEmail = $this->option('admin-email') ?: $this->ask('Email administrateur');
         $adminName = $this->option('admin-name') ?: $this->ask('Nom administrateur');
         $timezone = (string) $this->option('timezone');
+
+        // Le nom de branche finit dans `git clone -b …`, relu par un shell (et par
+        // ssh en production). Meme garde que tenant:deploy, avant toute action.
+        if (($motif = NomDeBranche::motifDeRefus($branch)) !== null) {
+            $this->error("❌ Branche refusée : {$motif}");
+            return 1;
+        }
 
         // Le fuseau est le SEUL reglage qui ne se rattrape pas apres coup :
         // Laravel ecrit les horodatages dedans, donc le changer sur une
