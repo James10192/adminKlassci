@@ -123,8 +123,12 @@ class CleanupOldBackups extends Command
     {
         $deleted = true;
 
+        // `backup_path` désigne le dossier de l'instance, celui où vivent TOUTES
+        // ses sauvegardes. Le supprimer pour une seule archive expirée effaçait
+        // aussi celle de la nuit : le nettoyage de 3 h détruisait la sauvegarde
+        // de 2 h. On ne supprime donc que des fichiers, jamais ce dossier.
         $paths = array_filter([
-            $backup->backup_path,
+            is_file((string) $backup->backup_path) ? $backup->backup_path : null,
             $backup->database_backup_path,
             $backup->storage_backup_path,
         ]);

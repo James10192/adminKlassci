@@ -8,6 +8,11 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 
 ## Septembre 2026
 
+### Corrections
+- `tenant:cleanup-backups` ne supprime plus le dossier de sauvegardes d'une instance. `backup_path`
+  désigne ce dossier, et le nettoyage le supprimait en entier pour une seule archive expirée :
+  celle de la nuit partait avec. Seuls les fichiers de la sauvegarde expirée (et leur sceau) sont retirés.
+
 ### Sécurité
 - Injection de commande par le nom de branche fermée sur le déploiement des tenants.
   `tenant:deploy` n'exécute plus aucune commande dans un shell : git, composer, artisan et chmod
