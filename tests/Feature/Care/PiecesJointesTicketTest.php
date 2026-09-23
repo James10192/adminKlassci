@@ -167,6 +167,30 @@ function pdfAvecObjetCacheDansUneImage(): string
     return pdfValide($corps, '', [2 => strpos(pdfValide($corps), '2 0 obj << /Open')]);
 }
 
+/**
+ * Deux tables, comme une mise a jour incrementale. La plus ancienne (A) declare le
+ * catalogue 9 et l'image 1 ; la plus recente (B), celle que designe startxref, ne
+ * declare que l'image, dont les donnees imitent un second catalogue 9 porteur de
+ * JavaScript. `$trailerB` complete le trailer de B : sans `/Prev`, la chaine du
+ * lecteur ne mene pas au catalogue, et il reconstruit — trouvant le faux.
+ */
+function pdfADeuxTables(string $trailerB, string $entreesB = ''): string
+{
+    $faux = '9 0 obj << /Type /Catalog /OpenAction << /S /JavaScript /JS (x) >> >> endobj';
+    $pdf = "%PDF-1.5\n";
+    $catalogue = strlen($pdf);
+    $pdf .= "9 0 obj\n<< /Type /Catalog >>\nendobj\n";
+    $image = strlen($pdf);
+    $pdf .= "1 0 obj\n".flux('/Type /XObject /Subtype /Image /Filter /DCTDecode', "\xFF\xD8 {$faux} \xFF\xD9")."\nendobj\n";
+    $a = strlen($pdf);
+    $pdf .= "xref\n1 1\n".sprintf('%010d', $image)." 00000 n \n9 1\n".sprintf('%010d', $catalogue)." 00000 n \n";
+    $pdf .= "trailer << /Size 10 /Root 9 0 R >>\n";
+    $b = strlen($pdf);
+    $pdf .= "xref\n1 1\n".sprintf('%010d', $image)." 00000 n \n{$entreesB}";
+
+    return $pdf.'trailer << /Size 10 /Root 9 0 R '.str_replace(['{A}', '{B}'], [$a, $b], $trailerB).">>\nstartxref\n{$b}\n%%EOF";
+}
+
 /** Un flux deflate brut dont les premiers octets, stockes tels quels, contiennent le mot `endstream`. */
 function deflateAvecEndstreamLitteral(string $objets): string
 {
@@ -349,6 +373,10 @@ it('refuse un PDF qu il ne sait pas lire au lieu de l accepter', function (strin
     'sans table xref' => fn () => "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF",
     'predicteur qui masque les noms' => fn () => pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 >>', gzcompress(avecPredicteurUp('<< /S /JavaScript >>', 4))),
     'flate illisible' => fn () => pdfAvecFlux('/Filter /FlateDecode', 'pas du deflate'),
+    'racine declaree hors de la chaine startxref / Prev' => fn () => pdfADeuxTables(''),
+    'racine liberee par la mise a jour' => fn () => pdfADeuxTables('/Prev {A} ', "9 1\n0000000000 00001 f \n"),
+    'boucle de Prev' => fn () => pdfADeuxTables('/Prev {B} '),
+    'table sans trailer' => fn () => preg_replace('/trailer << .*? >>\n/', '', pdfValide(['<< /Type /Catalog >>'])),
 ]);
 
 it('accepte les flux qu il sait lire ou qui ne portent que des pixels', function (string $pdf) {
@@ -362,6 +390,7 @@ it('accepte les flux qu il sait lire ou qui ne portent que des pixels', function
     'page d ouverture par reference, comme Ghostscript' => fn () => pdfValide(['<< /Type /Catalog /OpenAction 3 0 R >>', '<< /Type /Page >>', '[2 0 R /Fit]']),
     'page d ouverture compressee' => fn () => pdfAvecObjetsCompresses('<< /Type /Catalog /OpenAction [2 0 R /Fit] >>'),
     'signe' => fn () => pdfValide(['<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached >>']),
+    'mise a jour incrementale reliee par Prev' => fn () => pdfADeuxTables('/Prev {A} '),
 ]);
 
 it('reconnait un renvoi aux octets recus, sans refaire l assainissement', function () {

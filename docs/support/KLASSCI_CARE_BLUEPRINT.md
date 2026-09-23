@@ -65,9 +65,11 @@ the two disagree, **this list and the code are right**.
   passes unread; an unfiltered stream is read raw; exactly one FlateDecode is inflated to
   its real end within `pdf_inflation_max_octets`, PNG predictor undone; any other filter,
   chain, indirect `/Filter` or `/DecodeParms`, or external `/F` is refused. Then the way a
-  viewer finds the document must land on what we read: `startxref`, `/Prev` and `/XRefStm`
-  on a table we parsed, each xref entry on the object bearing that number, each compressed
-  object in a stream we decoded, and the trailer's `/Root` on a declared object. Otherwise
+  viewer finds the document must land on what we read. Each xref entry points at the
+  object bearing that number and each compressed object sits in a stream we decoded; then
+  the chain a viewer follows — last `startxref`, then `/XRefStm` and `/Prev` transitively,
+  first section wins per object, free entries included — must resolve the trailer's
+  `/Root` to an object we read. A table off that chain legitimises nothing. Otherwise
   the viewer rebuilds the table by scanning the raw file and may find objects hidden in
   image data we never read. Active names are refused (`/JavaScript`, `/JS`, `/Launch`,
   `/EmbeddedFile`, `/AA`, `/RichMedia`, `/XFA`, `/SubmitForm`, `/ImportData`, `/GoToE`,

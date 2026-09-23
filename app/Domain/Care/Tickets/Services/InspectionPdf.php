@@ -40,12 +40,12 @@ class InspectionPdf
 
     public function verifier(string $contenu, int $budgetInflation): void
     {
-        $xref = ['entrees' => [], 'compresses' => [], 'flux' => [], 'trailers' => []];
+        $fluxXref = [];
         $lus = [];
         $ouvertures = [];
         $structure = (new AnalyseurPdf($contenu))->parcourir(
             fn (string $nom) => $this->juger($nom),
-            function (array $dict, int $debut, ?int $objet) use ($contenu, &$budgetInflation, &$xref, &$lus): int {
+            function (array $dict, int $debut, ?int $objet, ?int $position) use ($contenu, &$budgetInflation, &$fluxXref, &$lus): int {
                 $fin = $debut + $this->longueur($dict, $contenu);
                 if ($fin > strlen($contenu)) {
                     $this->refuser();
@@ -60,7 +60,7 @@ class InspectionPdf
                     $lus[$objet] = true;
                 }
                 if ($this->nom($dict['Type'] ?? null) === 'XRef') {
-                    $this->lireFluxXref($texte, $dict, $objet, $xref);
+                    $fluxXref[$position ?? $this->refuser()] = $this->lireFluxXref($texte, $dict, $objet);
                 }
 
                 return $fin;
@@ -70,93 +70,107 @@ class InspectionPdf
             },
         );
 
-        $this->verifierXref($contenu, $structure, $xref, $lus);
+        $this->verifierXref($contenu, $structure, $structure['sections'] + $fluxXref, $lus);
         foreach ($ouvertures as $ouverture) {
             $this->jugerOuverture($ouverture, $structure['types']);
         }
     }
 
     /**
-     * Un lecteur trouve le document par `startxref`, la table xref et le `/Root` du
-     * trailer. Tout ce chemin doit tomber sur ce que l'analyseur a lu : sinon le
-     * lecteur reconstruit la table en balayant le fichier, et y trouve des objets
-     * que nous n'avons pas vus — cachés, par exemple, dans les données d'une image.
+     * Un lecteur trouve le document par le dernier `startxref`, la section xref qui s'y
+     * trouve, puis celles que designent `/XRefStm` et `/Prev`, de proche en proche.
+     * Pour chaque numero d'objet, la premiere section de cette chaine qui en parle
+     * l'emporte, et `/Root` se lit dans le premier trailer qui le porte. Si ce chemin
+     * n'aboutit pas a un objet que l'analyseur a lu, le lecteur reconstruit la table en
+     * balayant le fichier, et y trouve des objets que nous n'avons pas vus — caches,
+     * par exemple, dans les donnees d'une image. Une section hors de la chaine ne
+     * legitime donc rien : c'est la chaine qui est jugee, pas l'union des tables.
      *
-     * @param  array{objets: array<int, int>, xref: list<array{int, int}>, tables: list<int>,
-     *               trailers: list<array>, startxref: list<int>, types: array}  $structure
-     * @param  array{entrees: list<array{int, int}>, compresses: list<array{int, int}>,
-     *               flux: list<int>, trailers: list<array>}  $xref
-     * @param  array<int, true>  $lus
+     * @param  array{objets: array<int, int>, startxref: list<int>}  $structure
+     * @param  array<int, array{entrees: list<array{int, string, int}>, trailer: ?array}>  $sections
+     *         chaque section xref, table ou flux, par position de son debut
+     * @param  array<int, true>  $lus  les flux d'objets lus, par numero
      */
-    private function verifierXref(string $contenu, array $structure, array $xref, array $lus): void
+    private function verifierXref(string $contenu, array $structure, array $sections, array $lus): void
     {
-        $debutObjet = fn (int $position) => $position + strspn($contenu, "\0\t\n\f\r ", $position);
-        $declares = [];
-        foreach ([...$structure['xref'], ...$xref['entrees']] as [$numero, $position]) {
-            // L'entree doit designer l'objet qui porte ce numero, pas un autre.
-            if (($structure['objets'][$debutObjet($position)] ?? null) !== $numero) {
-                $this->refuser();
-            }
-            $declares[$numero] = true;
-        }
-        foreach ($xref['compresses'] as [$numero, $fluxDObjets]) {
-            if (! isset($lus[$fluxDObjets])) {
-                $this->refuser();
-            }
-            $declares[$numero] = true;
-        }
+        $debut = fn (int $position) => $position + strspn($contenu, "\0\t\n\f\r ", $position);
+        $sectionA = fn (int $position) => $sections[$debut($position)] ?? $this->refuser();
 
-        // startxref, /Prev et /XRefStm doivent tomber sur une table lue.
-        $tables = array_flip($structure['tables']);
-        foreach ($xref['flux'] as $numero) {
-            foreach (array_keys($structure['objets'], $numero, true) as $position) {
-                $tables[$position] = true;
-            }
-        }
-        $trailers = [...$structure['trailers'], ...$xref['trailers']];
-        $sauts = $structure['startxref'];
-        foreach ($trailers as $trailer) {
-            foreach (['Prev', 'XRefStm'] as $cle) {
-                if (array_key_exists($cle, $trailer)) {
-                    $sauts[] = is_int($trailer[$cle]) ? $trailer[$cle] : $this->refuser();
+        // Chaque entree, meme hors chaine, designe l'objet qui porte son numero.
+        foreach ($sections as $section) {
+            foreach ($section['entrees'] as [$numero, $type, $valeur]) {
+                $valide = match ($type) {
+                    'position' => ($structure['objets'][$debut($valeur)] ?? null) === $numero,
+                    'compresse' => isset($lus[$valeur]),
+                    default => true,
+                };
+                if (! $valide) {
+                    $this->refuser();
                 }
             }
         }
-        if ($structure['startxref'] === [] || $trailers === []) {
+
+        if ($structure['startxref'] === []) {
             $this->refuser();
         }
-        foreach ($sauts as $position) {
-            if (! isset($tables[$debutObjet($position)])) {
+        foreach ($structure['startxref'] as $position) {
+            $sectionA($position);
+        }
+
+        // La chaine du lecteur : chaque section, son /XRefStm (fichier hybride), puis /Prev.
+        $chaine = [];
+        $trailers = [];
+        $vues = [];
+        $prendre = function (int $position) use (&$vues, &$chaine, $debut, $sectionA): array {
+            $section = $sectionA($position);
+            if (isset($vues[$debut($position)]) || $section['trailer'] === null) {
                 $this->refuser();
+            }
+            $vues[$debut($position)] = true;
+            $chaine[] = $section;
+
+            return $section['trailer'];
+        };
+        $suivante = end($structure['startxref']);
+        while ($suivante !== null) {
+            $trailer = $prendre($suivante);
+            $trailers[] = $trailer;
+            if (array_key_exists('XRefStm', $trailer)) {
+                $prendre(is_int($trailer['XRefStm']) ? $trailer['XRefStm'] : $this->refuser());
+            }
+            $suivante = array_key_exists('Prev', $trailer)
+                ? (is_int($trailer['Prev']) ? $trailer['Prev'] : $this->refuser())
+                : null;
+        }
+
+        $resolu = [];
+        foreach ($chaine as $section) {
+            foreach ($section['entrees'] as [$numero, $type]) {
+                $resolu[$numero] ??= $type;
             }
         }
 
-        // Le point d'entree du document doit etre un objet que la table declare.
-        $racines = 0;
+        // Le point d'entree du document doit se resoudre, par la chaine, sur un objet lu.
+        $racine = null;
         foreach ($trailers as $trailer) {
-            if (! array_key_exists('Root', $trailer)) {
-                continue;
+            if (array_key_exists('Root', $trailer)) {
+                $racine = $trailer['Root'];
+                break;
             }
-            $racine = $trailer['Root'];
-            if (($racine['t'] ?? null) !== 'ref' || ! isset($declares[$racine['v'][0]])) {
-                $this->refuser();
-            }
-            $racines++;
         }
-        if ($racines === 0) {
+        if (($racine['t'] ?? null) !== 'ref' || ! in_array($resolu[$racine['v'][0]] ?? 'libre', ['position', 'compresse'], true)) {
             $this->refuser();
         }
     }
 
     /**
-     * Les entrees d'un flux xref (`/W`, `/Index`) : type 1, position d'un objet ;
-     * type 2, numero du flux d'objets qui le contient. Le dictionnaire du flux sert
-     * aussi de trailer.
+     * Les entrees d'un flux xref (`/W`, `/Index`) : type 0, entree liberee ; type 1,
+     * position d'un objet ; type 2, numero du flux d'objets qui le contient. Le
+     * dictionnaire du flux lui sert de trailer.
      *
-     * @param  array{entrees: list<array{int, int}>, compresses: list<array{int, int}>,
-     *               flux: list<int>, trailers: list<array>}  $xref
+     * @return array{entrees: list<array{int, string, int}>, trailer: array}
      */
-    private function lireFluxXref(string $texte, array $dict, ?int $objet, array &$xref): void
+    private function lireFluxXref(string $texte, array $dict, ?int $objet): array
     {
         $largeurs = $this->entiers($dict['W'] ?? null);
         $taille = $dict['Size'] ?? null;
@@ -169,8 +183,7 @@ class InspectionPdf
             $this->refuser();
         }
 
-        $xref['flux'][] = $objet;
-        $xref['trailers'][] = $dict;
+        $entrees = [];
         $pos = 0;
         foreach (array_chunk($index, 2) as [$premier, $nombre]) {
             for ($i = 0; $i < $nombre; $i++, $pos += $ligne) {
@@ -183,13 +196,17 @@ class InspectionPdf
                     $champs[] = $largeur === 0 ? null : (int) hexdec(bin2hex(substr($texte, $curseur, $largeur)));
                     $curseur += $largeur;
                 }
-                match ($champs[0] ?? 1) {
-                    1 => $xref['entrees'][] = [$premier + $i, (int) $champs[1]],
-                    2 => $xref['compresses'][] = [$premier + $i, (int) $champs[1]],
-                    default => null,
+                $entrees[] = match ($champs[0] ?? 1) {
+                    0 => [$premier + $i, 'libre', 0],
+                    1 => [$premier + $i, 'position', (int) $champs[1]],
+                    2 => [$premier + $i, 'compresse', (int) $champs[1]],
+                    // Un type inconnu se lit comme une reference nulle (ISO 32000-1, 7.5.8.3).
+                    default => [$premier + $i, 'libre', 0],
                 };
             }
         }
+
+        return ['entrees' => $entrees, 'trailer' => $dict];
     }
 
     /** @return list<int> */

@@ -41,14 +41,15 @@ class AnalyseurPdf
 
     /**
      * @param  callable(string): void  $surNom  chaque nom rencontre, echappements decodes
-     * @param  callable(array, int, ?int): int  $surFlux  dictionnaire du flux, debut de ses donnees et numero
-     *                                                     d'objet ; rend la fin des donnees
+     * @param  callable(array, int, ?int, ?int): int  $surFlux  dictionnaire du flux, debut de ses
+     *                                                           donnees, numero et position de
+     *                                                           l'objet ; rend la fin des donnees
      * @param  (callable(array): void)|null  $surDict  chaque dictionnaire lu, valeurs comprises
-     * @return array{objets: array<int, int>, xref: list<array{int, int}>, tables: list<int>,
-     *                trailers: list<array>, startxref: list<int>, types: array<int, list<string>>}
-     *         les objets lus (position => numero), les entrees en service des tables xref
-     *         [numero, position], la position de chaque table, les dictionnaires de trailer, les
-     *         valeurs de startxref, et le type de la valeur de chaque objet lu
+     * @return array{objets: array<int, int>, sections: array<int, array{entrees: list<array{int, string, int}>,
+     *                trailer: array}>, startxref: list<int>, types: array<int, list<string>>}
+     *         les objets lus (position => numero), chaque table xref classique (position => ses
+     *         entrees [numero, 'position'|'libre', valeur] et son trailer), les valeurs de
+     *         startxref, et le type de la valeur de chaque objet lu
      */
     public function parcourir(callable $surNom, callable $surFlux, ?callable $surDict = null): array
     {
@@ -57,18 +58,23 @@ class AnalyseurPdf
         $dernier = null;
         $recents = [];
         $objet = null;
+        $positionObjet = null;
         $objets = [];
-        $xref = [];
-        $tables = [];
-        $trailers = [];
+        $sections = [];
+        $tableOuverte = null;
         $startxref = [];
         $types = [];
         $valeurDObjet = false;
         while (($jeton = $this->jeton()) !== null) {
             $debut = $this->debutJeton;
             if ($jeton === 'trailer') {
+                // Un trailer clot la table qui le precede ; orphelin, il ne decrit rien.
                 $trailer = $this->valeur($this->jetonAttendu(), 0);
-                $trailers[] = is_array($trailer) && $trailer['t'] === 'dict' ? $trailer['v'] : $this->refuser();
+                if ($tableOuverte === null || ! is_array($trailer) || $trailer['t'] !== 'dict') {
+                    $this->refuser();
+                }
+                $sections[$tableOuverte]['trailer'] = $trailer['v'];
+                $tableOuverte = null;
                 [$dernier, $recents] = [null, []];
 
                 continue;
@@ -84,15 +90,18 @@ class AnalyseurPdf
                 if (! is_array($dernier) || ($dernier['t'] ?? null) !== 'dict') {
                     $this->refuser();
                 }
-                $this->pos = $surFlux($dernier['v'], $this->debutDesDonnees(), $objet);
+                $this->pos = $surFlux($dernier['v'], $this->debutDesDonnees(), $objet, $positionObjet);
                 $this->attendre('endstream');
                 [$dernier, $recents] = [null, []];
 
                 continue;
             }
             if ($jeton === 'xref') {
-                $tables[] = $debut;
-                $xref = [...$xref, ...$this->tableXref()];
+                if ($tableOuverte !== null) {
+                    $this->refuser();
+                }
+                $sections[$debut] = ['entrees' => $this->tableXref(), 'trailer' => null];
+                $tableOuverte = $debut;
                 [$dernier, $recents] = [null, []];
 
                 continue;
@@ -104,17 +113,25 @@ class AnalyseurPdf
             }
             if ($valeur === 'obj' && count($recents) === 2 && is_int($recents[0][0]) && is_int($recents[1][0])) {
                 $objets[$recents[0][1]] = $objet = $recents[0][0];
+                $positionObjet = $recents[0][1];
                 $valeurDObjet = true;
             }
             $recents = array_slice([...$recents, [$valeur, $debut]], -2);
             $dernier = $valeur;
         }
 
-        return ['objets' => $objets, 'xref' => $xref, 'tables' => $tables, 'trailers' => $trailers,
-            'startxref' => $startxref, 'types' => $types];
+        if ($tableOuverte !== null) {
+            $this->refuser();
+        }
+
+        return ['objets' => $objets, 'sections' => $sections, 'startxref' => $startxref, 'types' => $types];
     }
 
-    /** @return list<array{int, int}> les entrees en service (`n`) d'une table xref : [numero, position] */
+    /**
+     * @return list<array{int, string, int}> les entrees d'une table xref : [numero, 'position', position]
+     *         pour une entree en service, [numero, 'libre', 0] pour une entree liberee. Les libres
+     *         comptent : dans une mise a jour, elles masquent l'objet que declarait une table plus ancienne.
+     */
     private function tableXref(): array
     {
         $entrees = [];
@@ -125,9 +142,9 @@ class AnalyseurPdf
                     $this->refuser();
                 }
                 $this->pos += strlen($entree[0]);
-                if ($entree[3] === 'n') {
-                    $entrees[] = [(int) $section[1] + $i, (int) $entree[1]];
-                }
+                $entrees[] = $entree[3] === 'n'
+                    ? [(int) $section[1] + $i, 'position', (int) $entree[1]]
+                    : [(int) $section[1] + $i, 'libre', 0];
             }
         }
 
