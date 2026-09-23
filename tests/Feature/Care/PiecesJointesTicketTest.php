@@ -47,10 +47,11 @@ function jpegAvecExif(): string
     return substr($jpeg, 0, 2).$app1.substr($jpeg, 2);
 }
 
-/** Un JPEG 40x20 dont l'EXIF dit « tourner de 90° dans le sens horaire » (Orientation = 6). */
+/** Un JPEG 40x20, bord gauche rouge, dont l'EXIF dit « tourner de 90° dans le sens horaire » (Orientation = 6). */
 function jpegOriente(): string
 {
     $im = imagecreatetruecolor(40, 20);
+    imagefilledrectangle($im, 0, 0, 9, 19, imagecolorallocate($im, 255, 0, 0));
     ob_start();
     imagejpeg($im);
     $jpeg = (string) ob_get_clean();
@@ -66,7 +67,36 @@ function pdfAvecObjetsCompresses(string $objets): string
 {
     $flux = gzcompress($objets);
 
-    return "%PDF-1.5\n1 0 obj << /Type /ObjStm /Filter /FlateDecode /Length ".strlen($flux)." >>\nstream\n".$flux."\nendstream\nendobj\n%%EOF";
+    return pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode', $flux);
+}
+
+function pdfAvecFlux(string $dictionnaire, string $flux, string $finDeLigne = "\n"): string
+{
+    return "%PDF-1.5\n1 0 obj << {$dictionnaire} /Length ".strlen($flux)." >>\nstream{$finDeLigne}".$flux."\nendstream\nendobj\n%%EOF";
+}
+
+/** Un flux deflate brut dont les premiers octets, stockes tels quels, contiennent le mot `endstream`. */
+function deflateAvecEndstreamLitteral(string $objets): string
+{
+    $leurre = 'endstream';
+
+    return "\x00".pack('v', strlen($leurre)).pack('v', ~strlen($leurre) & 0xFFFF).$leurre.gzdeflate($objets);
+}
+
+/** Predicteur PNG « Up » (2) sur des lignes de `$largeur` octets, comme les flux xref. */
+function avecPredicteurUp(string $donnees, int $largeur): string
+{
+    $sortie = '';
+    $precedente = str_repeat("\0", $largeur);
+    foreach (str_split(str_pad($donnees, (int) ceil(strlen($donnees) / $largeur) * $largeur), $largeur) as $ligne) {
+        $sortie .= "\x02";
+        for ($i = 0; $i < $largeur; $i++) {
+            $sortie .= chr((ord($ligne[$i]) - ord($precedente[$i])) & 0xFF);
+        }
+        $precedente = $ligne;
+    }
+
+    return $sortie;
 }
 
 function joindre($test, string $ref, string $contenu, string $nom = 'capture.png', string $cle = 'pj-cle-000001', ?string $jeton = null, string $requete = 'reporter=42')
@@ -191,7 +221,33 @@ it('redresse une photo de telephone selon son orientation EXIF', function () {
 
     $piece = $this->ticket->piecesJointes()->sole();
     expect([$piece->width, $piece->height])->toBe([20, 40]);
+
+    // Tourne dans le bon sens : le bord gauche rouge est devenu le haut, pas le bas.
+    $im = imagecreatefromstring(Storage::disk('local')->get($piece->path));
+    $rouge = fn (int $x, int $y) => (imagecolorat($im, $x, $y) >> 16) & 0xFF;
+    expect($rouge(10, 2))->toBeGreaterThan(180)->and($rouge(10, 37))->toBeLessThan(80);
 });
+
+it('refuse un PDF qu il ne sait pas lire au lieu de l accepter', function (string $pdf) {
+    joindre($this, $this->reference, $pdf, 'x.pdf')->assertStatus(422)->assertJsonPath('error', 'attachment_rejected');
+})->with([
+    'endstream litteral dans le flux compresse' => fn () => pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode', deflateAvecEndstreamLitteral('<< /OpenAction << /S /JavaScript >> >>')),
+    'fin de ligne CR seule' => fn () => pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode', gzcompress('<< /S /JavaScript >>'), "\r"),
+    'chaine de filtres inconnue' => fn () => pdfAvecFlux('/Type /ObjStm /Filter [/ASCIIHexDecode /FlateDecode]', bin2hex(gzcompress('<< /S /JavaScript >>')).'>'),
+    'filtre indirect' => fn () => pdfAvecFlux('/Type /ObjStm /Filter 5 0 R', gzcompress('<< /S /JavaScript >>')),
+    'chiffre' => fn () => "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Encrypt 2 0 R >>\n%%EOF",
+    'predicteur qui masque les noms' => fn () => pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 >>', gzcompress(avecPredicteurUp('<< /S /JavaScript >>', 4))),
+    'flate illisible' => fn () => pdfAvecFlux('/Filter /FlateDecode', 'pas du deflate'),
+]);
+
+it('accepte les flux qu il sait lire ou qui ne portent que des pixels', function (string $pdf) {
+    joindre($this, $this->reference, $pdf, 'x.pdf')->assertCreated();
+})->with([
+    'xref avec predicteur' => fn () => pdfAvecFlux('/Type /XRef /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 >>', gzcompress(avecPredicteurUp(str_repeat("\x01\x00\x10\x00", 6), 4))),
+    'image JPEG' => fn () => pdfAvecFlux('/Type /XObject /Subtype /Image /Filter /DCTDecode', "\xFF\xD8\xFF\xE0 donnees binaires"),
+    'deflate brut' => fn () => pdfAvecFlux('/Filter /FlateDecode', gzdeflate('BT /F1 12 Tf (Releve) Tj ET')),
+    'signe' => fn () => "%PDF-1.7\n1 0 obj << /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached >> endobj\n%%EOF",
+]);
 
 it('reconnait un renvoi aux octets recus, sans refaire l assainissement', function () {
     joindre($this, $this->reference, pngDeTest())->assertCreated();

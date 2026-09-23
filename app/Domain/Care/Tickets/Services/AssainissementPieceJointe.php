@@ -15,18 +15,15 @@ use App\Domain\Care\Tickets\Exceptions\PieceJointeRefusee;
  * appliquee aux pixels avant d'etre perdue, sinon une photo de telephone
  * arriverait couchee.
  *
- * Un PDF ne se re-encode pas sans outil que l'hebergement n'a pas. Il est
- * refuse quand il porte un contenu actif REPERABLE (JavaScript, lancement,
- * fichier embarque) : noms echappes (#xx) decodes, flux FlateDecode inflates
- * dans une limite de taille. C'est une heuristique, pas une garantie : un flux
- * sous un autre filtre (LZW, ASCII85, chaine de filtres) n'est pas relu. Le PDF
- * se telecharge toujours (jamais rendu dans le panel), et le support l'ouvre
- * en le sachant.
+ * Un PDF ne se re-encode pas : `InspectionPdf` le lit, flux compresses compris,
+ * et refuse ce qu'elle ne sait pas decoder. Le PDF se telecharge toujours (jamais
+ * rendu dans le panel), et le support l'ouvre en le sachant.
  */
 class AssainissementPieceJointe
 {
-    /** Marqueurs de contenu actif dans un PDF. Un faux refus coute un courriel ; un faux accord, un poste. */
-    private const PDF_ACTIF = ['/JavaScript', '/JS', '/Launch', '/EmbeddedFile', '/OpenAction', '/AA', '/RichMedia', '/XFA'];
+    public function __construct(private readonly InspectionPdf $inspection)
+    {
+    }
 
     public function assainir(string $contenu, ?string $nomEnvoye): FichierAssaini
     {
@@ -56,55 +53,9 @@ class AssainissementPieceJointe
         if (! str_starts_with($contenu, '%PDF-')) {
             throw new PieceJointeRefusee('Ce PDF est illisible.');
         }
-        foreach ($this->textesDuPdf($contenu) as $texte) {
-            if ($this->porteUnContenuActif($texte)) {
-                throw new PieceJointeRefusee('Ce PDF contient des éléments actifs et ne peut pas être joint. Envoyez une capture d\'écran à la place.');
-            }
-        }
+        $this->inspection->verifier($contenu, (int) config('care.pieces_jointes.pdf_inflation_max_octets'));
 
         return new FichierAssaini($contenu, 'application/pdf', 'pdf', $nom);
-    }
-
-    /**
-     * Le fichier lui-meme, puis chaque flux FlateDecode inflate : depuis PDF 1.5,
-     * les objets vivent souvent dans des flux compresses (/ObjStm), ou un
-     * /OpenAction ne se voit pas en clair. Le budget d'inflation borne la bombe
-     * de decompression ; le depasser est un refus, pas un accord.
-     */
-    private function textesDuPdf(string $contenu): \Generator
-    {
-        yield $contenu;
-
-        $budget = (int) config('care.pieces_jointes.pdf_inflation_max_octets');
-        preg_match_all('/stream\r?\n(.*?)endstream/s', $contenu, $flux);
-        foreach ($flux[1] as $brut) {
-            $inflate = @gzuncompress($brut, $budget + 1);
-            if ($inflate === false) {
-                $inflate = @gzinflate($brut, $budget + 1);
-            }
-            if ($inflate === false) {
-                continue; // un autre filtre, ou des octets d'image : non relu (voir la classe).
-            }
-            $budget -= strlen($inflate);
-            if ($budget < 0) {
-                throw new PieceJointeRefusee('Ce PDF est trop complexe pour être vérifié. Envoyez une capture d\'écran à la place.');
-            }
-            yield $inflate;
-        }
-    }
-
-    private function porteUnContenuActif(string $texte): bool
-    {
-        // Un nom PDF peut s'ecrire /J#61vaScript : on decode les echappements avant de chercher.
-        $texte = (string) preg_replace_callback('/#([0-9A-Fa-f]{2})/', fn ($m) => chr(hexdec($m[1])), $texte);
-        foreach (self::PDF_ACTIF as $marqueur) {
-            // Le marqueur doit etre un nom complet : /JS ne doit pas refuser /JSmith.
-            if (preg_match('#'.preg_quote($marqueur, '#').'(?![A-Za-z0-9])#', $texte)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function image(string $contenu, string $mime, string $extension, string $nom, int $coteMax, int $pixelsMax): FichierAssaini
@@ -119,18 +70,19 @@ class AssainissementPieceJointe
         if ($source === false) {
             throw new PieceJointeRefusee('Cette image est illisible.');
         }
-        if ($mime === 'image/jpeg') {
-            $source = $this->redresser($source, $contenu);
-        }
 
+        // Reduire avant de tourner : la rotation copie l'image, autant copier la petite.
         [$l, $h] = [imagesx($source), imagesy($source)];
         $ratio = min(1, $coteMax / max($l, $h));
         if ($ratio < 1) {
             $reduite = imagescale($source, max(1, (int) round($l * $ratio)), max(1, (int) round($h * $ratio)));
             imagedestroy($source);
             $source = $reduite;
-            [$l, $h] = [imagesx($source), imagesy($source)];
         }
+        if ($mime === 'image/jpeg') {
+            $source = $this->redresser($source, $contenu);
+        }
+        [$l, $h] = [imagesx($source), imagesy($source)];
 
         ob_start();
         $ok = match ($mime) {
@@ -155,6 +107,9 @@ class AssainissementPieceJointe
     private function redresser(\GdImage $image, string $contenu): \GdImage
     {
         if (! function_exists('exif_read_data')) {
+            // Sans l'extension exif, une photo de telephone arrive couchee : le dire.
+            \Illuminate\Support\Facades\Log::warning('care.piece_jointe.exif_absent');
+
             return $image;
         }
         $exif = @exif_read_data('data://image/jpeg;base64,'.base64_encode($contenu));

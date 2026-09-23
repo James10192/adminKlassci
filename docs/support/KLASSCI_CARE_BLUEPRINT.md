@@ -58,11 +58,14 @@ the two disagree, **this list and the code are right**.
   decoded and re-encoded: EXIF and GPS dropped after the EXIF orientation is applied to the
   pixels, side capped at 2400 px, and anything above `pixels_max` (24 Mpx) refused from its
   declared size **before** decoding (the system libgd allocates outside `memory_limit`). A PDF
-  is refused when it carries **detectable** active content (`/JavaScript`, `/JS`, `/Launch`,
-  `/EmbeddedFile`, `/OpenAction`, `/AA`, `/RichMedia`, `/XFA`): `#xx` name escapes are decoded
-  and FlateDecode streams (object streams included) are inflated within
-  `pdf_inflation_max_octets`, past which the PDF is refused. This is a heuristic, not a
-  guarantee: streams under other filters (LZW, ASCII85, filter chains) are not read. PDFs
+  goes through `InspectionPdf`, which **fails closed**: an encrypted PDF is refused, every
+  `stream` keyword is examined, FlateDecode streams are inflated to their real end (not to the
+  first literal `endstream`) within `pdf_inflation_max_octets`, PNG predictors are undone, and
+  any other filter, filter chain or indirect `/Filter` is refused as unverifiable. Only
+  unfiltered streams (already read in clear) and image streams (DCT, JPX, CCITT, JBIG2) pass
+  unread. It then refuses active content (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFile`,
+  `/OpenAction`, `/AA`, `/RichMedia`, `/XFA`, `#xx` escapes decoded). A false refusal costs an
+  email; a false accept, a workstation. PDFs
   always download, never render in the panel. Refusals answer 422 `attachment_rejected` with a
   showable message. A retry is recognised by the sha256 of the **bytes received**
   (`received_sha256`), before any decoding; HEIC and animated WebP are refused as unreadable. Files live on the private disk `CARE_PIECES_DISQUE` (default `local`) under
@@ -72,8 +75,8 @@ the two disagree, **this list and the code are right**.
   projection lists `pieces_jointes` (`id, nom, type, taille, auteur, le`); the school reads one
   through `GET /tickets/{reference}/attachments/{id}` (support:read, relayed by its instance).
   Staff open them from the ticket through a signed link valid 10 minutes, access re-checked on
-  each opening; images display, PDFs download. An expired session is sent to the panel login
-  (`redirectGuestsTo`), and a row whose file is missing is logged before its 404.
+  each opening; images display, PDFs download. An expired session is sent to the login of the panel it came
+  from, admin or group portal (`redirectGuestsTo`), and a row whose file is missing is logged before its 404.
 
 ## 0. Executive summary
 

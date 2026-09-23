@@ -123,7 +123,9 @@ class JoindrePieceParLEcole
         if ($existante === null) {
             return null;
         }
-        if ($existante->received_sha256 !== $recu) {
+        // Une piece anterieure a la colonne n'a que l'empreinte assainie ; pour un
+        // PDF, garde tel quel, elle vaut celle des octets recus.
+        if (($existante->received_sha256 ?? $existante->sha256) !== $recu) {
             throw new CleIdempotenceReutilisee('Cette clé a déjà servi pour un autre fichier.');
         }
 

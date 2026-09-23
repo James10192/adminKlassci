@@ -20,8 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [\App\Http\Middleware\AttribuerIdentifiantRequete::class]);
         // Aucune route `login` : un invite qui suit un lien protege par `auth` (une
         // piece jointe ouverte apres expiration de la session) va a la connexion
-        // du panel, au lieu d'une erreur 500 sur route('login').
-        $middleware->redirectGuestsTo(fn () => route('filament.admin.auth.login'));
+        // du panel dont il releve (admin ou portail groupe), au lieu d'une erreur
+        // 500 sur route('login').
+        $middleware->redirectGuestsTo(fn (\Illuminate\Http\Request $request) => route(
+            $request->is('groupe', 'groupe/*') ? 'filament.group.auth.login' : 'filament.admin.auth.login'
+        ));
         // L'identifiant d'instance doit etre resolu AVANT la limite de debit,
         // qui compte par instance : sinon toutes les ecoles partagent un compteur.
         $middleware->prependToPriorityList(
