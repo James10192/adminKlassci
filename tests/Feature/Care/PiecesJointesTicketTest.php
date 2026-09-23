@@ -191,6 +191,26 @@ function pdfADeuxTables(string $trailerB, string $entreesB = ''): string
     return $pdf.'trailer << /Size 10 /Root 9 0 R '.str_replace(['{A}', '{B}'], [$a, $b], $trailerB).">>\nstartxref\n{$b}\n%%EOF";
 }
 
+/**
+ * Un fichier hybride, comme en ecrit Word : le catalogue vit dans un flux d'objets,
+ * la table classique le marque libre pour les lecteurs anciens, et le flux xref que
+ * designe /XRefStm le declare compresse pour les autres.
+ */
+function pdfHybride(): string
+{
+    $pdf = "%PDF-1.5\n";
+    $fluxDObjets = strlen($pdf);
+    $pdf .= "2 0 obj\n".flux('/Type /ObjStm /N 1 /First 4 /Filter /FlateDecode', gzcompress('1 0 << /Type /Catalog >>'))."\nendobj\n";
+    $fluxXref = strlen($pdf);
+    $lignes = "\x00\x00\x00\xFF\x02\x00\x02\x00\x01".pack('n', $fluxDObjets)."\x00\x01".pack('n', $fluxXref)."\x00";
+    $pdf .= "3 0 obj\n".flux('/Type /XRef /W [1 2 1] /Size 4', $lignes)."\nendobj\n";
+    $table = strlen($pdf);
+    $pdf .= "xref\n0 2\n0000000000 65535 f \n0000000000 00001 f \n2 2\n"
+        .sprintf('%010d', $fluxDObjets)." 00000 n \n".sprintf('%010d', $fluxXref)." 00000 n \n";
+
+    return $pdf."trailer << /Size 4 /Root 1 0 R /XRefStm {$fluxXref} >>\nstartxref\n{$table}\n%%EOF";
+}
+
 /** Un flux deflate brut dont les premiers octets, stockes tels quels, contiennent le mot `endstream`. */
 function deflateAvecEndstreamLitteral(string $objets): string
 {
@@ -391,6 +411,7 @@ it('accepte les flux qu il sait lire ou qui ne portent que des pixels', function
     'page d ouverture compressee' => fn () => pdfAvecObjetsCompresses('<< /Type /Catalog /OpenAction [2 0 R /Fit] >>'),
     'signe' => fn () => pdfValide(['<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached >>']),
     'mise a jour incrementale reliee par Prev' => fn () => pdfADeuxTables('/Prev {A} '),
+    'hybride, catalogue compresse marque libre dans la table' => fn () => pdfHybride(),
 ]);
 
 it('reconnait un renvoi aux octets recus, sans refaire l assainissement', function () {

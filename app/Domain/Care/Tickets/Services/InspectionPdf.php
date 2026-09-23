@@ -121,32 +121,38 @@ class InspectionPdf
         $chaine = [];
         $trailers = [];
         $vues = [];
-        $prendre = function (int $position) use (&$vues, &$chaine, $debut, $sectionA): array {
+        $prendre = function (int $position, int $groupe) use (&$vues, &$chaine, $debut, $sectionA): array {
             $section = $sectionA($position);
             if (isset($vues[$debut($position)]) || $section['trailer'] === null) {
                 $this->refuser();
             }
             $vues[$debut($position)] = true;
-            $chaine[] = $section;
+            $chaine[] = [$section, $groupe];
 
             return $section['trailer'];
         };
         $suivante = end($structure['startxref']);
-        while ($suivante !== null) {
-            $trailer = $prendre($suivante);
+        for ($groupe = 0; $suivante !== null; $groupe++) {
+            $trailer = $prendre($suivante, $groupe);
             $trailers[] = $trailer;
             if (array_key_exists('XRefStm', $trailer)) {
-                $prendre(is_int($trailer['XRefStm']) ? $trailer['XRefStm'] : $this->refuser());
+                $prendre(is_int($trailer['XRefStm']) ? $trailer['XRefStm'] : $this->refuser(), $groupe);
             }
             $suivante = array_key_exists('Prev', $trailer)
                 ? (is_int($trailer['Prev']) ? $trailer['Prev'] : $this->refuser())
                 : null;
         }
 
+        // Une section plus recente l'emporte. Dans un fichier hybride, une table et son
+        // /XRefStm forment un seul groupe : la table marque souvent libre un objet
+        // compresse, que les lecteurs PDF 1.5 prennent alors dans le flux.
         $resolu = [];
-        foreach ($chaine as $section) {
+        foreach ($chaine as [$section, $groupe]) {
             foreach ($section['entrees'] as [$numero, $type]) {
-                $resolu[$numero] ??= $type;
+                $avant = $resolu[$numero] ?? null;
+                if ($avant === null || ($avant[1] === $groupe && $avant[0] === 'libre')) {
+                    $resolu[$numero] = [$type, $groupe];
+                }
             }
         }
 
@@ -158,7 +164,7 @@ class InspectionPdf
                 break;
             }
         }
-        if (($racine['t'] ?? null) !== 'ref' || ! in_array($resolu[$racine['v'][0]] ?? 'libre', ['position', 'compresse'], true)) {
+        if (($racine['t'] ?? null) !== 'ref' || ! in_array($resolu[$racine['v'][0]][0] ?? 'libre', ['position', 'compresse'], true)) {
             $this->refuser();
         }
     }
