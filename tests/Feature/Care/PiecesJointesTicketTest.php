@@ -62,17 +62,89 @@ function jpegOriente(): string
     return substr($jpeg, 0, 2).$app1.substr($jpeg, 2);
 }
 
-/** Un PDF minimal dont les objets vivent dans un flux compresse, comme depuis PDF 1.5. */
-function pdfAvecObjetsCompresses(string $objets): string
+/**
+ * Un PDF lisible par un lecteur : chaque corps devient l'objet i+1, et une vraie
+ * table xref les annonce. `$xrefForcee` fait pointer une entree ailleurs, pour
+ * simuler un objet que le lecteur trouverait et pas nous.
+ *
+ * @param  list<string>  $corps
+ * @param  array<int, int>  $xrefForcee  numero d'objet => position annoncee
+ */
+function pdfValide(array $corps, string $trailer = '', array $xrefForcee = []): string
 {
-    $flux = gzcompress($objets);
+    $pdf = "%PDF-1.5\n";
+    $positions = [];
+    foreach (array_values($corps) as $i => $c) {
+        $positions[$i + 1] = strlen($pdf);
+        $pdf .= ($i + 1)." 0 obj\n{$c}\nendobj\n";
+    }
+    $debut = strlen($pdf);
+    $pdf .= "xref\n0 ".(count($positions) + 1)."\n0000000000 65535 f \n";
+    foreach ($positions as $numero => $position) {
+        $pdf .= sprintf("%010d 00000 n \n", $xrefForcee[$numero] ?? $position);
+    }
 
-    return pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode', $flux);
+    return $pdf.'trailer << /Size '.(count($positions) + 1)." /Root 1 0 R {$trailer} >>\nstartxref\n{$debut}\n%%EOF";
 }
 
-function pdfAvecFlux(string $dictionnaire, string $flux, string $finDeLigne = "\n"): string
+/** Le corps d'un objet flux, `/Length` compris. */
+function flux(string $dictionnaire, string $donnees, string $finDeLigne = "\n"): string
 {
-    return "%PDF-1.5\n1 0 obj << {$dictionnaire} /Length ".strlen($flux)." >>\nstream{$finDeLigne}".$flux."\nendstream\nendobj\n%%EOF";
+    return "<< {$dictionnaire} /Length ".strlen($donnees)." >>\nstream{$finDeLigne}{$donnees}\nendstream";
+}
+
+/**
+ * Un PDF 1.5 dont la table xref est un flux compresse, predicteur 12 compris,
+ * comme en produisent Word et LibreOffice. `$enPlus` ajoute des entrees brutes
+ * [type, champ 2, champ 3].
+ *
+ * @param  list<string>  $corps
+ * @param  list<array{int, int, int}>  $enPlus
+ */
+function pdfAvecFluxXref(array $corps, array $enPlus = []): string
+{
+    $pdf = "%PDF-1.5\n";
+    $positions = [];
+    foreach (array_values($corps) as $i => $c) {
+        $positions[] = strlen($pdf);
+        $pdf .= ($i + 1)." 0 obj\n{$c}\nendobj\n";
+    }
+    $numero = count($positions) + 1;
+    $positions[] = strlen($pdf);
+    $lignes = "\x00\x00\x00\xFF";
+    foreach ($positions as $position) {
+        $lignes .= "\x01".pack('n', $position)."\x00";
+    }
+    foreach ($enPlus as [$type, $a, $b]) {
+        $lignes .= chr($type).pack('n', $a).chr($b);
+    }
+    $taille = 1 + count($positions) + count($enPlus);
+    $dict = "/Type /XRef /W [1 2 1] /Size {$taille} /Root 1 0 R /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 >>";
+    $pdf .= "{$numero} 0 obj\n".flux($dict, gzcompress(avecPredicteurUp($lignes, 4)))."\nendobj\n";
+
+    return $pdf."startxref\n".end($positions)."\n%%EOF";
+}
+
+/** Un PDF dont les objets vivent dans un flux compresse, comme depuis PDF 1.5. */
+function pdfAvecObjetsCompresses(string $objets): string
+{
+    return pdfAvecFlux('/Type /ObjStm /N 1 /First 0 /Filter /FlateDecode', gzcompress($objets));
+}
+
+function pdfAvecFlux(string $dictionnaire, string $donnees, string $finDeLigne = "\n"): string
+{
+    return pdfValide([flux($dictionnaire, $donnees, $finDeLigne)]);
+}
+
+/** Une image dont les donnees imitent un objet, que la table xref designe. */
+function pdfAvecObjetCacheDansUneImage(): string
+{
+    $corps = [
+        flux('/Type /XObject /Subtype /Image /Filter /DCTDecode', "\xFF\xD8 2 0 obj << /OpenAction 3 0 R >> endobj \xFF\xD9"),
+        '<< /Type /Catalog >>',
+    ];
+
+    return pdfValide($corps, '', [2 => strpos(pdfValide($corps), '2 0 obj << /Open')]);
 }
 
 /** Un flux deflate brut dont les premiers octets, stockes tels quels, contiennent le mot `endstream`. */
@@ -141,7 +213,7 @@ it('refuse un PDF qui porte du contenu actif et accepte un PDF simple', function
     joindre($this, $this->reference, "%PDF-1.4\n1 0 obj << /OpenAction << /JS (app.alert(1)) >> >> endobj\n%%EOF", 'doc.pdf')
         ->assertStatus(422)->assertJsonPath('error', 'attachment_rejected');
 
-    joindre($this, $this->reference, "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF", 'releve.pdf', 'pj-cle-000002')
+    joindre($this, $this->reference, pdfValide(['<< /Type /Catalog >>']), 'releve.pdf', 'pj-cle-000002')
         ->assertCreated()->assertJsonPath('pieces_jointes.0.type', 'application/pdf');
 });
 
@@ -235,7 +307,19 @@ it('refuse un PDF qu il ne sait pas lire au lieu de l accepter', function (strin
     'fin de ligne CR seule' => fn () => pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode', gzcompress('<< /S /JavaScript >>'), "\r"),
     'chaine de filtres inconnue' => fn () => pdfAvecFlux('/Type /ObjStm /Filter [/ASCIIHexDecode /FlateDecode]', bin2hex(gzcompress('<< /S /JavaScript >>')).'>'),
     'filtre indirect' => fn () => pdfAvecFlux('/Type /ObjStm /Filter 5 0 R', gzcompress('<< /S /JavaScript >>')),
-    'chiffre' => fn () => "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Encrypt 2 0 R >>\n%%EOF",
+    'chiffre' => fn () => pdfValide(['<< /Type /Catalog >>'], '/Encrypt 2 0 R'),
+    'mot stream dans une chaine' => fn () => pdfValide(["<< /Title (a stream\nb) >>"]),
+    'mot stream en fin de commentaire' => fn () => pdfValide(["<< /Type /Catalog >> % stream"]),
+    'parametres indirects' => fn () => pdfAvecFlux('/Filter /FlateDecode /DecodeParms 7 0 R', gzcompress('BT ET')),
+    'colonnes indirectes' => fn () => pdfAvecFlux('/Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 0 R >>', gzcompress(avecPredicteurUp('BT ET', 4))),
+    'double compression' => fn () => pdfAvecFlux('/Filter [/FlateDecode /FlateDecode]', gzcompress(gzcompress('<< /S /JavaScript >>'))),
+    'flux d objets deguise en image' => fn () => pdfAvecFlux('/Type /ObjStm /Subtype /Image /N 1 /First 0 /Filter /CCITTFaxDecode', 'donnees'),
+    'objet cache dans une image' => fn () => pdfAvecObjetCacheDansUneImage(),
+    'objet compresse dans un flux jamais lu' => fn () => pdfAvecFluxXref(['<< /Type /Catalog >>'], [[2, 9, 0]]),
+    'ouverture sur une action' => fn () => pdfValide(['<< /Type /Catalog /OpenAction << /S /URI /URI (http://x.test) >> >>']),
+    'ouverture indirecte' => fn () => pdfValide(['<< /Type /Catalog /OpenAction 2 0 R >>', '<< /S /URI /URI (http://x.test) >>']),
+    'ouverture sur une action compressee' => fn () => pdfAvecObjetsCompresses('<< /OpenAction << /S /URI /URI (http://x.test) >> >>'),
+    'sans table xref' => fn () => "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF",
     'predicteur qui masque les noms' => fn () => pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 >>', gzcompress(avecPredicteurUp('<< /S /JavaScript >>', 4))),
     'flate illisible' => fn () => pdfAvecFlux('/Filter /FlateDecode', 'pas du deflate'),
 ]);
@@ -243,10 +327,13 @@ it('refuse un PDF qu il ne sait pas lire au lieu de l accepter', function (strin
 it('accepte les flux qu il sait lire ou qui ne portent que des pixels', function (string $pdf) {
     joindre($this, $this->reference, $pdf, 'x.pdf')->assertCreated();
 })->with([
-    'xref avec predicteur' => fn () => pdfAvecFlux('/Type /XRef /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 >>', gzcompress(avecPredicteurUp(str_repeat("\x01\x00\x10\x00", 6), 4))),
+    'flux xref avec predicteur' => fn () => pdfAvecFluxXref(['<< /Type /Catalog >>', flux('/Filter /FlateDecode', gzcompress('BT (Releve) Tj ET'))]),
+    'image compressee jamais inflatee' => fn () => pdfAvecFlux('/Type /XObject /Subtype /Image /Filter /FlateDecode', random_bytes(4096)),
     'image JPEG' => fn () => pdfAvecFlux('/Type /XObject /Subtype /Image /Filter /DCTDecode', "\xFF\xD8\xFF\xE0 donnees binaires"),
     'deflate brut' => fn () => pdfAvecFlux('/Filter /FlateDecode', gzdeflate('BT /F1 12 Tf (Releve) Tj ET')),
-    'signe' => fn () => "%PDF-1.7\n1 0 obj << /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached >> endobj\n%%EOF",
+    'page d ouverture, comme mPDF' => fn () => pdfValide(['<< /Type /Catalog /OpenAction [2 0 R /XYZ null null 1] >>', '<< /Type /Page >>']),
+    'page d ouverture compressee' => fn () => pdfAvecObjetsCompresses('<< /Type /Catalog /OpenAction [2 0 R /Fit] >>'),
+    'signe' => fn () => pdfValide(['<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached >>']),
 ]);
 
 it('reconnait un renvoi aux octets recus, sans refaire l assainissement', function () {

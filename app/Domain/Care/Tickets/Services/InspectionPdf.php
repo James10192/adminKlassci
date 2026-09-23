@@ -7,107 +7,271 @@ use App\Domain\Care\Tickets\Exceptions\PieceJointeRefusee;
 /**
  * Cherche un contenu actif dans un PDF, en refusant ce qu'elle ne sait pas lire.
  *
- * Un PDF ne se re-encode pas sans un outil que l'hebergement n'a pas. On lit donc
- * le fichier en clair, puis chaque flux compresse, et on refuse des qu'un marqueur
- * de contenu actif apparait. La regle qui compte est l'inverse du premier jet :
- * un flux qu'on ne sait pas decoder n'est PAS accepte par defaut. Seuls passent
- * les flux sans filtre (deja lus en clair), les flux d'image (DCT, JPX, CCITT,
- * JBIG2 : des pixels, pas des objets) et les flux FlateDecode effectivement
- * inflates. Tout autre filtre, toute chaine inconnue, tout PDF chiffre : refus.
+ * Un PDF ne se re-encode pas sans un outil que l'hebergement n'a pas. Un contenu
+ * actif s'annonce par un NOM dans un dictionnaire (`/OpenAction`, `/JS`…), et un
+ * dictionnaire ne vit qu'a deux endroits : dans le texte du fichier, ou dans un
+ * flux d'objets compresse. `AnalyseurPdf` lit le premier et remet chaque flux ;
+ * ici on decide de chacun, sur son propre dictionnaire :
+ * - une image (`/Subtype /Image`) ne porte que des pixels : sautee, quel que soit
+ *   son filtre ;
+ * - un flux sans filtre est lu tel quel ;
+ * - un flux FlateDecode est inflate jusqu'a sa fin, predicteur PNG defait, et lu ;
+ * - tout le reste — autre filtre, chaine de filtres, valeur indirecte, fichier
+ *   externe, PDF chiffre — est refuse comme illisible.
  *
- * Un faux refus coute un courriel ; un faux accord, un poste.
- *
- * Ce n'est pas un analyseur PDF. Trois choix le rendent sur malgre ca :
- * - chaque mot-cle `stream` du fichier est examine, meme dans une chaine ou un
- *   commentaire, et le curseur n'avance jamais au-dela du debut des donnees d'un
- *   flux : un faux flux ne peut pas faire sauter un vrai ;
- * - les filtres sont lus sur tout le texte depuis le flux precedent, pas sur un
- *   dictionnaire reconstruit : une chaine qui imite `/Filter` ajoute un filtre au
- *   lot, elle ne peut pas en retirer un ;
- * - l'inflation suit le flux compresse jusqu'a sa fin reelle, pas jusqu'au
- *   premier `endstream` litteral, qu'un bloc stocke peut contenir.
+ * Un faux refus coute un courriel ; un faux accord, un poste. Liens `/URI` exclus
+ * a dessein : presque tout PDF en porte, et un lien s'ouvre sur un clic, pas seul.
  */
 class InspectionPdf
 {
-    /** Marqueurs de contenu actif, noms complets (voir `porteUnContenuActif`). */
-    private const ACTIF = ['/JavaScript', '/JS', '/Launch', '/EmbeddedFile', '/OpenAction', '/AA', '/RichMedia', '/XFA'];
-
-    private const FLATE = ['FlateDecode', 'Fl'];
-
-    private const IMAGE = ['DCTDecode', 'DCT', 'JPXDecode', 'CCITTFaxDecode', 'CCF', 'JBIG2Decode'];
+    /**
+     * Noms qui declenchent une action ou embarquent un contenu. `/OpenAction` n'y
+     * est pas : sa forme la plus courante, un tableau, n'est qu'une page d'ouverture
+     * (mPDF l'ecrit sur chaque document). Elle est jugee sur sa valeur.
+     */
+    private const ACTIF = ['JavaScript', 'JS', 'Launch', 'EmbeddedFile', 'AA', 'RichMedia', 'XFA',
+        'SubmitForm', 'ImportData', 'GoToE', 'Rendition'];
 
     private const REFUS = 'Ce PDF contient des éléments actifs et ne peut pas être joint. Envoyez une capture d\'écran à la place.';
 
     private const ILLISIBLE = 'Ce PDF ne peut pas être vérifié. Envoyez une capture d\'écran à la place.';
 
+    private const PROTEGE = 'Ce PDF est protégé et ne peut pas être vérifié. Envoyez une capture d\'écran à la place.';
+
     public function verifier(string $contenu, int $budgetInflation): void
     {
-        $clair = $this->sansEchappements($contenu);
-        if ($this->contient($clair, '/Encrypt')) {
-            throw new PieceJointeRefusee('Ce PDF est protégé et ne peut pas être vérifié. Envoyez une capture d\'écran à la place.');
+        $xref = ['positions' => [], 'compresses' => [], 'flux' => 0];
+        $lus = [];
+        $structure = (new AnalyseurPdf($contenu))->parcourir(
+            fn (string $nom) => $this->juger($nom),
+            function (array $dict, int $debut, ?int $objet) use ($contenu, &$budgetInflation, &$xref, &$lus): int {
+                $fin = $debut + $this->longueur($dict, $contenu);
+                if ($fin > strlen($contenu)) {
+                    $this->refuser();
+                }
+                if ($this->estUneImage($dict)) {
+                    return $fin;
+                }
+                $texte = $this->decoder(substr($contenu, $debut, $fin - $debut), $dict, $budgetInflation);
+                $budgetInflation -= strlen($texte);
+                $this->scanner($texte);
+                if ($objet !== null) {
+                    $lus[$objet] = true;
+                }
+                if ($this->nom($dict['Type'] ?? null) === 'XRef') {
+                    $this->lireFluxXref($texte, $dict, $xref);
+                }
+
+                return $fin;
+            },
+            fn (array $dict) => $this->jugerOuverture($dict['OpenAction'] ?? null),
+        );
+
+        $this->verifierXref($contenu, $structure, $xref, $lus);
+    }
+
+    /**
+     * Un lecteur atteint les objets par la table xref, pas en parcourant le
+     * fichier. Chaque entree doit donc tomber sur un objet que l'analyseur a lu,
+     * et chaque objet compresse vivre dans un flux decode ici. Sinon un objet
+     * pourrait se loger dans les donnees d'une image, invisible pour nous.
+     *
+     * @param  array{objets: array<int, int>, xref: list<int>}  $structure
+     * @param  array{positions: list<int>, compresses: list<int>, flux: int}  $xref
+     * @param  array<int, true>  $lus
+     */
+    private function verifierXref(string $contenu, array $structure, array $xref, array $lus): void
+    {
+        if ($structure['xref'] === [] && $xref['flux'] === 0) {
+            $this->refuser();
         }
-        $this->refuserSiActif($clair);
-
-        preg_match_all('/(?<!end)stream(?:\r\n|\r|\n)/', $contenu, $flux, PREG_OFFSET_CAPTURE);
-        $curseur = 0;
-        foreach ($flux[0] as [$motCle, $position]) {
-            if ($position < $curseur) {
-                continue;
+        foreach ([...$structure['xref'], ...$xref['positions']] as $position) {
+            $position += strspn($contenu, "\0\t\n\f\r ", $position);
+            if (! isset($structure['objets'][$position])) {
+                $this->refuser();
             }
-            $debutDonnees = $position + strlen($motCle);
-            $entete = $this->sansEchappements(substr($contenu, $curseur, $position - $curseur));
-            $curseur = $debutDonnees;
-
-            $filtres = $this->filtres($entete);
-            if ($filtres === [] || array_diff($filtres, self::IMAGE) === []) {
-                continue; // sans filtre : deja lu en clair ; image : des pixels.
+        }
+        foreach ($xref['compresses'] as $fluxDObjets) {
+            if (! isset($lus[$fluxDObjets])) {
+                $this->refuser();
             }
-            if (array_intersect($filtres, self::FLATE) === [] || array_diff($filtres, self::FLATE, self::IMAGE) !== []) {
-                throw new PieceJointeRefusee(self::ILLISIBLE);
-            }
-
-            $texte = $this->inflater($contenu, $debutDonnees, $budgetInflation);
-            $budgetInflation -= strlen($texte);
-            $this->refuserSiActif($this->sansEchappements($this->sansPredicteur($texte, $entete)));
         }
     }
 
     /**
-     * Les noms de filtre annonces dans le texte. Une valeur indirecte (`/Filter 5 0 R`)
-     * ne se resout pas ici : elle rend le flux illisible, donc refuse. Les noms
-     * pointes (`/Adobe.PPKLite`) sont des gestionnaires de signature, pas des filtres.
+     * Les entrees d'un flux xref (`/W`, `/Index`) : type 1, position d'un objet ;
+     * type 2, numero du flux d'objets qui le contient.
      *
-     * @return list<string>
+     * @param  array{positions: list<int>, compresses: list<int>, flux: int}  $xref
      */
-    private function filtres(string $entete): array
+    private function lireFluxXref(string $texte, array $dict, array &$xref): void
     {
-        $annonces = preg_match_all('#/Filter(?![A-Za-z0-9])#', $entete);
-        preg_match_all('#/Filter\s*(\[[^\]]*\]|/[^\s/\[\]<>()]+)#', $entete, $valeurs);
-        if (count($valeurs[1]) !== $annonces) {
-            throw new PieceJointeRefusee(self::ILLISIBLE);
+        $largeurs = $this->entiers($dict['W'] ?? null);
+        $taille = $dict['Size'] ?? null;
+        if (count($largeurs) !== 3 || ! is_int($taille)) {
+            $this->refuser();
+        }
+        $index = array_key_exists('Index', $dict) ? $this->entiers($dict['Index']) : [0, $taille];
+        $ligne = array_sum($largeurs);
+        if ($ligne < 1 || count($index) % 2 !== 0) {
+            $this->refuser();
         }
 
-        $noms = [];
-        foreach ($valeurs[1] as $valeur) {
-            preg_match_all('#/([^\s/\[\]<>()]+)#', $valeur, $m);
-            $noms = [...$noms, ...array_filter($m[1], fn ($n) => ! str_contains($n, '.'))];
+        $xref['flux']++;
+        $pos = 0;
+        foreach (array_chunk($index, 2) as [, $nombre]) {
+            for ($i = 0; $i < $nombre; $i++, $pos += $ligne) {
+                if ($pos + $ligne > strlen($texte)) {
+                    $this->refuser();
+                }
+                $champs = [];
+                $curseur = $pos;
+                foreach ($largeurs as $largeur) {
+                    $champs[] = $largeur === 0 ? null : (int) hexdec(bin2hex(substr($texte, $curseur, $largeur)));
+                    $curseur += $largeur;
+                }
+                match ($champs[0] ?? 1) {
+                    1 => $xref['positions'][] = (int) $champs[1],
+                    2 => $xref['compresses'][] = (int) $champs[1],
+                    default => null,
+                };
+            }
         }
-
-        return array_values(array_unique($noms));
     }
 
-    /** Inflate le flux commencant a `$debut`, jusqu'a sa fin reelle, dans le budget. */
-    private function inflater(string $contenu, int $debut, int $budget): string
+    /** @return list<int> */
+    private function entiers(mixed $valeur): array
+    {
+        if (! is_array($valeur) || ($valeur['t'] ?? null) !== 'tableau') {
+            $this->refuser();
+        }
+
+        return array_map(fn ($n) => is_int($n) && $n >= 0 ? $n : $this->refuser(), $valeur['v']);
+    }
+
+    /** Le texte d'un flux : tel quel sans filtre, inflate en FlateDecode, refuse autrement. */
+    private function decoder(string $donnees, array $dict, int $budget): string
+    {
+        if (array_key_exists('F', $dict)) {
+            $this->refuser(); // donnees dans un fichier externe
+        }
+        $filtres = $this->filtres($dict['Filter'] ?? null);
+        if ($filtres === []) {
+            return $donnees;
+        }
+        if ($filtres !== ['FlateDecode'] && $filtres !== ['Fl']) {
+            $this->refuser();
+        }
+
+        return $this->sansPredicteur(
+            $this->inflater($donnees, $budget),
+            $this->parametresDeDecodage($dict['DecodeParms'] ?? $dict['DP'] ?? null),
+        );
+    }
+
+    /** Le texte d'un flux lu ou inflate : on y cherche les noms, faute de pouvoir le parcourir. */
+    private function scanner(string $texte): void
+    {
+        $texte = (string) preg_replace_callback('/#([0-9A-Fa-f]{2})/', fn ($m) => chr(hexdec($m[1])), $texte);
+        preg_match_all('#/([^\s()<>\[\]{}/%]+)#', $texte, $noms);
+        foreach (array_unique($noms[1]) as $nom) {
+            $this->juger($nom);
+        }
+        if (preg_match('#/OpenAction(?!\s*\[)#', $texte)) {
+            throw new PieceJointeRefusee(self::REFUS);
+        }
+    }
+
+    /** Une page d'ouverture (tableau) est inoffensive ; une action, ou ce qu'on ne voit pas, non. */
+    private function jugerOuverture(mixed $valeur): void
+    {
+        if ($valeur !== null && ($valeur['t'] ?? null) !== 'tableau') {
+            throw new PieceJointeRefusee(self::REFUS);
+        }
+    }
+
+    private function juger(string $nom): void
+    {
+        if ($nom === 'Encrypt') {
+            throw new PieceJointeRefusee(self::PROTEGE);
+        }
+        if (in_array($nom, self::ACTIF, true)) {
+            throw new PieceJointeRefusee(self::REFUS);
+        }
+    }
+
+    /** Une image XObject : pas un flux d'objets deguise (`/First`, `/N`, un autre `/Type`). */
+    private function estUneImage(array $dict): bool
+    {
+        return $this->nom($dict['Subtype'] ?? null) === 'Image'
+            && in_array($this->nom($dict['Type'] ?? null), [null, 'XObject'], true)
+            && ! array_key_exists('First', $dict) && ! array_key_exists('N', $dict);
+    }
+
+    /** @return list<string> les filtres dans l'ordre, doublons compris */
+    private function filtres(mixed $valeur): array
+    {
+        if ($valeur === null) {
+            return [];
+        }
+        $liste = is_array($valeur) && ($valeur['t'] ?? null) === 'tableau' ? $valeur['v'] : [$valeur];
+
+        return array_map(fn ($filtre) => $this->nom($filtre) ?? $this->refuser(), $liste);
+    }
+
+    /** @return array<string, int> */
+    private function parametresDeDecodage(mixed $valeur): array
+    {
+        if (is_array($valeur) && ($valeur['t'] ?? null) === 'tableau' && count($valeur['v']) === 1) {
+            $valeur = $valeur['v'][0];
+        }
+        if ($valeur === null || $valeur === 'null') {
+            return [];
+        }
+        if (! is_array($valeur) || ($valeur['t'] ?? null) !== 'dict') {
+            $this->refuser();
+        }
+
+        $parametres = [];
+        foreach (['Predictor', 'Colors', 'BitsPerComponent', 'Columns'] as $cle) {
+            if (array_key_exists($cle, $valeur['v'])) {
+                $parametres[$cle] = is_int($valeur['v'][$cle]) ? $valeur['v'][$cle] : $this->refuser();
+            }
+        }
+
+        return $parametres;
+    }
+
+    /** La longueur des donnees, directe ou lue sur son objet s'il n'est defini qu'une fois. */
+    private function longueur(array $dict, string $contenu): int
+    {
+        $valeur = $dict['Length'] ?? null;
+        if (is_int($valeur)) {
+            return $valeur;
+        }
+        if (! is_array($valeur) || ($valeur['t'] ?? null) !== 'ref') {
+            $this->refuser();
+        }
+
+        [$numero, $generation] = $valeur['v'];
+        preg_match_all('/(?<![0-9])'.$numero.'\s+'.$generation.'\s+obj\s*(\d+)\s*endobj/', $contenu, $m);
+        $valeurs = array_unique($m[1]);
+
+        return count($valeurs) === 1 ? (int) reset($valeurs) : $this->refuser();
+    }
+
+    /** Inflate le flux jusqu'a sa fin reelle, dans le budget. */
+    private function inflater(string $donnees, int $budget): string
     {
         foreach ([ZLIB_ENCODING_DEFLATE, ZLIB_ENCODING_RAW] as $encodage) {
             $contexte = inflate_init($encodage);
             $sortie = '';
-            for ($pos = $debut; $pos < strlen($contenu); $pos += 8192) {
-                $morceau = @inflate_add($contexte, substr($contenu, $pos, 8192), ZLIB_SYNC_FLUSH);
-                if ($morceau === false) {
+            foreach (str_split($donnees, 8192) as $morceau) {
+                $bloc = @inflate_add($contexte, $morceau, ZLIB_SYNC_FLUSH);
+                if ($bloc === false) {
                     break;
                 }
-                $sortie .= $morceau;
+                $sortie .= $bloc;
                 if (strlen($sortie) > $budget) {
                     throw new PieceJointeRefusee('Ce PDF est trop complexe pour être vérifié. Envoyez une capture d\'écran à la place.');
                 }
@@ -117,29 +281,31 @@ class InspectionPdf
             }
         }
 
-        throw new PieceJointeRefusee(self::ILLISIBLE);
+        $this->refuser();
     }
 
     /**
      * Un predicteur PNG (/Predictor 10 a 15) code chaque octet par difference :
-     * un nom n'y apparait plus en clair. On le defait ; tout autre predicteur, ou
-     * des parametres ambigus, rendent le flux illisible.
+     * un nom n'y apparait plus en clair. On le defait ; tout autre predicteur rend
+     * le flux illisible.
+     *
+     * @param  array<string, int>  $parametres
      */
-    private function sansPredicteur(string $texte, string $entete): string
+    private function sansPredicteur(string $texte, array $parametres): string
     {
-        $predicteur = $this->parametre($entete, 'Predictor', 1);
+        $predicteur = $parametres['Predictor'] ?? 1;
         if ($predicteur <= 1) {
             return $texte;
         }
-        if ($predicteur < 10) {
-            throw new PieceJointeRefusee(self::ILLISIBLE);
+        if ($predicteur < 10 || $predicteur > 15) {
+            $this->refuser();
         }
 
-        $bits = $this->parametre($entete, 'Colors', 1) * $this->parametre($entete, 'BitsPerComponent', 8);
+        $bits = ($parametres['Colors'] ?? 1) * ($parametres['BitsPerComponent'] ?? 8);
         $parPixel = max(1, intdiv($bits + 7, 8));
-        $largeur = intdiv($this->parametre($entete, 'Columns', 1) * $bits + 7, 8);
+        $largeur = intdiv(($parametres['Columns'] ?? 1) * $bits + 7, 8);
         if ($largeur < 1 || strlen($texte) % ($largeur + 1) !== 0) {
-            throw new PieceJointeRefusee(self::ILLISIBLE);
+            $this->refuser();
         }
 
         $sortie = '';
@@ -156,7 +322,7 @@ class InspectionPdf
                     2 => $b,
                     3 => intdiv($a + $b, 2),
                     4 => $this->paeth($a, $b, $c),
-                    default => throw new PieceJointeRefusee(self::ILLISIBLE),
+                    default => $this->refuser(),
                 }) & 0xFF);
             }
             $sortie .= $courante;
@@ -174,36 +340,13 @@ class InspectionPdf
         return $pa <= $pb && $pa <= $pc ? $a : ($pb <= $pc ? $b : $c);
     }
 
-    /** Un parametre entier du dictionnaire ; deux valeurs differentes le rendent ambigu. */
-    private function parametre(string $entete, string $nom, int $defaut): int
+    private function nom(mixed $valeur): ?string
     {
-        preg_match_all('#/'.$nom.'\s+(\d+)#', $entete, $m);
-        $valeurs = array_unique(array_map('intval', $m[1]));
-        if (count($valeurs) > 1) {
-            throw new PieceJointeRefusee(self::ILLISIBLE);
-        }
-
-        return $valeurs === [] ? $defaut : reset($valeurs);
+        return is_array($valeur) && ($valeur['t'] ?? null) === 'nom' ? $valeur['v'] : null;
     }
 
-    private function refuserSiActif(string $texte): void
+    private function refuser(): never
     {
-        foreach (self::ACTIF as $marqueur) {
-            if ($this->contient($texte, $marqueur)) {
-                throw new PieceJointeRefusee(self::REFUS);
-            }
-        }
-    }
-
-    /** Le marqueur doit etre un nom complet : /JS ne doit pas refuser /JSmith. */
-    private function contient(string $texte, string $nom): bool
-    {
-        return (bool) preg_match('#'.preg_quote($nom, '#').'(?![A-Za-z0-9])#', $texte);
-    }
-
-    /** Un nom PDF peut s'ecrire /J#61vaScript : on decode les echappements avant de chercher. */
-    private function sansEchappements(string $texte): string
-    {
-        return (string) preg_replace_callback('/#([0-9A-Fa-f]{2})/', fn ($m) => chr(hexdec($m[1])), $texte);
+        throw new PieceJointeRefusee(self::ILLISIBLE);
     }
 }

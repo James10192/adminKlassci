@@ -58,13 +58,20 @@ the two disagree, **this list and the code are right**.
   decoded and re-encoded: EXIF and GPS dropped after the EXIF orientation is applied to the
   pixels, side capped at 2400 px, and anything above `pixels_max` (24 Mpx) refused from its
   declared size **before** decoding (the system libgd allocates outside `memory_limit`). A PDF
-  goes through `InspectionPdf`, which **fails closed**: an encrypted PDF is refused, every
-  `stream` keyword is examined, FlateDecode streams are inflated to their real end (not to the
-  first literal `endstream`) within `pdf_inflation_max_octets`, PNG predictors are undone, and
-  any other filter, filter chain or indirect `/Filter` is refused as unverifiable. Only
-  unfiltered streams (already read in clear) and image streams (DCT, JPX, CCITT, JBIG2) pass
-  unread. It then refuses active content (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFile`,
-  `/OpenAction`, `/AA`, `/RichMedia`, `/XFA`, `#xx` escapes decoded). A false refusal costs an
+  goes through `InspectionPdf`, which **fails closed**. `AnalyseurPdf` reads the file
+  sequentially, as a viewer does, skipping stream data by its `/Length`; a `stream` keyword
+  hidden in a string or a comment is refused, since that is the only way to show a viewer a
+  stream we would not see. Each stream is judged on its own dictionary: an image XObject
+  passes unread; an unfiltered stream is read raw; exactly one FlateDecode is inflated to
+  its real end within `pdf_inflation_max_octets`, PNG predictor undone; any other filter,
+  chain, indirect `/Filter` or `/DecodeParms`, or external `/F` is refused. Then the xref
+  must agree with the reading: every offset lands on an object we read, every compressed
+  object lives in a stream we decoded, and a file without xref is refused. Active names are
+  refused (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFile`, `/AA`, `/RichMedia`, `/XFA`,
+  `/SubmitForm`, `/ImportData`, `/GoToE`, `/Rendition`, `#xx` escapes decoded); `/OpenAction`
+  is judged on its value — a destination array (mPDF writes one on every file) passes, an
+  action or a reference does not; `/Encrypt` is refused as protected. Checked against real
+  Dompdf and mPDF output. A false refusal costs an
   email; a false accept, a workstation. PDFs
   always download, never render in the panel. Refusals answer 422 `attachment_rejected` with a
   showable message. A retry is recognised by the sha256 of the **bytes received**
