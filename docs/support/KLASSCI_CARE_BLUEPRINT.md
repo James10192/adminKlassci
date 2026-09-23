@@ -618,14 +618,13 @@ Headers:
 
 ## 16. Screenshot architecture
 
-- **[NEEDS_DECISION] ADR-06, which capture engine:**
-  - (a) `getDisplayMedia` (native, pixel-perfect, asks the user each time, desktop only);
-  - (b) DOM rasterisation with a vendored library (`html2canvas` or `modern-screenshot`, served
-    from cdnjs/jsdelivr or `public/vendor`), which works on mobile but is imperfect with CSS
-    effects;
-  - (c) a file upload fallback.
-
-  **Recommendation:** (b) by default, with (c) always available. Load it lazily.
+- **[DECIDED] ADR-06, capture engine:** (b) DOM rasterisation with `html2canvas` 1.4.1
+  (MIT), vendored in the instance's `public/vendor` — never a CDN — and loaded on the first
+  click only, with (c) « Choisir une image » always offered, including when rasterisation
+  fails. (a) `getDisplayMedia` was set aside: desktop only, and it captures whatever the user
+  shares, not the page we can mask. Gated by the `support_screenshot` tenant feature (closed
+  by default), the customer portal, and the `support:update` scope — the image travels as an
+  attachment after creation, so without those it could not be joined.
 - **Privacy:** before the capture, elements marked `data-support-masque` and every `input`,
   `textarea` and `select` value are replaced with a blurred placeholder. Opt-out is explicit per
   field. The user sees the preview and must press "Joindre".
@@ -1075,7 +1074,7 @@ Tenant `.env` changes per rollout: `MASTER_SUPPORT_TOKEN`. `MASTER_API_URL` alre
 | ADR-03 | Entity naming language (English vs French) for Care models |
 | ADR-04 | Reference format and sequence strategy |
 | ADR-05 | Transactional outbox (Master) for GitHub/notifications |
-| ADR-06 | Screenshot engine |
+| ADR-06 | Screenshot engine — decided: vendored html2canvas + file fallback |
 | ADR-07 | JSON schema validation approach (internal vs package) |
 | ADR-08 | Semantic search / vectors: deferred until measured need |
 | ADR-09 | GitHub App vs PAT |
