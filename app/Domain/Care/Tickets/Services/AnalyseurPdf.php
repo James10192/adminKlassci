@@ -44,8 +44,11 @@ class AnalyseurPdf
      * @param  callable(array, int, ?int): int  $surFlux  dictionnaire du flux, debut de ses donnees et numero
      *                                                     d'objet ; rend la fin des donnees
      * @param  (callable(array): void)|null  $surDict  chaque dictionnaire lu, valeurs comprises
-     * @return array{objets: array<int, int>, xref: list<int>} les objets lus (position => numero)
-     *                                                          et les positions annoncees par les tables xref
+     * @return array{objets: array<int, int>, xref: list<array{int, int}>, tables: list<int>,
+     *                trailers: list<array>, startxref: list<int>, types: array<int, list<string>>}
+     *         les objets lus (position => numero), les entrees en service des tables xref
+     *         [numero, position], la position de chaque table, les dictionnaires de trailer, les
+     *         valeurs de startxref, et le type de la valeur de chaque objet lu
      */
     public function parcourir(callable $surNom, callable $surFlux, ?callable $surDict = null): array
     {
@@ -56,8 +59,27 @@ class AnalyseurPdf
         $objet = null;
         $objets = [];
         $xref = [];
+        $tables = [];
+        $trailers = [];
+        $startxref = [];
+        $types = [];
+        $valeurDObjet = false;
         while (($jeton = $this->jeton()) !== null) {
             $debut = $this->debutJeton;
+            if ($jeton === 'trailer') {
+                $trailer = $this->valeur($this->jetonAttendu(), 0);
+                $trailers[] = is_array($trailer) && $trailer['t'] === 'dict' ? $trailer['v'] : $this->refuser();
+                [$dernier, $recents] = [null, []];
+
+                continue;
+            }
+            if ($jeton === 'startxref') {
+                $position = $this->jetonAttendu();
+                $startxref[] = is_string($position) && ctype_digit($position) ? (int) $position : $this->refuser();
+                [$dernier, $recents] = [null, []];
+
+                continue;
+            }
             if ($jeton === 'stream') {
                 if (! is_array($dernier) || ($dernier['t'] ?? null) !== 'dict') {
                     $this->refuser();
@@ -69,26 +91,33 @@ class AnalyseurPdf
                 continue;
             }
             if ($jeton === 'xref') {
+                $tables[] = $debut;
                 $xref = [...$xref, ...$this->tableXref()];
                 [$dernier, $recents] = [null, []];
 
                 continue;
             }
             $valeur = $this->valeur($jeton, 0);
+            if ($valeurDObjet) {
+                $types[$objet][] = is_array($valeur) ? $valeur['t'] : 'autre';
+                $valeurDObjet = false;
+            }
             if ($valeur === 'obj' && count($recents) === 2 && is_int($recents[0][0]) && is_int($recents[1][0])) {
                 $objets[$recents[0][1]] = $objet = $recents[0][0];
+                $valeurDObjet = true;
             }
             $recents = array_slice([...$recents, [$valeur, $debut]], -2);
             $dernier = $valeur;
         }
 
-        return ['objets' => $objets, 'xref' => $xref];
+        return ['objets' => $objets, 'xref' => $xref, 'tables' => $tables, 'trailers' => $trailers,
+            'startxref' => $startxref, 'types' => $types];
     }
 
-    /** @return list<int> les positions des entrees en service (`n`) d'une table xref */
+    /** @return list<array{int, int}> les entrees en service (`n`) d'une table xref : [numero, position] */
     private function tableXref(): array
     {
-        $positions = [];
+        $entrees = [];
         while (preg_match('/\G\s*(\d+)\s+(\d+)[ \t]*[\r\n]/', $this->pdf, $section, 0, $this->pos)) {
             $this->pos += strlen($section[0]);
             for ($i = 0; $i < (int) $section[2]; $i++) {
@@ -97,12 +126,12 @@ class AnalyseurPdf
                 }
                 $this->pos += strlen($entree[0]);
                 if ($entree[3] === 'n') {
-                    $positions[] = (int) $entree[1];
+                    $entrees[] = [(int) $section[1] + $i, (int) $entree[1]];
                 }
             }
         }
 
-        return $positions;
+        return $entrees;
     }
 
     /** Une valeur : dictionnaire, tableau, reference, ou le jeton lui-meme. */

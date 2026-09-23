@@ -64,13 +64,16 @@ the two disagree, **this list and the code are right**.
   stream we would not see. Each stream is judged on its own dictionary: an image XObject
   passes unread; an unfiltered stream is read raw; exactly one FlateDecode is inflated to
   its real end within `pdf_inflation_max_octets`, PNG predictor undone; any other filter,
-  chain, indirect `/Filter` or `/DecodeParms`, or external `/F` is refused. Then the xref
-  must agree with the reading: every offset lands on an object we read, every compressed
-  object lives in a stream we decoded, and a file without xref is refused. Active names are
-  refused (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFile`, `/AA`, `/RichMedia`, `/XFA`,
-  `/SubmitForm`, `/ImportData`, `/GoToE`, `/Rendition`, `#xx` escapes decoded); `/OpenAction`
-  is judged on its value — a destination array (mPDF writes one on every file) passes, an
-  action or a reference does not; `/Encrypt` is refused as protected. Checked against real
+  chain, indirect `/Filter` or `/DecodeParms`, or external `/F` is refused. Then the way a
+  viewer finds the document must land on what we read: `startxref`, `/Prev` and `/XRefStm`
+  on a table we parsed, each xref entry on the object bearing that number, each compressed
+  object in a stream we decoded, and the trailer's `/Root` on a declared object. Otherwise
+  the viewer rebuilds the table by scanning the raw file and may find objects hidden in
+  image data we never read. Active names are refused (`/JavaScript`, `/JS`, `/Launch`,
+  `/EmbeddedFile`, `/AA`, `/RichMedia`, `/XFA`, `/SubmitForm`, `/ImportData`, `/GoToE`,
+  `/GoToR`, `/Rendition`, `#xx` escapes decoded); `/OpenAction` is judged on its value — a
+  destination array (mPDF writes one on every file), or a reference to an object defined
+  once as an array, passes; an action does not; `/Encrypt` is refused as protected. Checked against real
   Dompdf and mPDF output. A false refusal costs an
   email; a false accept, a workstation. PDFs
   always download, never render in the panel. Refusals answer 422 `attachment_rejected` with a

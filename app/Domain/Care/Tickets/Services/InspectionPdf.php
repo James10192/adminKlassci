@@ -30,7 +30,7 @@ class InspectionPdf
      * (mPDF l'ecrit sur chaque document). Elle est jugee sur sa valeur.
      */
     private const ACTIF = ['JavaScript', 'JS', 'Launch', 'EmbeddedFile', 'AA', 'RichMedia', 'XFA',
-        'SubmitForm', 'ImportData', 'GoToE', 'Rendition'];
+        'SubmitForm', 'ImportData', 'GoToE', 'GoToR', 'Rendition'];
 
     private const REFUS = 'Ce PDF contient des éléments actifs et ne peut pas être joint. Envoyez une capture d\'écran à la place.';
 
@@ -40,8 +40,9 @@ class InspectionPdf
 
     public function verifier(string $contenu, int $budgetInflation): void
     {
-        $xref = ['positions' => [], 'compresses' => [], 'flux' => 0];
+        $xref = ['entrees' => [], 'compresses' => [], 'flux' => [], 'trailers' => []];
         $lus = [];
+        $ouvertures = [];
         $structure = (new AnalyseurPdf($contenu))->parcourir(
             fn (string $nom) => $this->juger($nom),
             function (array $dict, int $debut, ?int $objet) use ($contenu, &$budgetInflation, &$xref, &$lus): int {
@@ -59,56 +60,107 @@ class InspectionPdf
                     $lus[$objet] = true;
                 }
                 if ($this->nom($dict['Type'] ?? null) === 'XRef') {
-                    $this->lireFluxXref($texte, $dict, $xref);
+                    $this->lireFluxXref($texte, $dict, $objet, $xref);
                 }
 
                 return $fin;
             },
-            fn (array $dict) => $this->jugerOuverture($dict['OpenAction'] ?? null),
+            function (array $dict) use (&$ouvertures) {
+                $ouvertures[] = $dict['OpenAction'] ?? null;
+            },
         );
 
         $this->verifierXref($contenu, $structure, $xref, $lus);
+        foreach ($ouvertures as $ouverture) {
+            $this->jugerOuverture($ouverture, $structure['types']);
+        }
     }
 
     /**
-     * Un lecteur atteint les objets par la table xref, pas en parcourant le
-     * fichier. Chaque entree doit donc tomber sur un objet que l'analyseur a lu,
-     * et chaque objet compresse vivre dans un flux decode ici. Sinon un objet
-     * pourrait se loger dans les donnees d'une image, invisible pour nous.
+     * Un lecteur trouve le document par `startxref`, la table xref et le `/Root` du
+     * trailer. Tout ce chemin doit tomber sur ce que l'analyseur a lu : sinon le
+     * lecteur reconstruit la table en balayant le fichier, et y trouve des objets
+     * que nous n'avons pas vus — cachés, par exemple, dans les données d'une image.
      *
-     * @param  array{objets: array<int, int>, xref: list<int>}  $structure
-     * @param  array{positions: list<int>, compresses: list<int>, flux: int}  $xref
+     * @param  array{objets: array<int, int>, xref: list<array{int, int}>, tables: list<int>,
+     *               trailers: list<array>, startxref: list<int>, types: array}  $structure
+     * @param  array{entrees: list<array{int, int}>, compresses: list<array{int, int}>,
+     *               flux: list<int>, trailers: list<array>}  $xref
      * @param  array<int, true>  $lus
      */
     private function verifierXref(string $contenu, array $structure, array $xref, array $lus): void
     {
-        if ($structure['xref'] === [] && $xref['flux'] === 0) {
-            $this->refuser();
-        }
-        foreach ([...$structure['xref'], ...$xref['positions']] as $position) {
-            $position += strspn($contenu, "\0\t\n\f\r ", $position);
-            if (! isset($structure['objets'][$position])) {
+        $debutObjet = fn (int $position) => $position + strspn($contenu, "\0\t\n\f\r ", $position);
+        $declares = [];
+        foreach ([...$structure['xref'], ...$xref['entrees']] as [$numero, $position]) {
+            // L'entree doit designer l'objet qui porte ce numero, pas un autre.
+            if (($structure['objets'][$debutObjet($position)] ?? null) !== $numero) {
                 $this->refuser();
             }
+            $declares[$numero] = true;
         }
-        foreach ($xref['compresses'] as $fluxDObjets) {
+        foreach ($xref['compresses'] as [$numero, $fluxDObjets]) {
             if (! isset($lus[$fluxDObjets])) {
                 $this->refuser();
             }
+            $declares[$numero] = true;
+        }
+
+        // startxref, /Prev et /XRefStm doivent tomber sur une table lue.
+        $tables = array_flip($structure['tables']);
+        foreach ($xref['flux'] as $numero) {
+            foreach (array_keys($structure['objets'], $numero, true) as $position) {
+                $tables[$position] = true;
+            }
+        }
+        $trailers = [...$structure['trailers'], ...$xref['trailers']];
+        $sauts = $structure['startxref'];
+        foreach ($trailers as $trailer) {
+            foreach (['Prev', 'XRefStm'] as $cle) {
+                if (array_key_exists($cle, $trailer)) {
+                    $sauts[] = is_int($trailer[$cle]) ? $trailer[$cle] : $this->refuser();
+                }
+            }
+        }
+        if ($structure['startxref'] === [] || $trailers === []) {
+            $this->refuser();
+        }
+        foreach ($sauts as $position) {
+            if (! isset($tables[$debutObjet($position)])) {
+                $this->refuser();
+            }
+        }
+
+        // Le point d'entree du document doit etre un objet que la table declare.
+        $racines = 0;
+        foreach ($trailers as $trailer) {
+            if (! array_key_exists('Root', $trailer)) {
+                continue;
+            }
+            $racine = $trailer['Root'];
+            if (($racine['t'] ?? null) !== 'ref' || ! isset($declares[$racine['v'][0]])) {
+                $this->refuser();
+            }
+            $racines++;
+        }
+        if ($racines === 0) {
+            $this->refuser();
         }
     }
 
     /**
      * Les entrees d'un flux xref (`/W`, `/Index`) : type 1, position d'un objet ;
-     * type 2, numero du flux d'objets qui le contient.
+     * type 2, numero du flux d'objets qui le contient. Le dictionnaire du flux sert
+     * aussi de trailer.
      *
-     * @param  array{positions: list<int>, compresses: list<int>, flux: int}  $xref
+     * @param  array{entrees: list<array{int, int}>, compresses: list<array{int, int}>,
+     *               flux: list<int>, trailers: list<array>}  $xref
      */
-    private function lireFluxXref(string $texte, array $dict, array &$xref): void
+    private function lireFluxXref(string $texte, array $dict, ?int $objet, array &$xref): void
     {
         $largeurs = $this->entiers($dict['W'] ?? null);
         $taille = $dict['Size'] ?? null;
-        if (count($largeurs) !== 3 || ! is_int($taille)) {
+        if (count($largeurs) !== 3 || ! is_int($taille) || $objet === null) {
             $this->refuser();
         }
         $index = array_key_exists('Index', $dict) ? $this->entiers($dict['Index']) : [0, $taille];
@@ -117,9 +169,10 @@ class InspectionPdf
             $this->refuser();
         }
 
-        $xref['flux']++;
+        $xref['flux'][] = $objet;
+        $xref['trailers'][] = $dict;
         $pos = 0;
-        foreach (array_chunk($index, 2) as [, $nombre]) {
+        foreach (array_chunk($index, 2) as [$premier, $nombre]) {
             for ($i = 0; $i < $nombre; $i++, $pos += $ligne) {
                 if ($pos + $ligne > strlen($texte)) {
                     $this->refuser();
@@ -131,8 +184,8 @@ class InspectionPdf
                     $curseur += $largeur;
                 }
                 match ($champs[0] ?? 1) {
-                    1 => $xref['positions'][] = (int) $champs[1],
-                    2 => $xref['compresses'][] = (int) $champs[1],
+                    1 => $xref['entrees'][] = [$premier + $i, (int) $champs[1]],
+                    2 => $xref['compresses'][] = [$premier + $i, (int) $champs[1]],
                     default => null,
                 };
             }
@@ -182,12 +235,24 @@ class InspectionPdf
         }
     }
 
-    /** Une page d'ouverture (tableau) est inoffensive ; une action, ou ce qu'on ne voit pas, non. */
-    private function jugerOuverture(mixed $valeur): void
+    /**
+     * Une page d'ouverture est inoffensive : un tableau, ou la reference d'un objet
+     * defini une seule fois, en clair, comme tableau (Ghostscript l'ecrit ainsi).
+     * Une action, ou ce qu'on ne voit pas, non.
+     *
+     * @param  array<int, list<string>>  $types
+     */
+    private function jugerOuverture(mixed $valeur, array $types): void
     {
-        if ($valeur !== null && ($valeur['t'] ?? null) !== 'tableau') {
-            throw new PieceJointeRefusee(self::REFUS);
+        $type = $valeur['t'] ?? null;
+        if ($valeur === null || $type === 'tableau') {
+            return;
         }
+        if ($type === 'ref' && ($types[$valeur['v'][0]] ?? null) === ['tableau']) {
+            return;
+        }
+
+        throw new PieceJointeRefusee(self::REFUS);
     }
 
     private function juger(string $nom): void

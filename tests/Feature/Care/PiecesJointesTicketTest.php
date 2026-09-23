@@ -136,6 +136,26 @@ function pdfAvecFlux(string $dictionnaire, string $donnees, string $finDeLigne =
     return pdfValide([flux($dictionnaire, $donnees, $finDeLigne)]);
 }
 
+/**
+ * Le catalogue du document cache dans les donnees d'une image, jamais lues : le
+ * trailer le designe, la table xref ne le declare pas. Un lecteur reconstruit
+ * alors la table en balayant le fichier, et le trouve.
+ */
+function pdfAvecRacineCacheeDansUneImage(): string
+{
+    $cache = '9 0 obj << /Type /Catalog /OpenAction << /S /JavaScript /JS (app.alert(1)) >> >> endobj';
+    $pdf = "%PDF-1.5\n1 0 obj\n".flux('/Type /XObject /Subtype /Image /Filter /DCTDecode', "\xFF\xD8 {$cache} \xFF\xD9")."\nendobj\n";
+    $table = strlen($pdf);
+
+    return $pdf."xref\n0 2\n0000000000 65535 f \n0000000009 00000 n \ntrailer << /Size 2 /Root 9 0 R >>\nstartxref\n{$table}\n%%EOF";
+}
+
+/** Une table xref juste, mais que startxref ne designe pas : le lecteur la reconstruit. */
+function pdfAvecStartxrefFaux(): string
+{
+    return preg_replace('/startxref\n\d+/', 'startxref\n3', pdfValide(['<< /Type /Catalog >>']));
+}
+
 /** Une image dont les donnees imitent un objet, que la table xref designe. */
 function pdfAvecObjetCacheDansUneImage(): string
 {
@@ -319,6 +339,13 @@ it('refuse un PDF qu il ne sait pas lire au lieu de l accepter', function (strin
     'ouverture sur une action' => fn () => pdfValide(['<< /Type /Catalog /OpenAction << /S /URI /URI (http://x.test) >> >>']),
     'ouverture indirecte' => fn () => pdfValide(['<< /Type /Catalog /OpenAction 2 0 R >>', '<< /S /URI /URI (http://x.test) >>']),
     'ouverture sur une action compressee' => fn () => pdfAvecObjetsCompresses('<< /OpenAction << /S /URI /URI (http://x.test) >> >>'),
+    'racine cachee dans une image' => fn () => pdfAvecRacineCacheeDansUneImage(),
+    'startxref qui ne designe pas la table' => fn () => pdfAvecStartxrefFaux(),
+    'entree xref sur un autre objet' => fn () => str_replace('0 3', '0 3', pdfValide(['<< /Type /Catalog >>', '<< /Type /Page >>'], '', [2 => 9])),
+    'racine absente de la table' => fn () => str_replace('/Root 1 0 R', '/Root 7 0 R', pdfValide(['<< /Type /Catalog >>'])),
+    'prev qui ne designe rien' => fn () => pdfValide(['<< /Type /Catalog >>'], '/Prev 3'),
+    'ouverture d un fichier distant' => fn () => pdfValide(['<< /Type /Catalog >>', '<< /Type /Annot /A << /S /GoToR /F (x.pdf) /D [0 /Fit] >> >>']),
+    'ouverture par reference sur une action' => fn () => pdfValide(['<< /Type /Catalog /OpenAction 2 0 R >>', '<< /S /Named /N /Print >>']),
     'sans table xref' => fn () => "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF",
     'predicteur qui masque les noms' => fn () => pdfAvecFlux('/Type /ObjStm /Filter /FlateDecode /DecodeParms << /Predictor 12 /Columns 4 >>', gzcompress(avecPredicteurUp('<< /S /JavaScript >>', 4))),
     'flate illisible' => fn () => pdfAvecFlux('/Filter /FlateDecode', 'pas du deflate'),
@@ -332,6 +359,7 @@ it('accepte les flux qu il sait lire ou qui ne portent que des pixels', function
     'image JPEG' => fn () => pdfAvecFlux('/Type /XObject /Subtype /Image /Filter /DCTDecode', "\xFF\xD8\xFF\xE0 donnees binaires"),
     'deflate brut' => fn () => pdfAvecFlux('/Filter /FlateDecode', gzdeflate('BT /F1 12 Tf (Releve) Tj ET')),
     'page d ouverture, comme mPDF' => fn () => pdfValide(['<< /Type /Catalog /OpenAction [2 0 R /XYZ null null 1] >>', '<< /Type /Page >>']),
+    'page d ouverture par reference, comme Ghostscript' => fn () => pdfValide(['<< /Type /Catalog /OpenAction 3 0 R >>', '<< /Type /Page >>', '[2 0 R /Fit]']),
     'page d ouverture compressee' => fn () => pdfAvecObjetsCompresses('<< /Type /Catalog /OpenAction [2 0 R /Fit] >>'),
     'signe' => fn () => pdfValide(['<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached >>']),
 ]);
