@@ -15,7 +15,22 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'tenant.api' => \App\Http\Middleware\VerifyTenantApiToken::class,
+            'care.instance' => \App\Http\Middleware\Care\AuthentifierInstance::class,
         ]);
+        $middleware->api(prepend: [\App\Http\Middleware\AttribuerIdentifiantRequete::class]);
+        // Aucune route `login` : un invite qui suit un lien protege par `auth` (une
+        // piece jointe ouverte apres expiration de la session) va a la connexion
+        // du panel dont il releve (admin ou portail groupe), au lieu d'une erreur
+        // 500 sur route('login').
+        $middleware->redirectGuestsTo(fn (\Illuminate\Http\Request $request) => route(
+            $request->is('groupe', 'groupe/*') ? 'filament.group.auth.login' : 'filament.admin.auth.login'
+        ));
+        // L'identifiant d'instance doit etre resolu AVANT la limite de debit,
+        // qui compte par instance : sinon toutes les ecoles partagent un compteur.
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\ThrottleRequests::class,
+            prepend: \App\Http\Middleware\Care\AuthentifierInstance::class,
+        );
     })
     ->withSchedule(function (Schedule $schedule) {
         // Mise à jour automatique des stats de tous les tenants actifs toutes les heures
@@ -38,5 +53,6 @@ return Application::configure(basePath: dirname(__DIR__))
         \App\Providers\Filament\AdminPanelProvider::class,
         \App\Providers\Filament\GroupPanelProvider::class,
         \App\Providers\GroupServiceProvider::class,
+        \App\Providers\CareServiceProvider::class,
     ])
     ->create();

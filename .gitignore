@@ -65,6 +65,10 @@ storage/framework/testing/disks/*
 # Elles se reconstruisent seules, et dependent du logo depose par le groupe :
 # commiter celle d une machine servirait le mauvais logo sur une autre.
 storage/app/branding/*
+# Pieces jointes des ecoles (KLASSCI Care, disque prive) : des fichiers d'ecole,
+# jamais du code. Un `git add -A` ne doit pas pouvoir les commiter.
+storage/app/private/
+storage/app/care/
 
 # Tenant-specific (for local development)
 /tenants/
