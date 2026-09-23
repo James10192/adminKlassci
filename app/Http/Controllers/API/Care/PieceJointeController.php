@@ -11,6 +11,7 @@ use App\Http\Controllers\API\Care\Concerns\BorneALInstance;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -70,11 +71,16 @@ class PieceJointeController extends Controller
         $ticket = $this->requete($request, $this->filtres($request))->where('reference', $reference)->first();
         abort_if($ticket === null, 404);
         $p = $ticket->piecesJointesPubliques()->whereKey($piece)->first();
-        abort_if($p === null || ! Storage::disk($p->disk)->exists($p->path), 404);
+        abort_if($p === null, 404);
+        if (! Storage::disk($p->disk)->exists($p->path)) {
+            Log::error('KLASSCI Care : fichier de pièce jointe introuvable', ['piece' => $p->getKey(), 'chemin' => $p->path]);
+            abort(404);
+        }
 
         return Storage::disk($p->disk)->download($p->path, $p->original_name, [
             'Content-Type' => $p->mime,
             'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; img-src 'self'; sandbox",
             'Cache-Control' => 'private, no-store',
         ]);
     }

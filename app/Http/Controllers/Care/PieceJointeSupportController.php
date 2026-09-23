@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Care;
 use App\Domain\Care\Tickets\Models\SupportTicketAttachment;
 use App\Filament\Resources\SupportTicketResource;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -27,7 +28,10 @@ class PieceJointeSupportController extends Controller
     public function __invoke(SupportTicketAttachment $piece): StreamedResponse
     {
         abort_unless(SupportTicketResource::canView($piece->ticket), 404);
-        abort_unless(Storage::disk($piece->disk)->exists($piece->path), 404);
+        if (! Storage::disk($piece->disk)->exists($piece->path)) {
+            Log::error('KLASSCI Care : fichier de pièce jointe introuvable', ['piece' => $piece->getKey(), 'chemin' => $piece->path]);
+            abort(404);
+        }
 
         $disposition = $piece->estImage() ? 'inline' : 'attachment';
 

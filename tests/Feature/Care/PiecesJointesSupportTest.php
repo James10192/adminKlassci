@@ -57,3 +57,8 @@ it('garde restreinte la piece d un dossier restreint', function () {
 
     $this->get(PieceJointeSupportController::lien($this->piece))->assertNotFound();
 });
+
+it('renvoie a la connexion du panel quand la session a expire', function () {
+    $this->get(PieceJointeSupportController::lien($this->piece))
+        ->assertRedirect(route('filament.admin.auth.login'));
+});

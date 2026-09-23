@@ -13,7 +13,7 @@ class SupportTicketAttachment extends Model
 
     protected $fillable = [
         'ticket_id', 'author_type', 'author_ref', 'author_name', 'visibility',
-        'original_name', 'mime', 'size_bytes', 'width', 'height', 'disk', 'path', 'sha256', 'client_key',
+        'original_name', 'mime', 'size_bytes', 'width', 'height', 'disk', 'path', 'sha256', 'received_sha256', 'client_key',
     ];
 
     protected function casts(): array

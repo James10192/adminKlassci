@@ -47,6 +47,28 @@ function jpegAvecExif(): string
     return substr($jpeg, 0, 2).$app1.substr($jpeg, 2);
 }
 
+/** Un JPEG 40x20 dont l'EXIF dit « tourner de 90° dans le sens horaire » (Orientation = 6). */
+function jpegOriente(): string
+{
+    $im = imagecreatetruecolor(40, 20);
+    ob_start();
+    imagejpeg($im);
+    $jpeg = (string) ob_get_clean();
+    $tiff = "MM\0*".pack('N', 8).pack('n', 1).pack('nnN', 0x0112, 3, 1).pack('nn', 6, 0).pack('N', 0);
+    $charge = "Exif\0\0".$tiff;
+    $app1 = "\xFF\xE1".pack('n', strlen($charge) + 2).$charge;
+
+    return substr($jpeg, 0, 2).$app1.substr($jpeg, 2);
+}
+
+/** Un PDF minimal dont les objets vivent dans un flux compresse, comme depuis PDF 1.5. */
+function pdfAvecObjetsCompresses(string $objets): string
+{
+    $flux = gzcompress($objets);
+
+    return "%PDF-1.5\n1 0 obj << /Type /ObjStm /Filter /FlateDecode /Length ".strlen($flux)." >>\nstream\n".$flux."\nendstream\nendobj\n%%EOF";
+}
+
 function joindre($test, string $ref, string $contenu, string $nom = 'capture.png', string $cle = 'pj-cle-000001', ?string $jeton = null, string $requete = 'reporter=42')
 {
     return $test->withToken($jeton ?? $test->jeton)->withHeader('Idempotency-Key', $cle)
@@ -144,4 +166,46 @@ it('exige la portee support:update et une cle', function () {
     $this->withToken($this->jeton)->flushHeaders()->withToken($this->jeton)
         ->post("/api/v1/support/tickets/{$this->reference}/attachments?reporter=42", ['fichier' => UploadedFile::fake()->createWithContent('a.png', pngDeTest())], ['Accept' => 'application/json'])
         ->assertStatus(400)->assertJsonPath('error', 'idempotency_key_required');
+});
+
+it('refuse un PDF dont le contenu actif est echappe ou compresse', function () {
+    joindre($this, $this->reference, "%PDF-1.4\n1 0 obj << /Open#41ction << /S /J#61vaScript /J#53 (x) >> >> endobj\n%%EOF", 'a.pdf')
+        ->assertStatus(422)->assertJsonPath('error', 'attachment_rejected');
+    joindre($this, $this->reference, pdfAvecObjetsCompresses('<< /OpenAction << /S /JavaScript >> >>'), 'b.pdf', 'pj-cle-000002')
+        ->assertStatus(422)->assertJsonPath('error', 'attachment_rejected');
+    joindre($this, $this->reference, pdfAvecObjetsCompresses('<< /Type /Page >>'), 'c.pdf', 'pj-cle-000003')
+        ->assertCreated();
+});
+
+it('refuse une image aux dimensions excessives avant de la decoder, et reduit une grande image', function () {
+    config(['care.pieces_jointes.pixels_max' => 1000, 'care.pieces_jointes.cote_max_px' => 20]);
+    joindre($this, $this->reference, pngDeTest(40, 30))->assertStatus(422)->assertJsonPath('error', 'attachment_rejected');
+
+    config(['care.pieces_jointes.pixels_max' => 24_000_000]);
+    joindre($this, $this->reference, pngDeTest(40, 30), cle: 'pj-cle-000002')->assertCreated();
+    expect([$this->ticket->piecesJointes()->sole()->width, $this->ticket->piecesJointes()->sole()->height])->toBe([20, 15]);
+});
+
+it('redresse une photo de telephone selon son orientation EXIF', function () {
+    joindre($this, $this->reference, jpegOriente(), 'photo.jpg')->assertCreated();
+
+    $piece = $this->ticket->piecesJointes()->sole();
+    expect([$piece->width, $piece->height])->toBe([20, 40]);
+});
+
+it('reconnait un renvoi aux octets recus, sans refaire l assainissement', function () {
+    joindre($this, $this->reference, pngDeTest())->assertCreated();
+
+    $this->mock(\App\Domain\Care\Tickets\Services\AssainissementPieceJointe::class)->shouldNotReceive('assainir');
+    joindre($this, $this->reference, pngDeTest())->assertOk()->assertHeader('Idempotent-Replayed', 'true');
+});
+
+it('retire le fichier ecrit quand la suite de l enregistrement echoue', function () {
+    $this->mock(\App\Domain\Care\Tickets\Services\Journal::class)
+        ->shouldReceive('consigner')->andThrow(new RuntimeException('journal indisponible'));
+
+    joindre($this, $this->reference, pngDeTest())->assertStatus(500);
+
+    expect($this->ticket->piecesJointes()->count())->toBe(0)
+        ->and(Storage::disk('local')->allFiles())->toBe([]);
 });

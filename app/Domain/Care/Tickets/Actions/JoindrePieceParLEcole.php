@@ -14,6 +14,7 @@ use App\Domain\Care\Tickets\Services\AssainissementPieceJointe;
 use App\Domain\Care\Tickets\Services\Journal;
 use App\Domain\Care\Tickets\Services\TicketStateMachine;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -23,10 +24,14 @@ use Illuminate\Support\Str;
  * Ce qui est stocke est ce que l'assainissement a produit, jamais ce qui a ete
  * recu. Le fichier est ecrit sur un disque prive avant la ligne qui le
  * reference, et retire si la transaction echoue : aucune ligne ne pointe vers un
- * fichier absent, et un fichier orphelin ne survit pas a un echec.
+ * fichier absent.
  *
  * Idempotente par la cle de l'envoi : un renvoi apres une reponse perdue
- * retrouve sa piece. Une meme cle sur un autre contenu est refusee.
+ * retrouve sa piece. Une meme cle sur d'autres octets est refusee.
+ *
+ * Un echec apres l'ecriture (exception) retire le fichier, et un retrait rate
+ * se journalise. Un arret brutal entre l'ecriture et la validation, lui, peut
+ * laisser un fichier sans ligne : rien ne les balaie encore.
  */
 class JoindrePieceParLEcole
 {
@@ -40,6 +45,15 @@ class JoindrePieceParLEcole
     /** @return array{0: SupportTicketAttachment, 1: bool} la piece, et true si c'etait un renvoi */
     public function executer(SupportTicket $ticket, int $rapporteur, ?string $nom, string $contenu, ?string $nomEnvoye, string $cle): array
     {
+        // Un renvoi se reconnait aux octets recus, avant tout decodage : il ne paie
+        // pas l'assainissement, et une mise a jour de GD entre l'envoi et le renvoi
+        // ne le fait pas passer pour une cle reutilisee.
+        $recu = hash('sha256', $contenu);
+        $deja = $this->renvoi($ticket, $cle, $recu);
+        if ($deja !== null) {
+            return [$deja, true];
+        }
+
         // Hors transaction : decoder une image prend du temps, le verrou n'a pas a l'attendre.
         $fichier = $this->assainissement->assainir($contenu, $nomEnvoye);
         $disque = (string) config('care.pieces_jointes.disque');
@@ -47,16 +61,13 @@ class JoindrePieceParLEcole
         $ecrit = false;
 
         try {
-            return DB::transaction(function () use ($ticket, $rapporteur, $nom, $fichier, $disque, $chemin, $cle, &$ecrit) {
+            return DB::transaction(function () use ($ticket, $rapporteur, $nom, $fichier, $disque, $chemin, $cle, $recu, &$ecrit) {
                 $courant = SupportTicket::whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
 
-                $existante = $courant->piecesJointes()->where('client_key', $cle)->first();
-                if ($existante !== null) {
-                    if ($existante->sha256 !== $fichier->empreinte()) {
-                        throw new CleIdempotenceReutilisee('Cette clé a déjà servi pour un autre fichier.');
-                    }
-
-                    return [$existante, true];
+                // Deux envois simultanes de la meme cle : le second trouve ici la piece du premier.
+                $deja = $this->renvoi($courant, $cle, $recu);
+                if ($deja !== null) {
+                    return [$deja, true];
                 }
 
                 if (TicketStateMachine::fermeeALEcole($courant->status)) {
@@ -87,6 +98,7 @@ class JoindrePieceParLEcole
                     'disk' => $disque,
                     'path' => $chemin,
                     'sha256' => $fichier->empreinte(),
+                    'received_sha256' => $recu,
                     'client_key' => $cle,
                 ]);
                 $this->journal->consigner($courant, TypeEvenement::PieceJointeClient, $acteur, details: ['piece_id' => $piece->id]);
@@ -97,10 +109,24 @@ class JoindrePieceParLEcole
                 return [$piece, false];
             });
         } catch (\Throwable $e) {
-            if ($ecrit) {
-                Storage::disk($disque)->delete($chemin);
+            if ($ecrit && ! Storage::disk($disque)->delete($chemin)) {
+                Log::error('KLASSCI Care : fichier orphelin après un échec de pièce jointe', ['disque' => $disque, 'chemin' => $chemin]);
             }
             throw $e;
         }
+    }
+
+    /** La piece deja enregistree sous cette cle, ou null. Une autre empreinte est un refus. */
+    private function renvoi(SupportTicket $ticket, string $cle, string $recu): ?SupportTicketAttachment
+    {
+        $existante = $ticket->piecesJointes()->where('client_key', $cle)->first();
+        if ($existante === null) {
+            return null;
+        }
+        if ($existante->received_sha256 !== $recu) {
+            throw new CleIdempotenceReutilisee('Cette clé a déjà servi pour un autre fichier.');
+        }
+
+        return $existante;
     }
 }

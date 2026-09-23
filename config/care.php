@@ -78,6 +78,12 @@ return [
         'par_minute' => 20,
         // Au-dela, l'image est reduite : une capture d'ecran n'a pas besoin de plus.
         'cote_max_px' => 2400,
+        // Refus AVANT decodage, sur les dimensions annoncees : une image de 24 Mpx
+        // coute pres de 100 Mo a decoder, hors memory_limit avec la libgd du
+        // systeme. Une photo de telephone en fait 12.
+        'pixels_max' => 24_000_000,
+        // Octets qu'un PDF peut produire une fois ses flux inflates pour etre relu.
+        'pdf_inflation_max_octets' => 20 * 1024 * 1024,
         'types' => [
             'image/png' => 'png',
             'image/jpeg' => 'jpg',

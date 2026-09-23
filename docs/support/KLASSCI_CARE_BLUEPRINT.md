@@ -55,16 +55,25 @@ the two disagree, **this list and the code are right**.
   multipart field `fichier` (+ optional `author_name`), `Idempotency-Key` required, same
   scoping as reading. The type is read from the content, never the name: PNG, JPEG, WebP, PDF,
   5 MB, 10 per ticket, 20/min per instance (`config/care.php` `pieces_jointes`). Images are
-  decoded and re-encoded (EXIF and GPS dropped, side capped at 2400 px, 40 Mpx decode cap); a
-  PDF with active content (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFile`, `/OpenAction`,
-  `/AA`, `/RichMedia`, `/XFA`) is refused. Refusals answer 422 `attachment_rejected` with a
-  showable message. Files live on the private disk `CARE_PIECES_DISQUE` (default `local`) under
+  decoded and re-encoded: EXIF and GPS dropped after the EXIF orientation is applied to the
+  pixels, side capped at 2400 px, and anything above `pixels_max` (24 Mpx) refused from its
+  declared size **before** decoding (the system libgd allocates outside `memory_limit`). A PDF
+  is refused when it carries **detectable** active content (`/JavaScript`, `/JS`, `/Launch`,
+  `/EmbeddedFile`, `/OpenAction`, `/AA`, `/RichMedia`, `/XFA`): `#xx` name escapes are decoded
+  and FlateDecode streams (object streams included) are inflated within
+  `pdf_inflation_max_octets`, past which the PDF is refused. This is a heuristic, not a
+  guarantee: streams under other filters (LZW, ASCII85, filter chains) are not read. PDFs
+  always download, never render in the panel. Refusals answer 422 `attachment_rejected` with a
+  showable message. A retry is recognised by the sha256 of the **bytes received**
+  (`received_sha256`), before any decoding; HEIC and animated WebP are refused as unreadable. Files live on the private disk `CARE_PIECES_DISQUE` (default `local`) under
   `care/{tenant_id}/{ticket_id}/`; the file is written before its row and removed if the
-  transaction fails. Attaching hands the ticket back to support like a reply. The detail
+  transaction throws (a failed removal is logged; a hard crash between write and commit can
+  still leave an orphan, and nothing sweeps them yet). Attaching hands the ticket back to support like a reply. The detail
   projection lists `pieces_jointes` (`id, nom, type, taille, auteur, le`); the school reads one
   through `GET /tickets/{reference}/attachments/{id}` (support:read, relayed by its instance).
   Staff open them from the ticket through a signed link valid 10 minutes, access re-checked on
-  each opening; images display, PDFs download.
+  each opening; images display, PDFs download. An expired session is sent to the panel login
+  (`redirectGuestsTo`), and a row whose file is missing is logged before its 404.
 
 ## 0. Executive summary
 
