@@ -45,6 +45,9 @@ return [
     'fonctionnalites' => [
         'support_widget',
         'support_customer_portal',
+        // Capture d'ecran annotee depuis la fenetre de signalement. Passe par les
+        // pieces jointes : sans support_customer_portal, elle ne s'affiche pas.
+        'support_screenshot',
     ],
 
     'limites' => [

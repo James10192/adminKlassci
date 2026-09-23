@@ -80,6 +80,7 @@ it('sert les fonctionnalites de l instance, fermees par defaut', function () {
         ->assertJsonPath('instance', 'presentation')
         ->assertJsonPath('fonctionnalites.support_widget', true)
         ->assertJsonPath('fonctionnalites.support_customer_portal', false)
+        ->assertJsonPath('fonctionnalites.support_screenshot', false)
         ->assertHeader('X-Request-ID');
 });
 
