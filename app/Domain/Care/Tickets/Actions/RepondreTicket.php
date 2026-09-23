@@ -16,6 +16,11 @@ use Illuminate\Support\Facades\DB;
  *
  * La visibilite est un parametre obligatoire, sans valeur par defaut : le
  * formulaire oblige a la choisir, et cette action aussi.
+ *
+ * Le ticket est verrouille AVANT l'insertion. Inserer d'abord pose, par la cle
+ * etrangere, un verrou partage sur la ligne du ticket ; le franchissement qui
+ * suit (« j'attends l'ecole ») le promeut en exclusif, et une reponse de
+ * l'ecole deja en file sur ce meme ticket fait alors un interblocage.
  */
 class RepondreTicket
 {
@@ -31,9 +36,10 @@ class RepondreTicket
         }
 
         return DB::transaction(function () use ($ticket, $auteur, $corps, $visibilite) {
+            $courant = SupportTicket::whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
             $acteur = Acteur::personnel($auteur);
 
-            $message = $ticket->messages()->create([
+            $message = $courant->messages()->create([
                 'author_type' => $acteur->type,
                 'author_ref' => $acteur->reference,
                 'author_name' => $auteur->name,
@@ -42,17 +48,19 @@ class RepondreTicket
             ]);
 
             $public = $visibilite === VisibiliteMessage::PublicClient;
-            if ($public && $ticket->first_response_at === null) {
-                $ticket->forceFill(['first_response_at' => now()])->save();
+            if ($public && $courant->first_response_at === null) {
+                $courant->forceFill(['first_response_at' => now()])->save();
             }
 
             $this->journal->consigner(
-                $ticket,
+                $courant,
                 $public ? TypeEvenement::ReponseSupport : TypeEvenement::NoteInterne,
                 $acteur,
                 vers: $visibilite->value,
                 details: ['message_id' => $message->id],
             );
+
+            $ticket->setRawAttributes($courant->getAttributes(), true);
 
             return $message;
         });

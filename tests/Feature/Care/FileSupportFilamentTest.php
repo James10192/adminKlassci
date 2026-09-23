@@ -71,6 +71,21 @@ it('pose la demande en attente de l ecole quand le support lui pose une question
     Livewire::test(ListSupportTickets::class)->set('activeTab', 'attente_client')->assertCanSeeTableRecords([$this->ticket]);
 });
 
+it('ne publie rien quand le dossier a change d etat avant l envoi', function () {
+    // La page est ouverte sur un dossier qui peut attendre l'ecole ; entre-temps
+    // un autre agent le passe en cours. La transition est relue sous verrou :
+    // elle est refusee, et le message ne doit pas partir seul.
+    $this->actingAs($this->support);
+    $this->ticket->forceFill(['status' => StatutTicket::Triaged])->save();
+    $page = Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()]);
+    $this->ticket->forceFill(['status' => StatutTicket::InProgress])->save();
+
+    $page->callAction('repondre', ['visibilite' => VisibiliteMessage::PublicClient->value, 'corps' => 'Quelle classe ?', 'attendre_ecole' => true]);
+
+    expect($this->ticket->messages()->count())->toBe(0)
+        ->and($this->ticket->fresh()->status)->toBe(StatutTicket::InProgress);
+});
+
 it('refuse une reponse sans visibilite choisie', function () {
     $this->actingAs($this->support);
 

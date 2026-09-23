@@ -80,13 +80,16 @@ class ViewSupportTicket extends ViewRecord
                 Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
                 // Une question posee a l'ecole : la demande passe en « Action requise » chez elle,
                 // et sa reponse la ramene d'elle-meme en attente support.
+                // La visibilite ne depend PAS de l'etat du dossier : Livewire relit le dossier a
+                // chaque requete, et un champ masque entre-temps n'est plus envoye. Le choix de
+                // l'agent disparaissait alors en silence et le message partait seul. La machine a
+                // etats tranche a l'envoi, sous verrou, et un refus garde le texte saisi.
                 Forms\Components\Toggle::make('attendre_ecole')
                     ->label("J'attends une réponse de l'école")
                     ->visible(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
-                        && Gate::allows('support.tickets.manage')
-                        && app(TicketStateMachine::class)->peut($this->record->status, StatutTicket::WaitingCustomer)),
+                        && Gate::allows('support.tickets.manage')),
             ])
-            ->action(function (array $data) {
+            ->action(function (array $data, Actions\Action $action) {
                 $visibilite = VisibiliteMessage::from($data['visibilite']);
                 abort_unless(in_array($visibilite, $this->visibilitesAutorisees(), true), 403);
                 $attendre = $visibilite === VisibiliteMessage::PublicClient && ! empty($data['attendre_ecole'])
@@ -96,7 +99,7 @@ class ViewSupportTicket extends ViewRecord
                     if ($attendre) {
                         app(TicketStateMachine::class)->franchir($this->record, StatutTicket::WaitingCustomer, Acteur::personnel(auth()->user()));
                     }
-                }), $visibilite === VisibiliteMessage::PublicClient ? "Réponse envoyée à l'école." : 'Note enregistrée.');
+                }), $visibilite === VisibiliteMessage::PublicClient ? "Réponse envoyée à l'école." : 'Note enregistrée.', garder: $action);
             });
     }
 
@@ -274,7 +277,11 @@ class ViewSupportTicket extends ViewRecord
         ])));
     }
 
-    private function tenter(callable $action, string $succes): void
+    /**
+     * Avec $garder, un refus laisse la fenetre ouverte : le dossier a change
+     * d'etat entre l'ouverture et l'envoi, et le texte saisi ne doit pas etre perdu.
+     */
+    private function tenter(callable $action, string $succes, ?Actions\Action $garder = null): void
     {
         try {
             $action();
@@ -283,7 +290,10 @@ class ViewSupportTicket extends ViewRecord
             $this->record->refresh();
             Notification::make()->success()->title($succes)->send();
         } catch (TransitionRefusee $e) {
-            Notification::make()->danger()->title($e->getMessage())->send();
+            $this->record->refresh();
+            Notification::make()->danger()->title($e->getMessage())
+                ->body($garder ? "Le dossier a changé d'état entre-temps : votre texte est conservé." : null)->send();
+            $garder?->halt();
         }
     }
 }
