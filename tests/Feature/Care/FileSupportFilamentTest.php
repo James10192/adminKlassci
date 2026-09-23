@@ -80,10 +80,22 @@ it('ne publie rien quand le dossier a change d etat avant l envoi', function () 
     $page = Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()]);
     $this->ticket->forceFill(['status' => StatutTicket::InProgress])->save();
 
-    $page->callAction('repondre', ['visibilite' => VisibiliteMessage::PublicClient->value, 'corps' => 'Quelle classe ?', 'attendre_ecole' => true]);
+    $page->callAction('repondre', ['visibilite' => VisibiliteMessage::PublicClient->value, 'corps' => 'Quelle classe ?', 'attendre_ecole' => true])
+        ->assertActionMounted('repondre')
+        ->assertSet('mountedActionsData.0.corps', 'Quelle classe ?');
 
     expect($this->ticket->messages()->count())->toBe(0)
         ->and($this->ticket->fresh()->status)->toBe(StatutTicket::InProgress);
+});
+
+it('ne propose pas d attendre l ecole quand le dossier ne peut pas l attendre', function () {
+    $this->actingAs($this->support);
+    $this->ticket->forceFill(['status' => StatutTicket::InProgress])->save();
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->mountAction('repondre')
+        ->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
+        ->assertFormFieldIsHidden('attendre_ecole', 'mountedActionForm');
 });
 
 it('refuse une reponse sans visibilite choisie', function () {

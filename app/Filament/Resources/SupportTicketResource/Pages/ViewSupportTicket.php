@@ -80,14 +80,17 @@ class ViewSupportTicket extends ViewRecord
                 Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
                 // Une question posee a l'ecole : la demande passe en « Action requise » chez elle,
                 // et sa reponse la ramene d'elle-meme en attente support.
-                // La visibilite ne depend PAS de l'etat du dossier : Livewire relit le dossier a
-                // chaque requete, et un champ masque entre-temps n'est plus envoye. Le choix de
-                // l'agent disparaissait alors en silence et le message partait seul. La machine a
-                // etats tranche a l'envoi, sous verrou, et un refus garde le texte saisi.
+                // Propose seulement si le dossier peut attendre l'ecole. Livewire relit le dossier
+                // a chaque requete : si son etat change entre l'ouverture et l'envoi, le champ se
+                // masque, et sans dehydratedWhenHidden() le choix de l'agent disparaitrait en
+                // silence (le message partirait seul). La machine a etats tranche alors sous
+                // verrou, et un refus garde le texte saisi.
                 Forms\Components\Toggle::make('attendre_ecole')
                     ->label("J'attends une réponse de l'école")
+                    ->dehydratedWhenHidden()
                     ->visible(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
-                        && Gate::allows('support.tickets.manage')),
+                        && Gate::allows('support.tickets.manage')
+                        && app(TicketStateMachine::class)->peut($this->record->status, StatutTicket::WaitingCustomer)),
             ])
             ->action(function (array $data, Actions\Action $action) {
                 $visibilite = VisibiliteMessage::from($data['visibilite']);
