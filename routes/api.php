@@ -44,11 +44,19 @@ Route::prefix('v1/support')->name('api.care.')->group(function () {
         ->middleware(['care.instance:support:update', 'throttle:care-ecriture'])
         ->name('tickets.messages.store');
 
+    Route::post('/tickets/{reference}/attachments', [\App\Http\Controllers\API\Care\PieceJointeController::class, 'store'])
+        ->where('reference', 'KC-\d{4}-\d{6,}')
+        ->middleware(['care.instance:support:update', 'throttle:care-pieces'])
+        ->name('tickets.attachments.store');
+
     Route::middleware(['care.instance:support:read', 'throttle:care-lecture'])->group(function () {
         Route::get('/bootstrap', \App\Http\Controllers\API\Care\BootstrapController::class)->name('bootstrap');
         Route::get('/tickets', [\App\Http\Controllers\API\Care\TicketController::class, 'index'])->name('tickets.index');
         Route::get('/tickets/{reference}', [\App\Http\Controllers\API\Care\TicketController::class, 'show'])
             ->where('reference', 'KC-\d{4}-\d{6,}')
             ->name('tickets.show');
+        Route::get('/tickets/{reference}/attachments/{piece}', [\App\Http\Controllers\API\Care\PieceJointeController::class, 'show'])
+            ->where(['reference' => 'KC-\d{4}-\d{6,}', 'piece' => '\d+'])
+            ->name('tickets.attachments.show');
     });
 });

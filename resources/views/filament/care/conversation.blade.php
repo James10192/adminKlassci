@@ -18,3 +18,20 @@
         <p class="text-sm text-gray-500 dark:text-gray-400">Aucun message pour l'instant.</p>
     @endforelse
 </div>
+@php $pieces = $getRecord()->piecesJointes->filter(fn ($p) => in_array($p->visibility->value, $visibles, true)); @endphp
+@if ($pieces->isNotEmpty())
+    <div class="mt-4 border-t border-gray-200 pt-3 dark:border-white/10">
+        <p class="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Pièces jointes</p>
+        <ul class="space-y-1">
+            @foreach ($pieces as $p)
+                <li class="flex items-center justify-between gap-3 text-sm">
+                    <a href="{{ \App\Http\Controllers\Care\PieceJointeSupportController::lien($p) }}" target="_blank" rel="noopener"
+                       class="truncate font-medium text-primary-600 hover:underline dark:text-primary-400">{{ $p->original_name }}</a>
+                    <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">
+                        {{ $p->author_name ?? 'École' }} · {{ number_format($p->size_bytes / 1024, 0, ',', ' ') }} Ko · {{ $p->created_at?->format('d/m/Y H:i') }}
+                    </span>
+                </li>
+            @endforeach
+        </ul>
+    </div>
+@endif

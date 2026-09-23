@@ -22,6 +22,7 @@ class CareServiceProvider extends ServiceProvider
         $parInstance = fn (Request $r) => 'care:'.(optional($r->attributes->get('care_tenant'))->id ?? 'ip:'.$r->ip());
 
         RateLimiter::for('care-ecriture', fn (Request $r) => Limit::perMinute((int) config('care.limites.tickets_par_minute'))->by($parInstance($r)));
+        RateLimiter::for('care-pieces', fn (Request $r) => Limit::perMinute((int) config('care.pieces_jointes.par_minute'))->by($parInstance($r)));
         RateLimiter::for('care-lecture', fn (Request $r) => Limit::perMinute((int) config('care.limites.lectures_par_minute'))->by($parInstance($r)));
     }
 }

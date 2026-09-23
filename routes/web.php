@@ -113,3 +113,9 @@ Route::middleware(['web', 'signed'])
         ]);
     })
     ->name('groupe.notifications.unsubscribe');
+
+// KLASSCI Care : piece jointe ouverte depuis le dossier (lien signe, 10 minutes).
+Route::middleware(['web', 'auth', 'signed', 'throttle:60,1'])
+    ->get('/care/pieces/{piece}', \App\Http\Controllers\Care\PieceJointeSupportController::class)
+    ->whereNumber('piece')
+    ->name('care.pieces.ouvrir');

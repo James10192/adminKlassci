@@ -96,6 +96,16 @@ class SupportTicket extends Model
         return $this->messages()->where('visibility', VisibiliteMessage::PublicClient->value);
     }
 
+    public function piecesJointes(): HasMany
+    {
+        return $this->hasMany(SupportTicketAttachment::class, 'ticket_id')->orderBy('created_at')->orderBy('id');
+    }
+
+    public function piecesJointesPubliques(): HasMany
+    {
+        return $this->piecesJointes()->where('visibility', VisibiliteMessage::PublicClient->value);
+    }
+
     public function events(): HasMany
     {
         return $this->hasMany(SupportTicketEvent::class, 'ticket_id')->orderBy('created_at')->orderBy('id');

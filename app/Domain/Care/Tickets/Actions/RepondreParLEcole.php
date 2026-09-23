@@ -2,7 +2,6 @@
 
 namespace App\Domain\Care\Tickets\Actions;
 
-use App\Domain\Care\Tickets\Enums\StatutTicket as S;
 use App\Domain\Care\Tickets\Enums\TypeEvenement;
 use App\Domain\Care\Tickets\Enums\VisibiliteMessage;
 use App\Domain\Care\Tickets\Exceptions\CleIdempotenceReutilisee;
@@ -26,8 +25,6 @@ use Illuminate\Support\Facades\DB;
  */
 class RepondreParLEcole
 {
-    private const CLOSES = [S::Closed, S::Rejected, S::Duplicate];
-
     public function __construct(
         private readonly Journal $journal,
         private readonly TicketStateMachine $etats,
@@ -50,7 +47,7 @@ class RepondreParLEcole
                 return true;
             }
 
-            if (in_array($courant->status, self::CLOSES, true)) {
+            if (TicketStateMachine::fermeeALEcole($courant->status)) {
                 throw new DemandeClose('Cette demande est close. Signalez un nouveau problème si besoin.');
             }
 
@@ -65,14 +62,7 @@ class RepondreParLEcole
             ]);
             $this->journal->consigner($courant, TypeEvenement::ReponseClient, $acteur, details: ['message_id' => $message->id]);
 
-            $vers = match ($courant->status) {
-                S::WaitingCustomer => S::WaitingSupport,
-                S::Resolved => S::Triaged,
-                default => null,
-            };
-            if ($vers !== null) {
-                $this->etats->franchir($courant, $vers, $acteur);
-            }
+            $this->etats->rendreLaMainAuSupport($courant, $acteur);
 
             $ticket->setRawAttributes($courant->getAttributes(), true);
 

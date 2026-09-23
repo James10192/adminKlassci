@@ -14,5 +14,6 @@ enum TypeEvenement: string
     case ReponseSupport = 'SUPPORT_REPLIED';
     case NoteInterne = 'INTERNAL_NOTE_ADDED';
     case ReponseClient = 'CUSTOMER_REPLIED';
+    case PieceJointeClient = 'CUSTOMER_ATTACHED';
     case RestrictionSecurite = 'SECURITY_RESTRICTION_CHANGED';
 }

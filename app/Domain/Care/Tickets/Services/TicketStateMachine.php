@@ -54,6 +54,29 @@ class TicketStateMachine
         ];
     }
 
+    /** Une demande close, rejetee ou fusionnee ne se rouvre pas par un geste de l'ecole. */
+    public static function fermeeALEcole(S $statut): bool
+    {
+        return in_array($statut, [S::Closed, S::Rejected, S::Duplicate], true);
+    }
+
+    /**
+     * L'ecole a agi sur sa demande (reponse, piece jointe) : la main revient au
+     * support. Une demande qui l'attendait repart en attente support, une demande
+     * resolue se rouvre. A appeler sous le verrou du dossier.
+     */
+    public function rendreLaMainAuSupport(SupportTicket $ticket, Acteur $acteur): void
+    {
+        $vers = match ($ticket->status) {
+            S::WaitingCustomer => S::WaitingSupport,
+            S::Resolved => S::Triaged,
+            default => null,
+        };
+        if ($vers !== null) {
+            $this->franchir($ticket, $vers, $acteur);
+        }
+    }
+
     /** @return list<S> */
     public function suivants(S $depuis): array
     {
@@ -82,7 +105,7 @@ class TicketStateMachine
             $depuis = $courant->status;
 
             if (! $this->peut($depuis, $vers)) {
-                throw new TransitionRefusee("Transition refusée : {$depuis->value} → {$vers->value}.");
+                throw new TransitionRefusee("Passage impossible de « {$depuis->libelle()} » à « {$vers->libelle()} ».");
             }
 
             $courant->forceFill(['status' => $vers] + $this->jalons($courant, $depuis, $vers))->save();

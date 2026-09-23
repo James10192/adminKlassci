@@ -51,6 +51,20 @@ the two disagree, **this list and the code are right**.
   duplicate ticket it answers 409 `ticket_closed`. Staff set `WAITING_CUSTOMER` with the
   « J'attends une réponse de l'école » toggle when replying. `/bootstrap` also returns the
   credential's `portees`, so the school hides what its credential cannot do.
+- **School attachments (tranche 2).** `POST /tickets/{reference}/attachments?reporter=<id>&scope=`,
+  multipart field `fichier` (+ optional `author_name`), `Idempotency-Key` required, same
+  scoping as reading. The type is read from the content, never the name: PNG, JPEG, WebP, PDF,
+  5 MB, 10 per ticket, 20/min per instance (`config/care.php` `pieces_jointes`). Images are
+  decoded and re-encoded (EXIF and GPS dropped, side capped at 2400 px, 40 Mpx decode cap); a
+  PDF with active content (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFile`, `/OpenAction`,
+  `/AA`, `/RichMedia`, `/XFA`) is refused. Refusals answer 422 `attachment_rejected` with a
+  showable message. Files live on the private disk `CARE_PIECES_DISQUE` (default `local`) under
+  `care/{tenant_id}/{ticket_id}/`; the file is written before its row and removed if the
+  transaction fails. Attaching hands the ticket back to support like a reply. The detail
+  projection lists `pieces_jointes` (`id, nom, type, taille, auteur, le`); the school reads one
+  through `GET /tickets/{reference}/attachments/{id}` (support:read, relayed by its instance).
+  Staff open them from the ticket through a signed link valid 10 minutes, access re-checked on
+  each opening; images display, PDFs download.
 
 ## 0. Executive summary
 
@@ -450,6 +464,7 @@ the jury PV numbering.
 | GET | `/tickets/{reference}?reporter=<ext_id>` | support:read | 1 |
 | POST | `/tickets/{reference}/messages` | support:update | 2 |
 | POST | `/tickets/{reference}/attachments` (multipart) | support:update | 2 |
+| GET | `/tickets/{reference}/attachments/{id}?reporter=<ext_id>` | support:read | 2 |
 | POST | `/tickets/{reference}/verification` (`corrige`\|`persiste`) | support:update | 8 |
 | POST | `/telemetry/errors` (batch ≤100) | telemetry:send | 3 |
 | GET | `/known-issues?module=` | support:read | 4 |

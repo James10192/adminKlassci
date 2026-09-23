@@ -4,6 +4,7 @@ namespace App\Domain\Care\Tickets\Services;
 
 use App\Domain\Care\Tickets\Enums\TypeActeur;
 use App\Domain\Care\Tickets\Models\SupportTicket;
+use App\Domain\Care\Tickets\Models\SupportTicketAttachment;
 use App\Domain\Care\Tickets\Models\SupportTicketMessage;
 
 /**
@@ -41,6 +42,19 @@ class ProjectionClient
         return $this->resume($ticket) + [
             'description' => $ticket->description,
             'messages' => $ticket->messagesPublics->map(fn ($m) => $this->message($m))->values()->all(),
+            'pieces_jointes' => $ticket->piecesJointesPubliques->map(fn ($p) => $this->piece($p))->values()->all(),
+        ];
+    }
+
+    private function piece(SupportTicketAttachment $p): array
+    {
+        return [
+            'id' => $p->id,
+            'nom' => $p->original_name,
+            'type' => $p->mime,
+            'taille' => $p->size_bytes,
+            'auteur' => $p->author_type === TypeActeur::Client ? 'ECOLE' : 'SUPPORT',
+            'le' => $p->created_at?->toIso8601String(),
         ];
     }
 

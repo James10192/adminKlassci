@@ -63,6 +63,27 @@ return [
     ],
 
     /*
+    | Pieces jointes. Pas d'antivirus sur l'hebergement mutualise : la defense
+    | est une liste blanche de types verifies sur le CONTENU, et le
+    | re-encodage des images, qui retire les metadonnees (position GPS d'une
+    | photo prise au telephone) et tout ce qui n'est pas des pixels.
+    */
+    'pieces_jointes' => [
+        'disque' => env('CARE_PIECES_DISQUE', 'local'),
+        'octets_max' => 5 * 1024 * 1024,
+        'par_demande_max' => 10,
+        'par_minute' => 20,
+        // Au-dela, l'image est reduite : une capture d'ecran n'a pas besoin de plus.
+        'cote_max_px' => 2400,
+        'types' => [
+            'image/png' => 'png',
+            'image/jpeg' => 'jpg',
+            'image/webp' => 'webp',
+            'application/pdf' => 'pdf',
+        ],
+    ],
+
+    /*
     | Liste blanche du contexte. Ce qui n'y figure pas est ignore, pas rejete :
     | une instance plus recente que le Master ne doit pas voir ses signalements
     | refuses parce qu'elle envoie une cle de plus.
