@@ -40,6 +40,8 @@ class BootstrapController extends Controller
                 'description_min' => $l['description_min'],
                 'description_max' => $l['description_max'],
                 'reponse_min' => $l['reponse_min'],
+                'piece_octets_max' => (int) config('care.pieces_jointes.octets_max'),
+                'pieces_max' => (int) config('care.pieces_jointes.par_demande_max'),
             ],
         ]);
     }

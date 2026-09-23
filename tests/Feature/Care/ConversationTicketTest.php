@@ -85,5 +85,7 @@ it('exige la portee support:update et une cle', function () {
 it('annonce ses portees a l instance', function () {
     $this->withToken($this->jeton)->getJson('/api/v1/support/bootstrap')
         ->assertJsonPath('portees', ['support:create', 'support:read', 'support:update'])
-        ->assertJsonPath('limites.reponse_min', 2);
+        ->assertJsonPath('limites.reponse_min', 2)
+        ->assertJsonPath('limites.piece_octets_max', 5 * 1024 * 1024)
+        ->assertJsonPath('limites.pieces_max', 10);
 });
