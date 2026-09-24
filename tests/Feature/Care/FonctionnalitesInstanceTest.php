@@ -65,8 +65,24 @@ it('refuse une fonctionnalite inconnue sans rien ecrire', function () {
     expect(array_values(array_unique(fonctionnalitesVues($this->jeton))))->toBe([false]);
 });
 
-it('refuse une meme fonctionnalite activee et desactivee', function () {
-    $this->artisan('care:fonctionnalites presentation --activer=support_widget --desactiver=support_widget')->assertFailed();
+it('refuse une meme fonctionnalite activee et desactivee, sans rien ecrire', function () {
+    $this->artisan('care:fonctionnalites presentation --activer=support_widget,support_screenshot --desactiver=support_widget')
+        ->expectsOutputToContain('A la fois activee et desactivee : support_widget')
+        ->assertFailed();
+
+    expect(array_values(array_unique(fonctionnalitesVues($this->jeton))))->toBe([false]);
+});
+
+it('ne journalise que ce qui change reellement', function () {
+    $journal = fn () => TenantActivityLog::where('tenant_id', $this->ecole->id)->where('action', 'care_features_changed');
+
+    $this->artisan('care:fonctionnalites presentation --activer=tout')->assertSuccessful();
+    $this->artisan('care:fonctionnalites presentation --activer=tout')->assertSuccessful();
+    expect($journal()->count())->toBe(1);
+
+    $this->artisan('care:fonctionnalites presentation --desactiver=support_screenshot')->assertSuccessful();
+    expect($journal()->count())->toBe(2)
+        ->and($journal()->latest('id')->first()->metadata)->toBe(['activees' => [], 'desactivees' => ['support_screenshot']]);
 });
 
 it('refuse une instance inconnue', function () {

@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\TenantActivityLog;
 use App\Models\TenantFeature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Activer ou desactiver les fonctionnalites KLASSCI Care d'une instance.
@@ -53,18 +54,29 @@ class FonctionnalitesInstance extends Command
             return self::FAILURE;
         }
 
-        foreach ([true => $activer, false => $desactiver] as $etat => $cles) {
-            foreach ($cles as $cle) {
-                TenantFeature::updateOrCreate(
+        // Toute la validation est faite : on ecrit tout ou rien.
+        $etats = array_fill_keys($activer, true) + array_fill_keys($desactiver, false);
+        $basculees = DB::transaction(function () use ($tenant, $etats) {
+            $basculees = [];
+            foreach ($etats as $cle => $etat) {
+                $ligne = TenantFeature::updateOrCreate(
                     ['tenant_id' => $tenant->id, 'feature_key' => $cle],
-                    ['is_enabled' => (bool) $etat],
+                    ['is_enabled' => $etat],
                 );
+                if ($ligne->wasRecentlyCreated || $ligne->wasChanged('is_enabled')) {
+                    $basculees[$cle] = $etat;
+                }
             }
-        }
 
-        if ($activer || $desactiver) {
-            TenantActivityLog::log($tenant->id, 'care_features_changed',
-                'Fonctionnalites KLASSCI Care modifiees', null, ['activees' => $activer, 'desactivees' => $desactiver]);
+            return $basculees;
+        });
+
+        // Journalise ce qui a reellement change : rejouer la meme commande n'ecrit rien.
+        if ($basculees !== []) {
+            TenantActivityLog::log($tenant->id, 'care_features_changed', 'Fonctionnalites KLASSCI Care modifiees', null, [
+                'activees' => array_keys(array_filter($basculees)),
+                'desactivees' => array_keys(array_diff_key($basculees, array_filter($basculees))),
+            ]);
         }
 
         $actives = TenantFeature::where('tenant_id', $tenant->id)
@@ -82,6 +94,10 @@ class FonctionnalitesInstance extends Command
         // elle est acceptee ici mais ne s'affiche nulle part (config/care.php).
         if (in_array('support_screenshot', $actives, true) && ! in_array('support_customer_portal', $actives, true)) {
             $this->warn('support_screenshot est active sans support_customer_portal : la capture ne s\'affichera pas.');
+        }
+
+        if ($basculees !== []) {
+            $this->info('Visible sur l\'instance sous 5 minutes (cache du bootstrap).');
         }
 
         return self::SUCCESS;
