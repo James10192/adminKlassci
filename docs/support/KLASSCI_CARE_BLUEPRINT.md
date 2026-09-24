@@ -1038,6 +1038,8 @@ Headers:
   `support_ai_triage`, `support_auto_known_issue`, `support_customer_portal`,
   `support_incident_detection`, `support_product_requests`, `support_replay`). They are served
   by `GET /support/bootstrap`, cached on the tenant for 5 min, **failure-cached** 60 s.
+  Set with `php artisan care:fonctionnalites <code> --activer=tout` (or a comma-separated list;
+  `--desactiver=` the same way; no option prints the current state). Never by hand in the table.
 - **Tenant kill switch:** setting `support.widget.enabled` (default ON only after rollout
   phase 3). If either the Master or the local switch is off, the widget is hidden and the
   navbar item becomes a mailto.

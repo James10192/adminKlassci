@@ -8,6 +8,13 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 
 ## Septembre 2026
 
+### Ajouts
+- `care:fonctionnalites <code>` affiche, active ou désactive les fonctionnalités KLASSCI Care d'une
+  école (`--activer=tout`, `--desactiver=support_screenshot`). Elles étaient désactivées par défaut
+  et ne s'activaient qu'en écrivant dans `tenant_features` à la main : une école munie de son
+  identifiant n'affichait donc toujours pas le bouton d'aide. Seul ce qui change réellement est
+  journalisé ; l'école le voit sous 5 minutes (cache du bootstrap).
+
 ### Corrections
 - `tenant:verifier-restauration` n'avait jamais abouti en production : sur cPanel, l'utilisateur MySQL
   d'une instance ne peut pas créer de base, et la commande commençait par `DROP/CREATE DATABASE`.
