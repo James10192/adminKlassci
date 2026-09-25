@@ -14,10 +14,19 @@ use Illuminate\Support\Facades\Schema;
  * dernière ligne déjà copiée (identifiant de l'école, `source_id`), par lots.
  * Une ligne copiée ne l'est jamais deux fois (index unique tenant + source_id),
  * donc relancer la commande ne double rien.
+ *
+ * Recouvrement : on relit les RECOUVREMENT dernières lignes déjà copiées. Deux
+ * échanges qui se terminent au même instant peuvent rendre visible la ligne N+1
+ * avant la ligne N ; sans relecture, N serait perdue pour toujours.
+ *
+ * `survenue_at` recopie l'horodatage de l'école, dans SON fuseau (APP_TIMEZONE,
+ * UTC+1 au Bénin) : au plus une heure d'écart avec les bornes de mois du master.
  */
 class SynchronisationConsommation
 {
     private const LOT = 2000;
+
+    private const RECOUVREMENT = 200;
 
     public function __construct(private TenantConnectionManager $connexions)
     {
@@ -33,12 +42,12 @@ class SynchronisationConsommation
                 return -1;
             }
 
-            $copiees = 0;
+            $avant = ConsommationIa::where('tenant_id', $tenant->id)->count();
+            $curseur = max(0, (int) ConsommationIa::where('tenant_id', $tenant->id)->max('source_id') - self::RECOUVREMENT);
             do {
-                $depuis = (int) ConsommationIa::where('tenant_id', $tenant->id)->max('source_id');
                 $lignes = DB::connection($connexion)->table('assistant_consommations as c')
                     ->leftJoin('users as u', 'u.id', '=', 'c.user_id')
-                    ->where('c.id', '>', $depuis)
+                    ->where('c.id', '>', $curseur)
                     ->orderBy('c.id')
                     ->limit(self::LOT)
                     ->get(['c.*', 'u.name as nom_utilisateur']);
@@ -67,8 +76,12 @@ class SynchronisationConsommation
                         'updated_at' => now(),
                     ])->all());
                 }
-                $copiees += $lignes->count();
+                // Le curseur avance sur ce qui a été LU, pas sur ce qui a été inséré :
+                // un lot entièrement ignoré ne fait pas tourner la boucle sans fin.
+                $curseur = $lignes->isEmpty() ? $curseur : (int) $lignes->last()->id;
             } while ($lignes->count() === self::LOT);
+
+            $copiees = ConsommationIa::where('tenant_id', $tenant->id)->count() - $avant;
 
             $tenant->forceFill(['ai_usage_synced_at' => now()])->save();
 

@@ -91,6 +91,16 @@ it('rapatrie les lignes d\'une école avec le nom de la personne, sans jamais le
     ligneEcole('presentation', ['user_id' => 7, 'cout_fcfa' => 3]);
     $this->artisan('tenant:sync-ai-usage', ['tenant' => 'presentation'])->expectsOutputToContain('1 ligne(s) copiée(s)');
     expect(ConsommationIa::count())->toBe(3);
+
+    // Une ligne d'identifiant plus petit apparue après coup (commit tardif) est rattrapée.
+    ligneEcole('presentation', ['id' => 99, 'cout_fcfa' => 1]);
+    DB::connection(BaseEcoleSimulee::nom('presentation'))->table('assistant_consommations')->where('id', 99)->update(['id' => 150]);
+    ligneEcole('presentation', ['id' => 120, 'cout_fcfa' => 2]);
+    $this->artisan('tenant:sync-ai-usage', ['tenant' => 'presentation'])->assertSuccessful();
+    ligneEcole('presentation', ['id' => 110, 'cout_fcfa' => 5]);
+    $this->artisan('tenant:sync-ai-usage', ['tenant' => 'presentation'])->assertSuccessful();
+    expect(ConsommationIa::where('source_id', 110)->exists())->toBeTrue()
+        ->and(ConsommationIa::count())->toBe(6);
 });
 
 it('ne tombe pas sur une école qui n\'a pas encore la table', function () {

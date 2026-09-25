@@ -34,7 +34,9 @@ class ConsommationIaOverview extends BaseWidget
 
         $mois = (float) ConsommationIa::where('survenue_at', '>=', $debut)->sum('cout_fcfa');
         $avant = (float) ConsommationIa::whereBetween('survenue_at', [$avantDebut, $avantFin])->sum('cout_fcfa');
-        $questions = ConsommationIa::where('survenue_at', '>=', $debut)->where('fonction', 'question')->count();
+        // Une réponse = une ligne « question » qui n'est pas un modèle abandonné pour le suivant.
+        $questions = ConsommationIa::where('survenue_at', '>=', $debut)->where('fonction', 'question')
+            ->where('statut', '!=', 'echec_fournisseur')->count();
 
         $parEcole = ConsommationIa::where('survenue_at', '>=', $debut)
             ->selectRaw('tenant_id, SUM(cout_fcfa) as total')->groupBy('tenant_id')->pluck('total', 'tenant_id');
@@ -49,8 +51,8 @@ class ConsommationIaOverview extends BaseWidget
                 ->descriptionIcon('heroicon-m-sparkles')
                 ->color('gray')
                 ->url(route('filament.admin.resources.consommation-ias.index')),
-            Stat::make('Appels au modèle', number_format($questions, 0, ',', ' '))
-                ->description('questions posées à Nanan ce mois')
+            Stat::make('Réponses de Nanan', number_format($questions, 0, ',', ' '))
+                ->description('questions traitées ce mois')
                 ->color('gray'),
             Stat::make('Écoles au-delà du budget', $auDela)
                 ->description($auDela > 0 ? 'palier économique ou pause' : 'toutes sous leur budget')

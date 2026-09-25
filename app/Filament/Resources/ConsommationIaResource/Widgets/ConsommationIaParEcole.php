@@ -41,15 +41,17 @@ class ConsommationIaParEcole extends TableWidget
                 ->select('tenants.*')
                 ->selectSub($somme($mois->toDateTimeString()), 'ia_mois')
                 ->selectSub($somme($precedent->toDateTimeString(), $mois->toDateTimeString()), 'ia_mois_precedent')
-                ->selectSub(ConsommationIa::query()->selectRaw('COUNT(DISTINCT source_id)')
+                // Une réponse = une ligne « question » qui n'est pas un modèle abandonné pour le suivant.
+                ->selectSub(ConsommationIa::query()->selectRaw('COUNT(*)')
                     ->whereColumn('tenant_ai_usages.tenant_id', 'tenants.id')
-                    ->where('fonction', 'question')->where('survenue_at', '>=', $mois), 'ia_echanges'))
+                    ->where('fonction', 'question')->where('statut', '!=', 'echec_fournisseur')
+                    ->where('survenue_at', '>=', $mois), 'ia_echanges'))
             ->defaultSort('ia_mois', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('name')->label('École')->searchable(),
                 Tables\Columns\TextColumn::make('ia_mois')->label('Dépensé ce mois')->formatStateUsing($fcfa)->sortable(),
                 Tables\Columns\TextColumn::make('ia_mois_precedent')->label('Mois dernier')->formatStateUsing($fcfa)->sortable(),
-                Tables\Columns\TextColumn::make('ia_echanges')->label('Appels (questions)')->numeric(thousandsSeparator: ' ')->sortable(),
+                Tables\Columns\TextColumn::make('ia_echanges')->label('Réponses de Nanan')->numeric(thousandsSeparator: ' ')->sortable(),
                 Tables\Columns\TextColumn::make('ai_monthly_budget_fcfa')->label('Budget')
                     ->formatStateUsing(fn ($state) => $state === null ? 'réglage de l\'école' : ((float) $state > 0 ? number_format((float) $state, 0, ',', ' ') . ' FCFA' : 'sans limite'))
                     ->placeholder('réglage de l\'école'),
