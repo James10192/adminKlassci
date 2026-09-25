@@ -123,6 +123,11 @@ class TenantLimitsController extends Controller
                 'storage_over_limit' => $tenant->isOverLimit('storage'),
             ],
             'blocked_features' => array_unique($blockedFeatures),
+            // Budget mensuel d'IA de l'école (FCFA) : null = le master ne fixe rien,
+            // 0 = sans limite. Lu par BudgetAssistant côté école.
+            'assistant' => [
+                'budget_mensuel_fcfa' => $tenant->ai_monthly_budget_fcfa !== null ? (float) $tenant->ai_monthly_budget_fcfa : null,
+            ],
             // `updated_at` repondait ici, et repondait faux : il bouge des
             // qu'un champ du tenant est edite depuis Filament, sans qu'aucune
             // statistique n'ait ete remesuree. Null tant qu'aucun releve n'a

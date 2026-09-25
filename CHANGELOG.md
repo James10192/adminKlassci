@@ -9,6 +9,14 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 ## Septembre 2026
 
 ### Ajouts
+- **Consommation d'IA des écoles** (assistant Nanan de KLASSCI). `tenant:sync-ai-usage` rapatrie chaque
+  heure les lignes `assistant_consommations` de chaque école (lecture seule, par identifiant, sans
+  doublon) dans `tenant_ai_usages`. Nouvelle page Facturation → Consommation IA (super admin et
+  facturation) : chaque appel avec école, personne, palier, modèle, jetons et coût en FCFA, filtres
+  et total ; en tête, le mois en cours école par école rapporté au budget. Tuile « Assistant IA »
+  au tableau de bord (coût du mois comparé à la même période du mois dernier, écoles au-delà de
+  leur budget). Budget mensuel d'IA par école dans la fiche du tenant, transmis par
+  `/api/tenants/{code}/limits` (`assistant.budget_mensuel_fcfa`).
 - `care:fonctionnalites <code>` affiche, active ou désactive les fonctionnalités KLASSCI Care d'une
   école (`--activer=tout`, `--desactiver=support_screenshot`). Elles étaient désactivées par défaut
   et ne s'activaient qu'en écrivant dans `tenant_features` à la main : une école munie de son

@@ -121,6 +121,16 @@ scheduleWithTimestamp(
     'tenant:update-stats --all'
 );
 
+// 5 bis. Consommation d'IA des écoles (assistant Nanan) — toutes les heures
+scheduleWithTimestamp(
+    Schedule::command('tenant:sync-ai-usage')
+        ->hourly()
+        ->withoutOverlapping()
+        ->runInBackground(),
+    storage_path('logs/ai-usage.log'),
+    'tenant:sync-ai-usage'
+);
+
 // 6. Alertes tenants — chaque jour à 09h00 (quota dépassé, expiration, inactivité)
 scheduleWithTimestamp(
     Schedule::command('tenant:send-alerts')

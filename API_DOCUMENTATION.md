@@ -101,6 +101,7 @@ Récupère les limites d'abonnement et l'utilisation actuelle d'un tenant.
     "storage_over_limit": false
   },
   "blocked_features": [],
+  "assistant": { "budget_mensuel_fcfa": 15000 },
   "last_stats_update": "2025-10-11T21:43:13+00:00"
 }
 ```
@@ -205,6 +206,13 @@ Pourcentages d'utilisation par rapport aux limites :
 - `students_over_limit` (boolean) : Limite d'étudiants dépassée
 - `inscriptions_over_limit` (boolean) : Limite d'inscriptions dépassée
 - `storage_over_limit` (boolean) : Limite de stockage dépassée
+
+### Champ `assistant.budget_mensuel_fcfa`
+
+Budget mensuel d'IA de l'école (assistant Nanan), en FCFA, fixé dans la fiche du tenant
+(onglet Abonnement). `null` : le master ne fixe rien, l'école garde son propre réglage ;
+`0` : sans limite, imposé. Côté école, `BudgetAssistant` le lit dans le cache de ces
+limites et le fait primer. Ajout non cassant (septembre 2026).
 
 ### Champ `blocked_features`
 

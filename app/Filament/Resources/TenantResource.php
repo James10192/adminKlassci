@@ -258,6 +258,18 @@ class TenantResource extends Resource
                                             ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
                                     ])->columns(3),
 
+                                Forms\Components\Section::make('Assistant IA (Nanan)')
+                                    ->description('Budget mensuel d\'IA de l\'école. Atteint : palier économique seulement ; à 120 %, pause jusqu\'au mois suivant.')
+                                    ->schema([
+                                        Forms\Components\TextInput::make('ai_monthly_budget_fcfa')
+                                            ->label('Budget mensuel (FCFA)')
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->prefix('FCFA')
+                                            ->helperText('Vide : l\'école garde son propre réglage. 0 : sans limite.')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
+                                    ])->columns(3),
+
                                 Forms\Components\Section::make('Période d\'Abonnement')
                                     ->schema([
                                         Forms\Components\DatePicker::make('subscription_start_date')

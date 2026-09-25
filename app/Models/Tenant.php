@@ -11,6 +11,8 @@ class Tenant extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'ai_monthly_budget_fcfa',
+        'ai_usage_synced_at',
         'code',
         'name',
         'subdomain',
@@ -76,6 +78,8 @@ class Tenant extends Model
         'current_inscriptions_per_year' => 'integer',
         'current_storage_mb' => 'integer',
         'stats_measured_at' => 'datetime',
+        'ai_monthly_budget_fcfa' => 'decimal:2',
+        'ai_usage_synced_at' => 'datetime',
     ];
 
     /**
