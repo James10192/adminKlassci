@@ -9,6 +9,12 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 ## Septembre 2026
 
 ### Ajouts
+- Les demandes KLASSCI Care s'annoncent dans un canal Slack (`CARE_SLACK_WEBHOOK`) : nouvelle
+  demande, changement de statut ou de sévérité, assignation, réponse du support, réponse ou pièce
+  jointe de l'école. Chaque message porte la référence (lien vers la demande), l'école, ce qui vient
+  de se passer et qui l'a fait. Ne sortent jamais : le titre, la description, les messages, les pièces
+  jointes (ils peuvent nommer un élève), ni une demande restreinte pour raison de sécurité. L'envoi
+  part après la réponse à l'école : un Slack lent ou en panne ne retarde ni ne fait échouer une demande.
 - `care:fonctionnalites <code>` affiche, active ou désactive les fonctionnalités KLASSCI Care d'une
   école (`--activer=tout`, `--desactiver=support_screenshot`). Elles étaient désactivées par défaut
   et ne s'activaient qu'en écrivant dans `tenant_features` à la main : une école munie de son

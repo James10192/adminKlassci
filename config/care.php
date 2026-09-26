@@ -1,5 +1,7 @@
 <?php
 
+use App\Domain\Care\Tickets\Enums\TypeEvenement;
+
 /*
 |--------------------------------------------------------------------------
 | KLASSCI Care — support, incidents, retours produit
@@ -89,6 +91,31 @@ return [
             'image/jpeg' => 'jpg',
             'image/webp' => 'webp',
             'application/pdf' => 'pdf',
+        ],
+    ],
+
+    /*
+    | Annonces Slack (App\Domain\Care\Notifications\AnnonceSlack). Le service
+    | technique suit sa file dans un canal, la direction y voit la progression.
+    | Rien ne part sans CARE_SLACK_WEBHOOK (URL d'un « Incoming Webhook » Slack,
+    | liée au canal choisi). Ni titre, ni description, ni message ne sortent : ils peuvent
+    | nommer un élève ; une demande restreinte (sécurité) n'est jamais annoncée.
+    */
+    'slack' => [
+        'webhook' => env('CARE_SLACK_WEBHOOK'),
+        'delai_secondes' => 3,
+        // Ce qui fait avancer une demande. Les notes internes, le classement
+        // et le contexte restent dans le panneau.
+        // Des cas d'enum, pas des chaînes : une faute de frappe échoue au lieu
+        // de faire disparaître une annonce en silence.
+        'evenements' => [
+            TypeEvenement::TicketCree,
+            TypeEvenement::StatutChange,
+            TypeEvenement::SeveriteChangee,
+            TypeEvenement::Assigne,
+            TypeEvenement::ReponseSupport,
+            TypeEvenement::ReponseClient,
+            TypeEvenement::PieceJointeClient,
         ],
     ],
 
