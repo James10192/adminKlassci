@@ -113,61 +113,31 @@
             icon="heroicon-o-arrow-path"
             size="md"
         >
-            Vérifier tous les tenants
+            Vérifier tous les établissements
         </x-filament::button>
     </div>
 
-    {{-- Summary cards --}}
+    {{-- Synthèse : cartes blanches, la couleur ne porte que le sens (icône et chiffre).
+         Trois aplats vert, orange et rouge criaient plus fort que les écoles elles-mêmes. --}}
+    @php
+        $etatsParc = [
+            ['n' => $stats['healthy'], 'libelle' => 'Établissements sains', 'icone' => 'heroicon-o-check-circle', 'teinte' => 'rgb(var(--success-600))', 'fond' => 'rgba(var(--success-500), .1)'],
+            ['n' => $stats['degraded'], 'libelle' => 'À surveiller', 'icone' => 'heroicon-o-exclamation-triangle', 'teinte' => 'rgb(var(--warning-600))', 'fond' => 'rgba(var(--warning-500), .1)'],
+            ['n' => $stats['unhealthy'], 'libelle' => 'Critiques', 'icone' => 'heroicon-o-x-circle', 'teinte' => 'rgb(var(--danger-600))', 'fond' => 'rgba(var(--danger-500), .1)'],
+        ];
+    @endphp
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
-
-        {{-- Healthy --}}
-        <div class="rounded-2xl shadow-md px-6 py-5 flex items-center gap-4" style="background-color: #10b981; color: white;">
-            <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: rgba(255,255,255,0.2);">
-                <x-heroicon-o-check-circle class="w-6 h-6" style="color: white;" />
+        @foreach ($etatsParc as $etat)
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
+                <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: {{ $etat['fond'] }};">
+                    <x-dynamic-component :component="$etat['icone']" class="w-6 h-6" style="color: {{ $etat['teinte'] }};" />
+                </div>
+                <div>
+                    <div class="text-3xl font-bold leading-none" style="color: {{ $etat['n'] > 0 ? $etat['teinte'] : 'rgb(var(--gray-400))' }};">{{ $etat['n'] }}</div>
+                    <div class="text-sm mt-1 text-gray-500 dark:text-gray-400">{{ $etat['libelle'] }}</div>
+                </div>
             </div>
-            <div>
-                <div class="text-3xl font-bold leading-none">{{ $stats['healthy'] }}</div>
-                <div class="text-sm mt-1" style="color: #d1fae5;">Tenants sains</div>
-            </div>
-            <div class="ml-auto">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style="background-color: rgba(255,255,255,0.25); color: white;">
-                    Sain
-                </span>
-            </div>
-        </div>
-
-        {{-- Degraded --}}
-        <div class="rounded-2xl shadow-md px-6 py-5 flex items-center gap-4" style="background-color: #f59e0b; color: white;">
-            <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: rgba(255,255,255,0.2);">
-                <x-heroicon-o-exclamation-triangle class="w-6 h-6" style="color: white;" />
-            </div>
-            <div>
-                <div class="text-3xl font-bold leading-none">{{ $stats['degraded'] }}</div>
-                <div class="text-sm mt-1" style="color: #fef3c7;">Dégradés</div>
-            </div>
-            <div class="ml-auto">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style="background-color: rgba(255,255,255,0.25); color: white;">
-                    Avertissement
-                </span>
-            </div>
-        </div>
-
-        {{-- Critical --}}
-        <div class="rounded-2xl shadow-md px-6 py-5 flex items-center gap-4" style="background-color: #ef4444; color: white;">
-            <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: rgba(255,255,255,0.2);">
-                <x-heroicon-o-x-circle class="w-6 h-6" style="color: white;" />
-            </div>
-            <div>
-                <div class="text-3xl font-bold leading-none">{{ $stats['unhealthy'] }}</div>
-                <div class="text-sm mt-1" style="color: #fecaca;">Critiques</div>
-            </div>
-            <div class="ml-auto">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold" style="background-color: rgba(255,255,255,0.25); color: white;">
-                    Critique
-                </span>
-            </div>
-        </div>
-
+        @endforeach
     </div>
 
     {{-- Log Rotation Panel --}}

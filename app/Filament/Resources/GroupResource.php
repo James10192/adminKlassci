@@ -13,6 +13,8 @@ use Filament\Tables\Table;
 
 class GroupResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = Group::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office';

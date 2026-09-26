@@ -14,6 +14,8 @@ class BackupsRelationManager extends RelationManager
 {
     protected static string $relationship = 'backups';
 
+    protected static ?string $title = 'Sauvegardes';
+
     public function form(Form $form): Form
     {
         // Les backups sont créés automatiquement par la commande tenant:backup
@@ -41,9 +43,9 @@ class BackupsRelationManager extends RelationManager
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'full' => 'Full Backup',
-                        'database_only' => 'Database Only',
-                        'files_only' => 'Files Only',
+                        'full' => 'Complète',
+                        'database_only' => 'Base de données',
+                        'files_only' => 'Fichiers',
                         default => $state,
                     }),
 
@@ -62,9 +64,9 @@ class BackupsRelationManager extends RelationManager
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'completed' => 'Completed',
-                        'in_progress' => 'In Progress',
-                        'failed' => 'Failed',
+                        'completed' => 'Terminée',
+                        'in_progress' => 'En cours',
+                        'failed' => 'Échouée',
                         default => $state,
                     }),
 
@@ -83,15 +85,15 @@ class BackupsRelationManager extends RelationManager
             ->filters([
                 Tables\Filters\SelectFilter::make('type')
                     ->options([
-                        'full' => 'Full Backup',
-                        'database_only' => 'Database Only',
-                        'files_only' => 'Files Only',
+                        'full' => 'Complète',
+                        'database_only' => 'Base de données',
+                        'files_only' => 'Fichiers',
                     ]),
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
-                        'completed' => 'Completed',
-                        'in_progress' => 'In Progress',
-                        'failed' => 'Failed',
+                        'completed' => 'Terminée',
+                        'in_progress' => 'En cours',
+                        'failed' => 'Échouée',
                     ]),
                 Tables\Filters\TrashedFilter::make()
             ])
@@ -142,7 +144,7 @@ class BackupsRelationManager extends RelationManager
                                     ->send();
                             } else {
                                 $typeLabel = match($type) {
-                                    'full' => 'Full Backup',
+                                    'full' => 'Complète',
                                     'database_only' => 'Base de données',
                                     'files_only' => 'Fichiers',
                                 };

@@ -20,7 +20,7 @@ class HealthDashboard extends Page
 
     protected static string $view = 'filament.pages.health-dashboard';
 
-    protected static ?string $title = 'Tableau de bord Santé';
+    protected static ?string $title = 'Santé du parc';
 
     public array $tenantChecks = [];
     public array $stats = ['healthy' => 0, 'degraded' => 0, 'unhealthy' => 0];

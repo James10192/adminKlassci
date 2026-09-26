@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Artisan;
 
 class TenantDeploymentResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = TenantDeployment::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-arrow-path';

@@ -12,6 +12,8 @@ use Filament\Tables\Table;
 
 class SaasAdminResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = User::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-users';

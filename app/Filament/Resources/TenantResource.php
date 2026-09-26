@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TenantResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = Tenant::class;
 
     // Navigation customization
@@ -136,6 +138,12 @@ class TenantResource extends Resource
                                     ->schema([
                                         Forms\Components\TextInput::make('api_token')
                                             ->label('Token API actuel')
+                                            // Masqué par défaut : la fiche s'ouvre devant l'école
+                                            // ou sur un écran partagé, et ce jeton ouvre l'API.
+                                            // Protection d'écran seulement : la valeur reste dans
+                                            // l'état de la page. Pas un contrôle d'accès.
+                                            ->password()
+                                            ->revealable()
                                             ->disabled()
                                             ->placeholder('Aucun token généré — utilisez le bouton sur la page de détail')
                                             ->helperText(fn ($record) => $record?->api_token_created_at
@@ -151,13 +159,15 @@ class TenantResource extends Resource
                                                     return '(Générez d\'abord un token)';
                                                 }
                                                 $appUrl = config('app.url');
+                                                // Le jeton n'est pas recopié ici en clair : il se révèle
+                                                // dans le champ ci-dessus, pour qui en a besoin.
                                                 return implode("\n", [
                                                     "MASTER_API_URL={$appUrl}/api",
-                                                    "MASTER_API_TOKEN={$record->api_token}",
+                                                    'MASTER_API_TOKEN=' . substr($record->api_token, 0, 6) . '… (voir le champ ci-dessus)',
                                                     "TENANT_CODE={$record->code}",
                                                 ]);
                                             })
-                                            ->helperText('Copiez ce bloc dans le fichier .env du tenant puis faites php artisan config:clear'),
+                                            ->helperText('Ces trois lignes vont dans le fichier .env de l\'école. Sans elles, l\'école n\'affiche pas l\'alerte de fin d\'abonnement.'),
                                     ])->columns(1),
 
                                 Forms\Components\Section::make('Git & Déploiement')
@@ -487,9 +497,9 @@ class TenantResource extends Resource
                     ->toggleable(),
 
                 Tables\Columns\TextColumn::make('current_inscriptions_per_year')
-                    ->label('Inscrits / Max')
+                    ->label('Inscrits / max')
                     ->formatStateUsing(fn (Tenant $record): string =>
-                        number_format($record->current_inscriptions_per_year) . ' / ' . number_format($record->max_inscriptions_per_year)
+                        \App\Support\Quotas\Limite::usage($record->current_inscriptions_per_year, $record->max_inscriptions_per_year)
                     )
                     ->badge()
                     ->color(fn (Tenant $record): string =>

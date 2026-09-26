@@ -535,8 +535,8 @@ ENV;
             ],
             'elite' => [
                 'monthly_fee' => 400000,
-                'max_users' => 999999,
-                'max_inscriptions_per_year' => 999999,
+                'max_users' => \App\Support\Quotas\Limite::ILLIMITE,
+                'max_inscriptions_per_year' => \App\Support\Quotas\Limite::ILLIMITE,
                 'max_storage_mb' => 20480,
             ],
         };

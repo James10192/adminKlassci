@@ -50,6 +50,12 @@ jobs:
       - name: Generate app key
         run: php artisan key:generate --ansi
 
+      # Les vues Blade du panneau emploient des classes Tailwind que Filament ne
+      # compile pas ; elles vivent dans public/css/klassci-admin-utilities.css.
+      # Une classe ajoutée sans régénérer cette feuille sortirait sans style.
+      - name: Check custom-view Tailwind utilities are up to date
+        run: node scripts/utilitaires-admin/generer.mjs --verifier
+
       # Toute la suite, Unit ET Feature : les tests Feature tournent sur SQLite
       # en memoire (voir phpunit.xml), donc aucun service de base a demarrer.
       # Les jouer ici est le seul endroit ou ils sont verifies avant la fusion.

@@ -19,6 +19,9 @@ trait TenantConfigTrait
 
     protected ?Tenant $resolvedTenant = null;
 
+    /** Ce qui a empêché de lire l'école, en mots de l'équipe ; null si tout va bien. */
+    public ?string $erreurTenant = null;
+
     public function mountTenantConfigTrait(): void
     {
         $this->tenants = $this->getActiveTenants();
@@ -58,19 +61,52 @@ trait TenantConfigTrait
             return null;
         }
 
+        // Chaque lecture ou écriture rouvre la connexion : c'est le moment
+        // d'oublier l'échec précédent, sinon le bandeau survivait aux succès.
+        $this->erreurTenant = null;
+
         try {
             $manager = app(TenantConnectionManager::class);
             $this->tenantConnectionName = $manager->createConnection($tenant);
             return $this->tenantConnectionName;
         } catch (\Exception $e) {
-            Log::error("Failed to connect to tenant {$tenant->code}", ['error' => $e->getMessage()]);
-            Notification::make()
-                ->title('Erreur de connexion')
-                ->body("Impossible de se connecter à la base de {$tenant->name}: {$e->getMessage()}")
-                ->danger()
-                ->send();
+            $this->signalerEchecTenant($e, 'connexion');
             return null;
         }
+    }
+
+    /**
+     * Journalise l'erreur complète et n'en montre qu'une phrase utile.
+     *
+     * Le message brut de MySQL s'affichait tel quel : nom d'utilisateur, nom
+     * de base et requête SQL dans un toast, et rien sur ce qu'il fallait faire.
+     */
+    protected function signalerEchecTenant(\Throwable $e, string $operation, bool $lecture = true): void
+    {
+        $tenant = $this->getSelectedTenant();
+        $nom = $tenant?->name ?? 'cet établissement';
+
+        Log::error("TenantConfig : échec de {$operation}", [
+            'tenant' => $tenant?->code,
+            'page' => static::class,
+            'error' => $e->getMessage(),
+        ]);
+
+        $message = str_contains($e->getMessage(), 'Access denied')
+            ? "La base de {$nom} refuse les identifiants enregistrés. Corrigez-les dans la fiche de l'établissement (onglet Configuration technique)."
+            : "Échec de l'opération « {$operation} » pour {$nom}. Le détail est dans le journal de l'admin.";
+
+        // Seule une lecture ratée laisse la page vide : c'est elle qui mérite
+        // un bandeau. Une écriture ratée laisse la page lisible, un toast suffit.
+        if ($lecture) {
+            $this->erreurTenant = $message;
+        }
+
+        Notification::make()
+            ->title($lecture ? 'Établissement inaccessible' : 'Modification non enregistrée')
+            ->body($message)
+            ->danger()
+            ->send();
     }
 
     protected function tenantDb(): ?\Illuminate\Database\ConnectionInterface
@@ -106,6 +142,7 @@ trait TenantConfigTrait
     {
         $this->closeTenantConnection();
         $this->resolvedTenant = null;
+        $this->erreurTenant = null;
     }
 
     protected function closeTenantConnection(): void

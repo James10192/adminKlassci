@@ -33,22 +33,10 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogoHeight('2.5rem')
             ->favicon(asset('images/LOGO-KLASSCI-PNG.png'))
             ->colors([
-                // Cyan cohérent avec le thème Graphite Pro
-                // Filament génère bg-primary-500/10 text-primary-400 sur les items actifs
-                // Ces valeurs cyan garantissent que les classes auto-générées correspondent au CSS
-                'primary' => [
-                    50  => '#ecfeff',
-                    100 => '#cffafe',
-                    200 => '#a5f3fc',
-                    300 => '#67e8f9',
-                    400 => '#22d3ee',
-                    500 => '#06b6d4',
-                    600 => '#0891b2',
-                    700 => '#0e7490',
-                    800 => '#155e75',
-                    900 => '#164e63',
-                    950 => '#083344',
-                ],
+                // Bleu KLASSCI. Le cyan hérité d'un ancien thème colorait en turquoise
+                // les liens, les onglets et le libellé du menu actif (illisible sur
+                // son fond bleu) : tout ce que Filament dessine en « primary ».
+                'primary' => Color::hex('#0453cb'),
                 'gray' => Color::Slate,
             ])
             // Fonts + Thème CSS Slate Pro
@@ -61,6 +49,9 @@ class AdminPanelProvider extends PanelProvider
                 fn () => '<link rel="preconnect" href="https://fonts.googleapis.com">'
                     . '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
                     . '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">'
+                    // Utilitaires Tailwind de nos vues Blade, absents de la feuille de
+                    // Filament (voir scripts/utilitaires-admin). Avant le thème, qui garde le dernier mot.
+                    . '<link rel="stylesheet" href="' . asset('css/klassci-admin-utilities.css') . '?v=' . (@filemtime(public_path('css/klassci-admin-utilities.css')) ?: time()) . '">'
                     . '<link rel="stylesheet" href="' . asset('css/klassci-admin-theme.css') . '?v=' . (@filemtime(public_path('css/klassci-admin-theme.css')) ?: time()) . '">'
             )
             // JS : préserver le logo KLASSCI en mode collapsed

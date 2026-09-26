@@ -24,6 +24,8 @@ use Illuminate\Support\Facades\Gate;
  */
 class SupportTicketResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = SupportTicket::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-lifebuoy';

@@ -68,41 +68,17 @@ class TenantsWithIssues extends BaseWidget
                     ->color('primary'),
 
                 Tables\Columns\TextColumn::make('check_type')
-                    ->label('Type de Check')
+                    ->label('Contrôle')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'http_status' => 'HTTP Status',
-                        'database_connection' => 'Database',
-                        'disk_space' => 'Disk Space',
-                        'ssl_certificate' => 'SSL Certificate',
-                        'application_errors' => 'App Errors',
-                        'queue_workers' => 'Queue Workers',
-                        default => $state,
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'http_status' => 'info',
-                        'database_connection' => 'primary',
-                        'disk_space' => 'warning',
-                        'ssl_certificate' => 'success',
-                        'application_errors' => 'danger',
-                        'queue_workers' => 'secondary',
-                        default => 'gray',
-                    }),
+                    ->formatStateUsing(fn (string $state): string => \App\Support\Sante\ControleSante::libelleType($state))
+                    ->color('gray'),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->label('Statut')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'healthy' => 'success',
-                        'degraded' => 'warning',
-                        'unhealthy' => 'danger',
-                        default => 'gray',
-                    })
-                    ->icon(fn (string $state): string => match ($state) {
-                        'healthy' => 'heroicon-o-check-circle',
-                        'degraded' => 'heroicon-o-exclamation-triangle',
-                        'unhealthy' => 'heroicon-o-x-circle',
-                        default => 'heroicon-o-question-mark-circle',
-                    }),
+                    ->formatStateUsing(fn (string $state): string => \App\Support\Sante\ControleSante::libelleStatut($state))
+                    ->color(fn (string $state): string => \App\Support\Sante\ControleSante::couleurStatut($state))
+                    ->icon(fn (string $state): string => \App\Support\Sante\ControleSante::iconeStatut($state)),
 
                 Tables\Columns\TextColumn::make('details')
                     ->label('Détails')
@@ -155,7 +131,7 @@ class TenantsWithIssues extends BaseWidget
                 ? 'Aucune dégradation dans les relevés de cette fenêtre.'
                 // Sans relevé, on ne dit pas que tout va bien : on dit qu'on
                 // ne sait pas, et comment savoir.
-                : 'La sonde n\'est pas passée récemment — lancez php artisan tenant:health-check --all')
+                : 'La sonde n\'est pas passée récemment — lancez « Vérifier tous les établissements » dans Santé du parc')
             ->emptyStateIcon('heroicon-o-check-circle');
     }
 }

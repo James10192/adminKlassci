@@ -99,7 +99,7 @@ class TenantHealthOverview extends BaseWidget
             // c'est la case qui désigne les établissements à aller vérifier.
             Stat::make('Sans relevé', $sansReleve)
                 ->description($sansReleve > 0
-                    ? "Rien de frais depuis {$fraicheur} min — php artisan tenant:health-check --all"
+                    ? "Rien de frais depuis {$fraicheur} min — lancez « Vérifier tous les établissements » dans Santé du parc"
                     : 'Tout le parc a un relevé frais')
                 ->descriptionIcon('heroicon-o-question-mark-circle')
                 ->color($sansReleve > 0 ? 'warning' : 'gray'),

@@ -15,7 +15,7 @@ class BulletinStylePage extends Page
     protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 3;
     protected static string $view = 'filament.pages.tenant-config.bulletin-style';
-    protected static ?string $title = 'Style du Bulletin PDF';
+    protected static ?string $title = 'Style des bulletins';
 
     public string $bulletinStyle = '';
 

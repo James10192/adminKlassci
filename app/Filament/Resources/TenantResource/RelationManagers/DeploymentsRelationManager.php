@@ -16,6 +16,8 @@ class DeploymentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'deployments';
 
+    protected static ?string $title = 'Déploiements';
+
     public function form(Form $form): Form
     {
         // Les deployments sont créés automatiquement par la commande tenant:deploy
@@ -160,9 +162,9 @@ class DeploymentsRelationManager extends RelationManager
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
-                        'completed' => 'Completed',
-                        'in_progress' => 'In Progress',
-                        'failed' => 'Failed',
+                        'completed' => 'Terminé',
+                        'in_progress' => 'En cours',
+                        'failed' => 'Échoué',
                     ]),
                 Tables\Filters\SelectFilter::make('git_branch')
                     ->options([
