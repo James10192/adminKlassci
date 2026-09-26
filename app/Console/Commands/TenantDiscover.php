@@ -80,9 +80,14 @@ class TenantDiscover extends Command
                 continue;
             }
 
-            // Vérifier si le tenant existe déjà en BDD
-            if (Tenant::where('code', $code)->exists()) {
-                $this->line("  <fg=gray>✓ Déjà connu : {$code}</>");
+            // Vérifier si le tenant existe déjà en BDD. La comparaison MySQL
+            // ignore la casse : « IMERTEL » en base retrouve le dossier
+            // « imertel », dont le nom exact doit alors être enregistré.
+            $connu = Tenant::where('code', $code)->orWhere('install_directory', $code)->first();
+            if ($connu) {
+                if (!$this->rattacherDossier($connu, $code, $isDryRun)) {
+                    $this->line("  <fg=gray>✓ Déjà connu : {$code}</>");
+                }
                 $alreadyKnown++;
                 continue;
             }
@@ -95,8 +100,17 @@ class TenantDiscover extends Command
             $dbName    = $env['DB_DATABASE'] ?? "c2569688c_{$code}";
             $gitBranch = $env['GIT_BRANCH'] ?? $env['APP_BRANCH'] ?? 'presentation';
 
+            // Un sous-domaine déjà connu sous un autre code est la même école
+            // installée dans un dossier qui ne porte pas son code (ISLG :
+            // code « islg », dossier « islg-rostan ») : on rattache le dossier.
+            $parSousDomaine = Tenant::where('subdomain', $subdomain)->first();
+            if ($parSousDomaine && $this->rattacherDossier($parSousDomaine, $code, $isDryRun)) {
+                $alreadyKnown++;
+                continue;
+            }
+
             // Vérifier unicité du subdomain
-            if (Tenant::where('subdomain', $subdomain)->exists()) {
+            if ($parSousDomaine) {
                 $msg = "Subdomain '{$subdomain}' déjà utilisé pour le dossier '{$code}'";
                 $errors[] = $msg;
                 $this->line("  <fg=red>✗ {$msg}</>");
@@ -179,6 +193,47 @@ class TenantDiscover extends Command
         }
 
         return 0;
+    }
+
+    /**
+     * Enregistre le nom réel du dossier d'une école déjà connue.
+     *
+     * Renvoie true quand le dossier est (ou serait, en simulation) celui de
+     * l'école. Ne remplace jamais un dossier déjà enregistré qui existe : deux
+     * dossiers pour une même école relèvent d'une décision humaine.
+     */
+    private function rattacherDossier(Tenant $tenant, string $dossier, bool $simulation): bool
+    {
+        if ($tenant->dossierInstallation() === $dossier) {
+            $this->line("  <fg=gray>✓ Déjà connu : {$dossier}</>");
+            return true;
+        }
+
+        // Le dossier actuel — enregistré ou déduit du code — existe : c'est
+        // lui qui sert. Une copie laissée à côté (« esbtp-yakro-old ») porte
+        // souvent le même APP_URL et ne doit jamais le remplacer.
+        if ($tenant->cheminInstallationExistant() !== null) {
+            return false;
+        }
+
+        if ($simulation) {
+            $this->line("  <fg=cyan>~ Dossier « {$dossier} » serait rattaché à {$tenant->code}</>");
+            return true;
+        }
+
+        $ancien = $tenant->dossierInstallation();
+        $tenant->forceFill(['install_directory' => $dossier])->save();
+
+        TenantActivityLog::create([
+            'tenant_id'   => $tenant->id,
+            'action'      => 'install_directory_detected',
+            'description' => "Dossier « {$dossier} » rattaché (cherché jusqu'ici sous « {$ancien} »)",
+            'metadata'    => ['source' => 'disk_scan', 'ancien' => $ancien, 'nouveau' => $dossier],
+        ]);
+
+        $this->line("  <fg=green>✅ Dossier « {$dossier} » rattaché à {$tenant->code}</>");
+
+        return true;
     }
 
     /**

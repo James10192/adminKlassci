@@ -254,10 +254,10 @@ class TenantBackup extends Command
     /** L'archive du dossier `storage` d'une instance, chiffrée si une clé est posée. */
     private function backupFiles(Tenant $tenant, string $backupDir, string $backupName): ?string
     {
-        $tenantPath = env('PRODUCTION_PATH') . $tenant->code;
+        $tenantPath = $tenant->cheminInstallationExistant();
 
-        if (!file_exists($tenantPath) || !is_dir($tenantPath)) {
-            throw new \Exception("Répertoire tenant introuvable: {$tenantPath}");
+        if ($tenantPath === null) {
+            throw new \Exception('Sauvegarde des fichiers impossible : ' . $tenant->motifDossierIntrouvable());
         }
 
         if (!file_exists("{$tenantPath}/storage")) {

@@ -23,16 +23,10 @@ class TenantClearLimitsCache extends Command
             return 1;
         }
 
-        $productionPath = rtrim(env('PRODUCTION_PATH', ''), '/');
+        // Null en développement local (PRODUCTION_PATH absent) — non bloquant
+        $tenantPath = $tenant->cheminInstallationExistant();
 
-        if (! $productionPath) {
-            // En développement local, PRODUCTION_PATH n'est pas défini — non bloquant
-            return 0;
-        }
-
-        $tenantPath = "{$productionPath}/{$code}";
-
-        if (! is_dir($tenantPath)) {
+        if ($tenantPath === null) {
             return 0;
         }
 
@@ -40,7 +34,7 @@ class TenantClearLimitsCache extends Command
         $phpBinary = $this->detectPhpBinary();
 
         exec(
-            "cd {$tenantPath} && {$phpBinary} artisan cache:forget {$cacheKey} 2>&1",
+            "cd " . escapeshellarg($tenantPath) . " && {$phpBinary} artisan cache:forget " . escapeshellarg($cacheKey) . " 2>&1",
             $output,
             $exitCode
         );

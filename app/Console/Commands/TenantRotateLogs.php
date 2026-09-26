@@ -34,7 +34,6 @@ class TenantRotateLogs extends Command
             return 0;
         }
 
-        $productionPath = env('PRODUCTION_PATH', '');
         $cutoff         = now()->subDays($days)->format('Y-m-d');
         $totalSaved     = 0;
         $processed      = 0;
@@ -46,7 +45,15 @@ class TenantRotateLogs extends Command
         $this->newLine();
 
         foreach ($tenants as $tenant) {
-            $logPath = rtrim($productionPath, '/') . '/' . $tenant->code . '/storage/logs/laravel.log';
+            $installation = $tenant->cheminInstallationExistant();
+            if ($installation === null) {
+                $this->line("  [{$tenant->code}] " . ucfirst($tenant->motifDossierIntrouvable()) . ' — ignoré.');
+                continue;
+            }
+
+            // Les écoles à jour écrivent un journal par jour, déjà borné à 14
+            // jours par Laravel ; seul un ancien laravel.log unique reste à tronquer.
+            $logPath = $installation . '/storage/logs/laravel.log';
 
             if (!file_exists($logPath)) {
                 $this->line("  [{$tenant->code}] Pas de fichier log — ignoré.");

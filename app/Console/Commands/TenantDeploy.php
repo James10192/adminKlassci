@@ -101,8 +101,7 @@ class TenantDeploy extends Command
     ): int {
         $startTime = microtime(true);
         $branch = $branchOverride ?? $tenant->git_branch ?? 'presentation';
-        $productionPath = rtrim(env('PRODUCTION_PATH', ''), '/');
-        $tenantPath = "{$productionPath}/{$tenant->code}";
+        $tenantPath = (string) ($tenant->cheminInstallation() ?? $tenant->dossierInstallation());
 
         if ($verbose) {
             $this->info("🚀 Déploiement de '{$tenant->code}' sur '{$tenantPath}' (branche: {$branch})...");
@@ -118,9 +117,9 @@ class TenantDeploy extends Command
         }
 
         // Verify directory exists before proceeding
-        if (!is_dir($tenantPath)) {
-            $this->error("❌ Répertoire introuvable : {$tenantPath}");
-            $this->line("   Vérifiez que PRODUCTION_PATH est correct et que le tenant a été provisionné.");
+        if (($introuvable = $tenant->motifDossierIntrouvable()) !== null) {
+            $this->error("❌ Déploiement impossible : {$introuvable}");
+            $this->line("   Renseignez « Dossier sur le serveur » dans la fiche, ou lancez « Actualiser les tenants ».");
             return 1;
         }
 

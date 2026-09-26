@@ -14,6 +14,7 @@ class Tenant extends Model
         'code',
         'name',
         'subdomain',
+        'install_directory',
         'database_name',
         'database_credentials',
         'git_branch',
@@ -195,6 +196,65 @@ class Tenant extends Model
         }
 
         return "{$sousDomaine}.{$domaine}";
+    }
+
+    /**
+     * Le nom du dossier de l'école sur le serveur.
+     *
+     * Il ne se déduit pas du code : ISLG a le code « islg » et vit dans
+     * « islg-rostan ». Quand ce nom était deviné, la santé, la sauvegarde et le
+     * déploiement cherchaient un dossier absent et déclaraient l'école en
+     * panne alors qu'elle tournait.
+     */
+    public function dossierInstallation(): string
+    {
+        $dossier = trim((string) $this->install_directory, " /\\");
+
+        return $dossier !== '' ? $dossier : $this->code;
+    }
+
+    /**
+     * Le chemin complet du dossier de l'école, ou null quand PRODUCTION_PATH
+     * n'est pas défini (poste de développement) : sans racine, le chemin
+     * renvoyé serait relatif au dossier courant et pointerait n'importe où.
+     */
+    public function cheminInstallation(): ?string
+    {
+        // Lu comme le reste des commandes d'exploitation (TenantDeploy,
+        // TenantRotateLogs…) : la configuration n'est pas mise en cache sur
+        // le serveur, et les tests posent la variable à l'exécution.
+        $racine = rtrim((string) env('PRODUCTION_PATH', ''), '/\\');
+
+        if ($racine === '') {
+            return null;
+        }
+
+        return $racine . '/' . $this->dossierInstallation();
+    }
+
+    /** Le chemin du dossier s'il existe sur ce serveur, sinon null. */
+    public function cheminInstallationExistant(): ?string
+    {
+        $chemin = $this->cheminInstallation();
+
+        return $chemin !== null && is_dir($chemin) ? $chemin : null;
+    }
+
+    /**
+     * Pourquoi le dossier est introuvable, dans les mots d'un message
+     * d'erreur ; null quand il existe.
+     */
+    public function motifDossierIntrouvable(): ?string
+    {
+        if ($this->cheminInstallationExistant() !== null) {
+            return null;
+        }
+
+        $chemin = $this->cheminInstallation();
+
+        return $chemin === null
+            ? 'PRODUCTION_PATH non défini'
+            : "dossier « {$this->dossierInstallation()} » introuvable ({$chemin})";
     }
 
     public function getIsActiveAttribute(): bool
