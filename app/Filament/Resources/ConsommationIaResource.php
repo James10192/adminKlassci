@@ -98,7 +98,7 @@ class ConsommationIaResource extends Resource
 
     public static function getWidgets(): array
     {
-        return [ConsommationIaResource\Widgets\ConsommationIaParEcole::class];
+        return [ConsommationIaResource\Widgets\ConsommationIaParEcole::class, ConsommationIaResource\Widgets\SatisfactionParModele::class];
     }
 
     public static function getPages(): array

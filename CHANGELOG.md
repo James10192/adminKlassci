@@ -9,6 +9,7 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 ## Septembre 2026
 
 ### Ajouts
+- **Satisfaction de chaque modèle d'IA, école par école.** `tenant:sync-ai-usage` rapatrie aussi les avis 👍 / 👎 donnés aux réponses de Nanan (`assistant_retours` des écoles → `tenant_ai_feedbacks`), y compris quand la personne change d'avis ou rattache un signalement KLASSCI Care (mise à jour par école et identifiant source, sur 45 jours glissants). La page Consommation IA ajoute « Satisfaction par modèle (30 jours) » : avis utiles, pas utiles, taux de satisfaction, part des « information fausse » et coût moyen d'une réponse, pour ranger chaque modèle dans son palier au plus juste.
 - **Consommation d'IA des écoles** (assistant Nanan de KLASSCI). `tenant:sync-ai-usage` rapatrie chaque
   heure les lignes `assistant_consommations` de chaque école (lecture seule, par identifiant, sans
   doublon) dans `tenant_ai_usages`. Nouvelle page Facturation → Consommation IA (super admin et

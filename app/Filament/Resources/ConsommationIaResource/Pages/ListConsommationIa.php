@@ -11,6 +11,9 @@ class ListConsommationIa extends ListRecords
 
     protected function getHeaderWidgets(): array
     {
-        return [\App\Filament\Resources\ConsommationIaResource\Widgets\ConsommationIaParEcole::class];
+        return [
+            \App\Filament\Resources\ConsommationIaResource\Widgets\ConsommationIaParEcole::class,
+            \App\Filament\Resources\ConsommationIaResource\Widgets\SatisfactionParModele::class,
+        ];
     }
 }

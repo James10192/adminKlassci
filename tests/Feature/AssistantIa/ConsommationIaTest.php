@@ -141,3 +141,45 @@ it('montre la consommation au super admin et la refuse au support', function () 
     $this->actingAs(User::create(['name' => 'T', 'email' => 't@klassci.com', 'password' => 'x', 'role' => 'support', 'is_active' => true]));
     $this->get('/admin/consommation-ias')->assertForbidden();
 });
+
+it('rapatrie les avis et suit leurs changements, puis montre la satisfaction par modèle', function () {
+    $tenant = ecoleAvecConsommation('esbtp-yakro');
+    $nom = BaseEcoleSimulee::nom('esbtp-yakro');
+    Schema::connection($nom)->create('assistant_retours', function ($t): void {
+        $t->id();
+        $t->unsignedBigInteger('message_id');
+        $t->unsignedBigInteger('conversation_id');
+        $t->unsignedBigInteger('user_id');
+        $t->string('avis', 12);
+        $t->string('raison', 20)->nullable();
+        $t->string('commentaire', 1000)->nullable();
+        $t->string('modele', 64)->nullable();
+        $t->string('palier', 16)->nullable();
+        $t->string('care_reference', 64)->nullable();
+        $t->timestamps();
+    });
+    DB::connection($nom)->table('users')->insert(['id' => 7, 'name' => 'Awa Koné']);
+    $avis = fn (array $v) => DB::connection($nom)->table('assistant_retours')->insert($v + [
+        'message_id' => 1, 'conversation_id' => 1, 'user_id' => 7, 'modele' => 'or-gemini-flash-lite', 'palier' => 'economique',
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $avis(['id' => 1, 'avis' => 'utile']);
+    $avis(['id' => 2, 'avis' => 'pas_utile', 'raison' => 'faux', 'message_id' => 2]);
+    ligneEcole('esbtp-yakro', ['cout_fcfa' => 0.3]);
+
+    $this->artisan('tenant:sync-ai-usage', ['tenant' => 'esbtp-yakro'])->expectsOutputToContain('2 avis relevé(s)')->assertSuccessful();
+    expect(\App\Domain\AssistantIa\RetourIa::count())->toBe(2)
+        ->and(\App\Domain\AssistantIa\RetourIa::where('source_id', 2)->value('nom_utilisateur'))->toBe('Awa Koné');
+
+    // La personne change d'avis et signale : la copie suit, sans doublon.
+    DB::connection($nom)->table('assistant_retours')->where('id', 1)->update(['avis' => 'pas_utile', 'care_reference' => 'KC-1', 'updated_at' => now()]);
+    $this->artisan('tenant:sync-ai-usage', ['tenant' => 'esbtp-yakro'])->assertSuccessful();
+    expect(\App\Domain\AssistantIa\RetourIa::count())->toBe(2)
+        ->and(\App\Domain\AssistantIa\RetourIa::where('source_id', 1)->value('care_reference'))->toBe('KC-1');
+
+    $this->actingAs(User::create(['name' => 'S', 'email' => 's2@klassci.com', 'password' => 'x', 'role' => 'super_admin', 'is_active' => true]));
+    Livewire::test(\App\Filament\Resources\ConsommationIaResource\Widgets\SatisfactionParModele::class)
+        ->assertSee('or-gemini-flash-lite')
+        ->assertSee('0 %')
+        ->assertSee('0,30 FCFA');
+});
