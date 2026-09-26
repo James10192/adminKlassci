@@ -281,13 +281,13 @@ class ViewTenant extends EditRecord
                 ->requiresConfirmation()
                 ->modalHeading('Détecter la branche Git')
                 ->modalDescription(function () {
-                    $path = rtrim(env('PRODUCTION_PATH', ''), '/') . '/' . $this->record->code;
+                    $path = $this->record->cheminInstallation() ?? $this->record->dossierInstallation();
                     return "Cette action va exécuter « git branch --show-current » dans {$path} et mettre à jour la branche enregistrée en base.";
                 })
                 ->modalSubmitActionLabel('Détecter')
                 ->action(function () {
-                    $productionPath = rtrim(env('PRODUCTION_PATH', ''), '/');
-                    if (!$productionPath) {
+                    $tenantPath = $this->record->cheminInstallation();
+                    if ($tenantPath === null) {
                         Notification::make()
                             ->danger()
                             ->title('PRODUCTION_PATH non défini')
@@ -296,8 +296,6 @@ class ViewTenant extends EditRecord
                             ->send();
                         return;
                     }
-
-                    $tenantPath = "{$productionPath}/{$this->record->code}";
 
                     if (!is_dir($tenantPath)) {
                         Notification::make()

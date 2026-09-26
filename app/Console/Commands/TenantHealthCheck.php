@@ -159,6 +159,11 @@ class TenantHealthCheck extends Command
         $credentials = $tenant->database_credentials;
         $startTime = microtime(true);
 
+        // Laravel garde la connexion ouverte sous son nom : sans purge, la
+        // configuration de l'école suivante était ignorée et chaque école
+        // était déclarée « saine » avec la base de la première vérifiée.
+        DB::purge('tenant_temp');
+
         try {
             config([
                 'database.connections.tenant_temp' => [
@@ -195,20 +200,20 @@ class TenantHealthCheck extends Command
                 'details' => "Erreur: {$e->getMessage()}",
                 'metadata' => ['database' => $tenant->database_name, 'error' => $e->getMessage()],
             ];
+        } finally {
+            DB::purge('tenant_temp');
         }
     }
 
     private function checkDiskSpace(Tenant $tenant): array
     {
-        $path = env('PRODUCTION_PATH') . $tenant->code;
-
-        if (!file_exists($path) || !is_dir($path)) {
+        if (($introuvable = $tenant->motifDossierIntrouvable()) !== null) {
             return [
                 'type' => 'disk_space',
                 'status' => 'unhealthy',
                 'response_time_ms' => null,
-                'details' => "Répertoire introuvable",
-                'metadata' => ['path' => $path],
+                'details' => ucfirst($introuvable),
+                'metadata' => ['path' => $tenant->cheminInstallation()],
             ];
         }
 
@@ -298,17 +303,19 @@ class TenantHealthCheck extends Command
 
     private function checkApplicationErrors(Tenant $tenant): array
     {
-        $logPath = env('PRODUCTION_PATH') . $tenant->code . '/storage/logs/laravel.log';
+        $installation = $tenant->cheminInstallationExistant();
+        $dossierLogs = $installation === null ? null : $installation . '/storage/logs';
+        $logPath = $dossierLogs === null ? null : $this->journalLePlusRecent($dossierLogs);
 
-        if (!file_exists($logPath)) {
+        if ($logPath === null) {
             return [
                 'type' => 'application_errors',
-                'status' => 'degraded',  // ⚠️ Log file should exist - degraded status
+                'status' => 'degraded',
                 'response_time_ms' => null,
-                'details' => "Aucun fichier de log (permissions ou config logging incorrecte)",
+                'details' => "Aucun journal trouvé (droits d'écriture ou configuration des logs)",
                 'metadata' => [
-                    'log_path' => $logPath,
-                    'reason' => 'Log file does not exist - may indicate permission issues or logging misconfiguration',
+                    'log_dir' => $dossierLogs,
+                    'reason' => 'Ni laravel.log ni laravel-AAAA-MM-JJ.log dans le dossier des journaux',
                 ],
             ];
         }
@@ -460,6 +467,31 @@ class TenantHealthCheck extends Command
         }
 
         return 'other';
+    }
+
+    /**
+     * Le journal le plus récent de l'école.
+     *
+     * Les écoles écrivent un fichier par jour (canal « daily » :
+     * laravel-AAAA-MM-JJ.log) depuis la rotation de septembre 2026 ; seules
+     * les installations anciennes ont encore un laravel.log unique. Ne
+     * chercher que ce dernier déclarait « aucun journal » sur toutes les
+     * écoles à jour.
+     */
+    private function journalLePlusRecent(string $dossierLogs): ?string
+    {
+        $candidats = array_merge(
+            glob($dossierLogs . '/laravel-*.log') ?: [],
+            is_file($dossierLogs . '/laravel.log') ? [$dossierLogs . '/laravel.log'] : [],
+        );
+
+        if ($candidats === []) {
+            return null;
+        }
+
+        usort($candidats, fn (string $a, string $b) => filemtime($b) <=> filemtime($a));
+
+        return $candidats[0];
     }
 
     private function checkQueueWorkers(Tenant $tenant): array

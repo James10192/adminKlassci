@@ -16,6 +16,16 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
   journalisé ; l'école le voit sous 5 minutes (cache du bootstrap).
 
 ### Corrections
+- La santé du parc déclarait des écoles en panne qui tournaient. Trois causes :
+  - le dossier d'une école était deviné à partir de son code ; ISLG (code `islg`, dossier
+    `islg-rostan`) et Imertel apparaissaient « Critique — Répertoire introuvable », et leurs
+    sauvegardes échouaient. Le dossier réel s'enregistre désormais dans la fiche (« Dossier sur le
+    serveur ») et « Actualiser les tenants » le rattache seul d'après l'adresse du site. La santé, la
+    sauvegarde, le déploiement et la détection de branche le lisent ;
+  - la sonde ne cherchait que `laravel.log`, alors que les écoles écrivent un journal par jour depuis
+    la rotation de septembre : six écoles à jour étaient « Dégradées — aucun fichier de log » ;
+  - la connexion de test à la base était gardée ouverte d'une école à l'autre : chaque école était
+    déclarée saine avec la base de la première vérifiée.
 - `tenant:verifier-restauration` n'avait jamais abouti en production : sur cPanel, l'utilisateur MySQL
   d'une instance ne peut pas créer de base, et la commande commençait par `DROP/CREATE DATABASE`.
   La base d'essai est désormais créée une fois dans cPanel (`SAUVEGARDE_BASE_ESSAI`, partagée par toutes

@@ -163,6 +163,15 @@ class TenantResource extends Resource
                                 Forms\Components\Section::make('Git & Déploiement')
                                     ->extraAttributes(['style' => 'overflow: visible;'])
                                     ->schema([
+                                        Forms\Components\TextInput::make('install_directory')
+                                            ->label('Dossier sur le serveur')
+                                            ->maxLength(100)
+                                            ->placeholder(fn ($record) => $record?->code ?? 'même nom que le code')
+                                            ->regex('/^[A-Za-z0-9][A-Za-z0-9._-]*$/')
+                                            ->unique(ignoreRecord: true)
+                                            ->helperText('À remplir seulement si le dossier ne porte pas le code (ex. islg-rostan). « Actualiser les tenants » le détecte seul.')
+                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
+
                                         Forms\Components\Select::make('git_branch')
                                             ->label('Branche Git')
                                             ->required()
@@ -192,7 +201,7 @@ class TenantResource extends Resource
                                         Forms\Components\DateTimePicker::make('last_deployed_at')
                                             ->label('Dernier Déploiement')
                                             ->disabled(),
-                                    ])->columns(3),
+                                    ])->columns(2),
                             ]),
 
                         // Onglet 3: Abonnement & Plan

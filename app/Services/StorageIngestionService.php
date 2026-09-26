@@ -49,7 +49,9 @@ class StorageIngestionService
             return null;
         }
 
-        $remotePath = $basePath . '/' . $tenant->subdomain;
+        // Le dossier réel, pas le sous-domaine : ISLG répond sur « islg » et
+        // vit dans « islg-rostan ».
+        $remotePath = $basePath . '/' . $tenant->dossierInstallation();
         $sshCommand = $this->buildSshCommand($user, $host, $remotePath);
         $timeout = (int) config('group_portal.storage_ssh_timeout_sec', 30);
 

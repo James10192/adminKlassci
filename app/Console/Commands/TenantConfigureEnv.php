@@ -31,13 +31,13 @@ class TenantConfigureEnv extends Command
             return 1;
         }
 
-        $productionPath = rtrim(env('PRODUCTION_PATH', ''), '/');
-        if (!$productionPath) {
-            $this->error('❌ PRODUCTION_PATH non défini dans le .env admin.');
+        $tenantPath = $tenant->cheminInstallationExistant();
+        if ($tenantPath === null) {
+            $this->error('❌ ' . ucfirst($tenant->motifDossierIntrouvable()) . '.');
             return 1;
         }
 
-        $envPath = "{$productionPath}/{$code}/.env";
+        $envPath = "{$tenantPath}/.env";
 
         if (!file_exists($envPath)) {
             $this->error("❌ Fichier .env introuvable : {$envPath}");
@@ -53,10 +53,16 @@ class TenantConfigureEnv extends Command
             'TENANT_CODE'      => $code,
         ];
 
+        // Le jeton n'apparaît jamais en clair : la sortie de la commande
+        // remonte dans les notifications et les journaux du panneau.
+        $affiche = fn (string $key, string $value) => $key === 'MASTER_API_TOKEN'
+            ? substr($value, 0, 6) . '…'
+            : $value;
+
         if ($dryRun) {
             $this->info("🔍 [DRY RUN] Changements qui seraient appliqués dans {$envPath} :");
             foreach ($updates as $key => $value) {
-                $this->line("   {$key}={$value}");
+                $this->line("   {$key}=" . $affiche($key, $value));
             }
             return 0;
         }
@@ -71,20 +77,19 @@ class TenantConfigureEnv extends Command
             if (preg_match("/^{$escapedKey}=.*/m", $content)) {
                 // La clé existe — on la remplace
                 $content = preg_replace("/^{$escapedKey}=.*/m", "{$key}={$value}", $content);
-                $changed[] = "  ✏️  {$key}={$value} (mis à jour)";
+                $changed[] = "  ✏️  {$key}=" . $affiche($key, $value) . " (mis à jour)";
             } else {
                 // La clé n'existe pas — on l'ajoute à la fin
                 $content .= "\n{$key}={$value}";
-                $changed[] = "  ➕ {$key}={$value} (ajouté)";
+                $changed[] = "  ➕ {$key}=" . $affiche($key, $value) . " (ajouté)";
             }
         }
 
         file_put_contents($envPath, $content);
 
         // Vider le cache config du tenant
-        $tenantPath = "{$productionPath}/{$code}";
         $phpBinary = PHP_BINARY;
-        exec("cd {$tenantPath} && {$phpBinary} artisan config:clear 2>&1", $output, $exitCode);
+        exec("cd " . escapeshellarg($tenantPath) . " && {$phpBinary} artisan config:clear 2>&1", $output, $exitCode);
 
         $this->info("✅ .env du tenant '{$code}' mis à jour :");
         foreach ($changed as $line) {
