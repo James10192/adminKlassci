@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\API;
 
+use App\Domain\Deploiement\DemanderDeploiement;
+use App\Domain\Deploiement\DeploiementDejaDemande;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DeployWebhookRequest;
+use App\Models\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -29,27 +32,27 @@ class DeployWebhookController extends Controller
         $skipBackup     = $validated['skip_backup'] ?? false;
         $skipMigrations = $validated['skip_migrations'] ?? false;
 
-        // Construction des arguments artisan
-        $args = [];
-
         if ($tenantCode) {
-            $args['tenant'] = $tenantCode;
+            // Une école : même garde que le CLI et le panneau, pour ne jamais
+            // enchaîner deux déploiements sur le même site.
+            try {
+                app(DemanderDeploiement::class)->demander(
+                    Tenant::where('code', $tenantCode)->firstOrFail(),
+                    branche: $branch,
+                    sansSauvegarde: (bool) $skipBackup,
+                    sansMigrations: (bool) $skipMigrations,
+                );
+            } catch (DeploiementDejaDemande $e) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 409);
+            }
+        } else {
+            // Sans école : tenant:deploy parcourt les écoles actives une à une.
+            Artisan::queue('tenant:deploy', array_filter([
+                '--branch' => $branch,
+                '--skip-backup' => (bool) $skipBackup,
+                '--skip-migrations' => (bool) $skipMigrations,
+            ]));
         }
-
-        if ($branch) {
-            $args['--branch'] = $branch;
-        }
-
-        if ($skipBackup) {
-            $args['--skip-backup'] = true;
-        }
-
-        if ($skipMigrations) {
-            $args['--skip-migrations'] = true;
-        }
-
-        // Déclenchement asynchrone via queue
-        Artisan::queue('tenant:deploy', $args);
 
         $label = $tenantCode ?? '(tous les tenants actifs)';
 

@@ -209,3 +209,17 @@ scheduleWithTimestamp(
     storage_path('logs/group-scheduled-reports.log'),
     'group:send-scheduled-reports'
 );
+
+// File d'attente — chaque minute. Pas de worker permanent sur l'hébergement
+// mutualisé : le planificateur vide la file et s'arrête. Sans cette entrée,
+// les déploiements mis en file (boutons Filament, webhook GitHub, CLI) n'étaient
+// jamais exécutés. Un déploiement dure plusieurs minutes : --timeout le borne,
+// --tries=1 interdit de rejouer un déploiement à moitié fait.
+scheduleWithTimestamp(
+    Schedule::command('queue:work --stop-when-empty --tries=1 --timeout=1800 --max-time=3300')
+        ->everyMinute()
+        ->withoutOverlapping(60)
+        ->runInBackground(),
+    storage_path('logs/queue.log'),
+    'queue:work'
+);

@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant.api' => \App\Http\Middleware\VerifyTenantApiToken::class,
             'care.instance' => \App\Http\Middleware\Care\AuthentifierInstance::class,
+            'cli.capacite' => \App\Http\Middleware\Cli\ExigerCapaciteCli::class,
         ]);
         $middleware->api(prepend: [\App\Http\Middleware\AttribuerIdentifiantRequete::class]);
         // Aucune route `login` : un invite qui suit un lien protege par `auth` (une

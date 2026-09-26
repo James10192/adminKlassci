@@ -60,3 +60,6 @@ Route::prefix('v1/support')->name('api.care.')->group(function () {
             ->name('tickets.attachments.show');
     });
 });
+
+// API du CLI de l'équipe (klassci admin:*) : voir routes/api-cli.php.
+require __DIR__ . '/api-cli.php';

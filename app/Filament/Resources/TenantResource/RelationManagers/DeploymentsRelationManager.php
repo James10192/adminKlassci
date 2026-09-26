@@ -186,16 +186,15 @@ class DeploymentsRelationManager extends RelationManager
                         $tenant = $livewire->ownerRecord;
 
                         try {
-                            // Lancer le déploiement en arrière-plan
-                            \Artisan::call('tenant:deploy', [
-                                'tenant' => $tenant->code,
-                            ]);
+                            app(\App\Domain\Deploiement\DemanderDeploiement::class)->demander($tenant, parMembre: auth()->id());
 
                             \Filament\Notifications\Notification::make()
                                 ->success()
-                                ->title('Déploiement démarré')
-                                ->body('Le déploiement du tenant a été démarré. Consultez l\'onglet Deployments pour suivre la progression.')
+                                ->title('Déploiement mis en file')
+                                ->body('Il démarre à la prochaine minute. Cette liste montre sa progression.')
                                 ->send();
+                        } catch (\App\Domain\Deploiement\DeploiementDejaDemande $e) {
+                            \Filament\Notifications\Notification::make()->warning()->title('Déjà en cours')->body($e->getMessage())->send();
                         } catch (\Exception $e) {
                             \Filament\Notifications\Notification::make()
                                 ->danger()

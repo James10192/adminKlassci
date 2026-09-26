@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\TenantResource\Pages;
 
+use App\Domain\Deploiement\DemanderDeploiement;
+use App\Domain\Deploiement\DeploiementDejaDemande;
 use App\Filament\Resources\TenantResource;
 use App\Filament\Resources\TenantResource\Concerns\ReinjecteLesSecretsDuTenant;
 use App\Support\SubscriptionCountdown;
@@ -182,31 +184,22 @@ class ViewTenant extends EditRecord
                     })
                     ->modalSubmitActionLabel('Lancer le déploiement')
                     ->action(function () {
+                        // En file d'attente, jamais dans la requête : un déploiement
+                        // dure plus que les 30 s qu'accorde l'hébergeur à une page.
                         try {
-                            $exitCode = \Artisan::call('tenant:deploy', [
-                                'tenant' => $this->record->code,
-                                '--skip-backup' => true,
-                            ]);
-
-                            $output = \Artisan::output();
-
-                            if ($exitCode !== 0 || str_contains($output, '❌') || str_contains($output, 'Erreur')) {
-                                Notification::make()
-                                    ->danger()
-                                    ->title('Déploiement échoué')
-                                    ->body('Le déploiement a échoué. Consultez l\'onglet Deployments pour les détails.')
-                                    ->persistent()
-                                    ->send();
-                                return;
-                            }
-
-                            $this->record->refresh();
+                            app(DemanderDeploiement::class)->demander(
+                                $this->record,
+                                sansSauvegarde: true,
+                                parMembre: auth()->id(),
+                            );
 
                             Notification::make()
                                 ->success()
-                                ->title('Déploiement réussi ✅')
-                                ->body("Le tenant « {$this->record->name} » a été mis à jour avec succès.")
+                                ->title('Déploiement mis en file')
+                                ->body("Il démarre à la prochaine minute. Suivez-le dans l'onglet Déploiements.")
                                 ->send();
+                        } catch (DeploiementDejaDemande $e) {
+                            Notification::make()->warning()->title('Déjà en cours')->body($e->getMessage())->send();
                         } catch (\Exception $e) {
                             Notification::make()
                                 ->danger()

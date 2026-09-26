@@ -28,6 +28,23 @@ return [
             ]) : [],
         ],
 
+        // klassci admin:sql : utilisateur MySQL qui n'a que SELECT sur la base
+        // maître, sans les colonnes d'identifiants ni sessions/cache/jobs.
+        // Activée par CLI_SQL_CONNEXION=lecture (config/klassci.php).
+        'lecture' => [
+            'driver' => 'mysql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('DB_DATABASE', 'klassci_master'),
+            'username' => env('DB_LECTURE_USERNAME'),
+            'password' => env('DB_LECTURE_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'strict' => true,
+        ],
+
     ],
 
     'migrations' => [

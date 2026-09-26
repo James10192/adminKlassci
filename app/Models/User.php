@@ -7,10 +7,13 @@ use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements FilamentUser
 {
-    use HasFactory, Notifiable;
+    // Jetons du CLI (klassci admin:*) : un par membre de l'équipe, portant
+    // les capacités de son rôle (App\Domain\Cli\CapacitesCli).
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The table associated with the model.
