@@ -15,7 +15,7 @@ class SettingsPage extends Page
     protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 4;
     protected static string $view = 'filament.pages.tenant-config.settings';
-    protected static ?string $title = 'Paramètres PDF & Bulletin';
+    protected static ?string $title = 'Documents PDF et bulletins';
 
     public array $settings = [];
     public array $formValues = [];
@@ -111,11 +111,7 @@ class SettingsPage extends Page
                 }
             }
         } catch (\Exception $e) {
-            Notification::make()
-                ->title('Erreur')
-                ->body('Impossible de charger les settings: ' . $e->getMessage())
-                ->danger()
-                ->send();
+            $this->signalerEchecTenant($e, 'lecture des réglages PDF');
         } finally {
             $this->closeTenantConnection();
         }

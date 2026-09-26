@@ -61,7 +61,7 @@ class TenantsTableWidget extends BaseWidget
                 Tables\Columns\TextColumn::make('current_users')
                     ->label('Utilisateurs')
                     ->formatStateUsing(fn (Tenant $record): string =>
-                        "{$record->current_users}/{$record->max_users}"
+                        \App\Support\Quotas\Limite::usage($record->current_users, $record->max_users)
                     )
                     ->badge()
                     ->color(fn (Tenant $record): string =>
@@ -71,7 +71,7 @@ class TenantsTableWidget extends BaseWidget
                 Tables\Columns\TextColumn::make('current_students')
                     ->label('Étudiants')
                     ->formatStateUsing(fn (Tenant $record): string =>
-                        "{$record->current_students}/{$record->max_students}"
+                        \App\Support\Quotas\Limite::usage($record->current_students, $record->max_students)
                     )
                     ->badge()
                     ->color(fn (Tenant $record): string =>

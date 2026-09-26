@@ -16,7 +16,7 @@ class RolePermissionPage extends Page
     protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 1;
     protected static string $view = 'filament.pages.tenant-config.role-permission';
-    protected static ?string $title = 'Gestion des Rôles & Permissions';
+    protected static ?string $title = 'Rôles et permissions';
 
     public array $roles = [];
     public array $permissions = [];
@@ -74,11 +74,7 @@ class RolePermissionPage extends Page
             $this->groupedPermissions = $grouped;
 
         } catch (\Exception $e) {
-            Notification::make()
-                ->title('Erreur')
-                ->body('Tables Spatie non trouvées: ' . $e->getMessage())
-                ->danger()
-                ->send();
+            $this->signalerEchecTenant($e, 'lecture des rôles');
         } finally {
             $this->closeTenantConnection();
         }
@@ -161,11 +157,7 @@ class RolePermissionPage extends Page
         } catch (\Exception $e) {
             $db->rollBack();
 
-            Notification::make()
-                ->title('Erreur')
-                ->body('Erreur lors de la sauvegarde: ' . $e->getMessage())
-                ->danger()
-                ->send();
+            $this->signalerEchecTenant($e, 'enregistrement des permissions', lecture: false);
             return;
         } finally {
             $this->closeTenantConnection();

@@ -248,9 +248,14 @@ a.fi-sidebar-item-button.bg-primary-50 {
     opacity: 1 !important;
     color: var(--s-hover-t) !important;
 }
-/* Icône active : blanche sur fond bleu */
+/* Icône et libellé actifs : blancs sur fond bleu. Filament pose sa propre
+   couleur (text-primary-600) sur le libellé, que la couleur du lien
+   n'atteignait pas : le texte actif restait bleu sur bleu. */
 .fi-sidebar-item-active .fi-sidebar-item-icon {
     opacity: 1 !important;
+    color: #ffffff !important;
+}
+.fi-sidebar-item-active .fi-sidebar-item-label {
     color: #ffffff !important;
 }
 
@@ -754,9 +759,10 @@ a.fi-sidebar-item-button.bg-primary-50 {
     text-align: center !important;
 }
 
-/* Labels */
+/* Labels — « :not(.fi-btn-label) » : le texte du bouton Connexion porte aussi
+   « label » dans sa classe, et sortait gris foncé sur son fond bleu. */
 .fi-simple-main label,
-.fi-simple-main [class*="label"] {
+.fi-simple-main [class*="label"]:not(.fi-btn-label) {
     color: #374151 !important;
     font-family: var(--f-body) !important;
     font-size: .8rem !important;

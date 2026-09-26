@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\TenantHealthCheckResource\Pages;
 use App\Filament\Resources\TenantHealthCheckResource\RelationManagers;
 use App\Models\TenantHealthCheck;
+use App\Support\Sante\ControleSante;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class TenantHealthCheckResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = TenantHealthCheck::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-exclamation-triangle';
@@ -23,7 +26,7 @@ class TenantHealthCheckResource extends Resource
 
     protected static ?string $modelLabel = 'anomalie';
 
-    protected static ?string $pluralModelLabel = 'Issues détectées';
+    protected static ?string $pluralModelLabel = 'anomalies relevées';
 
     protected static ?string $navigationGroup = 'Surveillance';
 
@@ -79,7 +82,7 @@ class TenantHealthCheckResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('tenant.name')
-                    ->label('Tenant')
+                    ->label('Établissement')
                     ->searchable()
                     ->sortable()
                     ->url(fn ($record) => route('filament.admin.resources.tenants.view', $record->tenant_id))
@@ -90,40 +93,15 @@ class TenantHealthCheckResource extends Resource
                 Tables\Columns\TextColumn::make('check_type')
                     ->label('Type')
                     ->badge()
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'http_status' => 'HTTP Status',
-                        'database_connection' => 'Database',
-                        'disk_space' => 'Disk Space',
-                        'ssl_certificate' => 'SSL',
-                        'application_errors' => 'App Errors',
-                        'queue_workers' => 'Queue Workers',
-                        default => $state,
-                    })
-                    ->color(fn (string $state): string => match ($state) {
-                        'http_status' => 'info',
-                        'database_connection' => 'primary',
-                        'disk_space' => 'warning',
-                        'ssl_certificate' => 'success',
-                        'application_errors' => 'danger',
-                        'queue_workers' => 'secondary',
-                        default => 'gray',
-                    }),
+                    ->formatStateUsing(fn (string $state): string => ControleSante::libelleType($state))
+                    ->color('gray'),
 
                 Tables\Columns\TextColumn::make('status')
+                    ->label('Statut')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'healthy' => 'success',
-                        'degraded' => 'warning',
-                        'unhealthy' => 'danger',
-                        default => 'gray',
-                    })
-                    ->icon(fn (string $state): string => match ($state) {
-                        'healthy' => 'heroicon-o-check-circle',
-                        'degraded' => 'heroicon-o-exclamation-triangle',
-                        'unhealthy' => 'heroicon-o-x-circle',
-                        default => 'heroicon-o-question-mark-circle',
-                    })
-                    ->size('lg'),
+                    ->formatStateUsing(fn (string $state): string => ControleSante::libelleStatut($state))
+                    ->color(fn (string $state): string => ControleSante::couleurStatut($state))
+                    ->icon(fn (string $state): string => ControleSante::iconeStatut($state)),
 
                 Tables\Columns\TextColumn::make('details')
                     ->label('Problème')
@@ -133,8 +111,8 @@ class TenantHealthCheckResource extends Resource
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('response_time_ms')
-                    ->label('Response')
-                    ->formatStateUsing(fn ($state) => $state ? $state . ' ms' : 'N/A')
+                    ->label('Temps de réponse')
+                    ->formatStateUsing(fn ($state) => $state ? $state . ' ms' : '—')
                     ->color(fn ($state) => match (true) {
                         $state === null => 'gray',
                         $state < 500 => 'success',
@@ -152,22 +130,12 @@ class TenantHealthCheckResource extends Resource
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->options([
-                        'degraded' => 'Degraded',
-                        'unhealthy' => 'Unhealthy',
-                    ])
+                    ->options(array_intersect_key(ControleSante::STATUTS, array_flip(['degraded', 'unhealthy'])))
                     ->default('unhealthy'), // Par défaut, afficher les critiques
 
                 Tables\Filters\SelectFilter::make('check_type')
-                    ->label('Type de check')
-                    ->options([
-                        'http_status' => 'HTTP Status',
-                        'database_connection' => 'Database',
-                        'disk_space' => 'Disk Space',
-                        'ssl_certificate' => 'SSL Certificate',
-                        'application_errors' => 'App Errors',
-                        'queue_workers' => 'Queue Workers',
-                    ]),
+                    ->label('Type de contrôle')
+                    ->options(ControleSante::TYPES),
 
                 Tables\Filters\SelectFilter::make('tenant_id')
                     ->relationship('tenant', 'name')
@@ -191,13 +159,13 @@ class TenantHealthCheckResource extends Resource
 
                         \Filament\Notifications\Notification::make()
                             ->success()
-                            ->title('Health Check relancé')
+                            ->title('Vérification relancée')
                             ->body("Vérification exécutée pour {$record->tenant->name}")
                             ->send();
                     }),
 
                 Tables\Actions\Action::make('view_tenant')
-                    ->label('Voir tenant')
+                    ->label("Voir l'établissement")
                     ->icon('heroicon-o-eye')
                     ->url(fn ($record) => route('filament.admin.resources.tenants.view', $record->tenant_id))
                     ->color('gray'),
@@ -205,7 +173,7 @@ class TenantHealthCheckResource extends Resource
                 Tables\Actions\DeleteAction::make()
                     ->label('Résoudre')
                     ->modalHeading('Marquer comme résolu')
-                    ->modalDescription('Cette action va archiver ce problème. Le tenant sera re-vérifié lors du prochain health check.')
+                    ->modalDescription("Cette action va archiver ce problème. L'établissement sera revérifié au prochain passage de la sonde.")
                     ->successNotificationTitle('Problème marqué comme résolu'),
             ])
             ->bulkActions([

@@ -13,6 +13,8 @@ use Filament\Notifications\Notification;
 
 class SubscriptionPlanResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = SubscriptionPlan::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
@@ -125,7 +127,7 @@ class SubscriptionPlanResource extends Resource
                     ])->columns(2),
 
                 Forms\Components\Section::make('Limites & Quotas')
-                    ->description('Définissez les limites incluses dans ce plan. Utilisez 999999 pour "illimité".')
+                    ->description('Définissez les limites incluses dans ce plan. Utilisez 999999 pour « illimité ».')
                     ->schema([
                         Forms\Components\TextInput::make('max_users')
                             ->label('Max utilisateurs')
@@ -251,18 +253,18 @@ class SubscriptionPlanResource extends Resource
 
                 Tables\Columns\TextColumn::make('max_users')
                     ->label('Utilisateurs')
-                    ->formatStateUsing(fn ($state) => $state >= 999999 ? '∞' : $state)
+                    ->formatStateUsing(fn ($state) => \App\Support\Quotas\Limite::afficher((int) $state))
                     ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('max_inscriptions_per_year')
                     ->label('Inscriptions/an')
-                    ->formatStateUsing(fn ($state) => $state >= 999999 ? '∞' : number_format($state, 0, ',', ' '))
+                    ->formatStateUsing(fn ($state) => \App\Support\Quotas\Limite::afficher((int) $state))
                     ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('max_storage_mb')
                     ->label('Stockage')
                     ->formatStateUsing(function ($state) {
-                        if ($state >= 999999) return '∞';
+                        if (\App\Support\Quotas\Limite::estIllimitee((int) $state)) return 'illimité';
                         if ($state >= 1024) return round($state / 1024, 1) . ' GB';
                         return $state . ' MB';
                     })

@@ -15,7 +15,7 @@ class MatriculeConfigPage extends Page
     protected static ?string $navigationGroup = 'Réglages des établissements';
     protected static ?int $navigationSort = 2;
     protected static string $view = 'filament.pages.tenant-config.matricule-config';
-    protected static ?string $title = 'Configuration des Matricules';
+    protected static ?string $title = 'Format des matricules';
 
     public array $configs = [];
 
@@ -51,12 +51,10 @@ class MatriculeConfigPage extends Page
                 ->map(fn ($c) => (array) $c)
                 ->toArray();
         } catch (\Exception $e) {
+            // « Table non trouvée » s'affichait aussi quand la base refusait
+            // la connexion : on renvoyait l'équipe chercher le mauvais défaut.
             $this->configs = [];
-            Notification::make()
-                ->title('Table non trouvée')
-                ->body('La table esbtp_matricule_configs n\'existe pas pour ce tenant.')
-                ->warning()
-                ->send();
+            $this->signalerEchecTenant($e, 'lecture des formats de matricule');
         } finally {
             $this->closeTenantConnection();
         }

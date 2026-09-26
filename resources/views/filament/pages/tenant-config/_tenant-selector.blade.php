@@ -8,10 +8,17 @@
             wire:model.live="selectedTenantId"
             class="fi-select-input block w-full max-w-md rounded-lg border-gray-300 shadow-sm transition duration-75 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
         >
-            <option value="">— Sélectionner un tenant —</option>
+            <option value="">— Choisir un établissement —</option>
             @foreach ($tenants as $t)
                 <option value="{{ $t['id'] }}">{{ $t['name'] }} ({{ $t['code'] }})</option>
             @endforeach
         </select>
     </div>
+
+    @if ($erreurTenant)
+        <div class="mt-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300" role="alert">
+            <x-heroicon-o-exclamation-triangle class="h-5 w-5 flex-shrink-0" />
+            <p>{{ $erreurTenant }}</p>
+        </div>
+    @endif
 </div>

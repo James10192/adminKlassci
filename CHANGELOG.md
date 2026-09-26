@@ -8,6 +8,23 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 
 ## Septembre 2026
 
+### Améliorations
+- Interface du panneau reprise pour l'équipe support :
+  - couleur primaire au bleu KLASSCI : les liens, onglets et le menu actif sortaient en turquoise,
+    et le libellé du menu actif était illisible sur son fond ;
+  - bouton « Connexion » lisible (son texte sortait gris foncé sur bleu) ;
+  - les pages « Réglages des établissements » affichaient des icônes géantes et des grilles
+    empilées : leurs classes Tailwind n'existaient pas dans la feuille de Filament. Elles sont
+    compilées dans `public/css/klassci-admin-utilities.css` (`node scripts/utilitaires-admin/generer.mjs`) ;
+  - fiche établissement : les cinq opérations passent dans un menu « Opérations », le nom de l'école
+    tient sur une ligne ; le jeton API est masqué (révélable) et n'est plus recopié en clair ;
+  - une base d'école inaccessible donne une phrase utile (identifiants refusés, où les corriger)
+    au lieu du message SQL brut, et la page ne reste plus bloquée sur « Chargement » ;
+  - titres en français correct (« Journal d'activité », « Plans d'abonnement », « Demandes de
+    support », « Sauvegardes », « Anomalies relevées ») et libellés anglais traduits ;
+  - les plans illimités affichent le nombre d'inscrits seul au lieu de « 2 / 999 999 » ;
+  - santé du parc : cartes de synthèse sobres, et plus de commande `php artisan` à taper dans les messages.
+
 ### Ajouts
 - Les demandes KLASSCI Care s'annoncent dans un canal Slack (`CARE_SLACK_WEBHOOK`) : nouvelle
   demande, changement de statut ou de sévérité, assignation, réponse du support, réponse ou pièce

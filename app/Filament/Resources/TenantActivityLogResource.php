@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class TenantActivityLogResource extends Resource
 {
+    use \App\Filament\Concerns\LibelleAvecMajusculeInitiale;
+
     protected static ?string $model = TenantActivityLog::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';

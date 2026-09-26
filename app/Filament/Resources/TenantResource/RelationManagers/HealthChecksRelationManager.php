@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\TenantResource\RelationManagers;
 
+use App\Support\Sante\ControleSante;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 class HealthChecksRelationManager extends RelationManager
 {
     protected static string $relationship = 'healthChecks';
+
+    protected static ?string $title = 'Contrôles de santé';
 
     public function form(Form $form): Form
     {
@@ -32,45 +35,22 @@ class HealthChecksRelationManager extends RelationManager
             ->recordTitleAttribute('check_type')
             ->columns([
                 Tables\Columns\TextColumn::make('check_type')
-                    ->label('Type de Check')
+                    ->label('Contrôle')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'http_status' => 'info',
-                        'database_connection' => 'primary',
-                        'disk_space' => 'warning',
-                        'ssl_certificate' => 'success',
-                        'application_errors' => 'danger',
-                        'queue_workers' => 'secondary',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'http_status' => 'HTTP Status',
-                        'database_connection' => 'Database',
-                        'disk_space' => 'Disk Space',
-                        'ssl_certificate' => 'SSL Certificate',
-                        'application_errors' => 'App Errors',
-                        'queue_workers' => 'Queue Workers',
-                        default => $state,
-                    }),
+                    ->color('gray')
+                    ->formatStateUsing(fn (string $state): string => ControleSante::libelleType($state)),
 
+                // Les statuts « warning » / « critical » attendus ici n'existent
+                // plus : un contrôle critique (« unhealthy ») sortait gris et en anglais.
                 Tables\Columns\TextColumn::make('status')
                     ->label('Statut')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'healthy' => 'success',
-                        'warning' => 'warning',
-                        'critical' => 'danger',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'healthy' => 'Healthy',
-                        'warning' => 'Warning',
-                        'critical' => 'Critical',
-                        default => $state,
-                    }),
+                    ->color(fn (string $state): string => ControleSante::couleurStatut($state))
+                    ->icon(fn (string $state): string => ControleSante::iconeStatut($state))
+                    ->formatStateUsing(fn (string $state): string => ControleSante::libelleStatut($state)),
 
                 Tables\Columns\TextColumn::make('response_time_ms')
-                    ->label('Temps de Réponse')
+                    ->label('Temps de réponse')
                     ->suffix(' ms')
                     ->numeric()
                     ->sortable(),
@@ -88,20 +68,11 @@ class HealthChecksRelationManager extends RelationManager
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->options([
-                        'healthy' => 'Healthy',
-                        'warning' => 'Warning',
-                        'critical' => 'Critical',
-                    ]),
+                    ->label('Statut')
+                    ->options(ControleSante::STATUTS),
                 Tables\Filters\SelectFilter::make('check_type')
-                    ->options([
-                        'http_status' => 'HTTP Status',
-                        'database_connection' => 'Database',
-                        'disk_space' => 'Disk Space',
-                        'ssl_certificate' => 'SSL Certificate',
-                        'application_errors' => 'App Errors',
-                        'queue_workers' => 'Queue Workers',
-                    ]),
+                    ->label('Contrôle')
+                    ->options(ControleSante::TYPES),
                 Tables\Filters\TrashedFilter::make()
             ])
             ->headerActions([
