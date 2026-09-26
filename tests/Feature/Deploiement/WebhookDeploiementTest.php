@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Tenant;
 use Illuminate\Foundation\Console\QueuedCommand;
 use Illuminate\Support\Facades\Queue;
 
@@ -29,7 +30,19 @@ it('refuse une branche porteuse d\'une commande shell avec 422, sans rien mettre
     'feat/../main',
 ]);
 
+it('répond 404 pour une école inconnue, sans rien mettre en file', function () {
+    appelerWebhook(['tenant_code' => 'inconnue', 'branch' => 'main'])->assertNotFound();
+
+    Queue::assertNothingPushed();
+});
+
 it('met en file un déploiement dont la branche est bien formée', function () {
+    Tenant::create([
+        'code' => 'presentation', 'name' => 'Présentation', 'subdomain' => 'presentation',
+        'database_name' => 'klassci_presentation', 'git_branch' => 'presentation', 'status' => 'active', 'plan' => 'free',
+        'database_credentials' => ['host' => '127.0.0.1', 'port' => 3306, 'username' => 'u', 'password' => 'p'],
+    ]);
+
     appelerWebhook(['tenant_code' => 'presentation', 'branch' => 'feat/lmd-jury'])
         ->assertStatus(202)
         ->assertJsonPath('queued.branch', 'feat/lmd-jury');

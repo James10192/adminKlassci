@@ -16,6 +16,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Connexion de klassci admin:sql
+    |--------------------------------------------------------------------------
+    |
+    | Nom d'une connexion de config/database.php dont l'utilisateur MySQL n'a
+    | que SELECT sur la base maître, sans les colonnes d'identifiants ni les
+    | tables sessions/cache/jobs (connexion « lecture », DB_LECTURE_*).
+    | Tant qu'elle n'est pas renseignée, la lecture SQL reste fermée : aucun
+    | filtre sur le texte d'une requête ne vaut ces droits côté base.
+    |
+    */
+    'cli_sql_connexion' => env('CLI_SQL_CONNEXION'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Fraîcheur d'un relevé de santé
     |--------------------------------------------------------------------------
     |

@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use App\Domain\Deploiement\DemanderDeploiement;
+use App\Domain\Deploiement\DeploiementDejaDemande;
 use App\Filament\Resources\TenantDeploymentResource\Pages;
 use App\Models\Tenant;
 use App\Models\TenantDeployment;
@@ -12,7 +14,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Artisan;
 
 class TenantDeploymentResource extends Resource
 {
@@ -220,25 +221,22 @@ class TenantDeploymentResource extends Resource
                             ->default(false),
                     ])
                     ->action(function (array $data): void {
-                        $args = ['tenant' => $data['tenant_code']];
-                        if (!empty($data['branch'])) {
-                            $args['--branch'] = $data['branch'];
-                        }
-                        if ($data['skip_backup'] ?? false) {
-                            $args['--skip-backup'] = true;
-                        }
-                        if ($data['skip_migrations'] ?? false) {
-                            $args['--skip-migrations'] = true;
-                        }
-
                         try {
-                            Artisan::queue('tenant:deploy', $args);
+                            app(DemanderDeploiement::class)->demander(
+                                Tenant::where('code', $data['tenant_code'])->firstOrFail(),
+                                branche: ($data['branch'] ?? null) ?: null,
+                                sansSauvegarde: (bool) ($data['skip_backup'] ?? false),
+                                sansMigrations: (bool) ($data['skip_migrations'] ?? false),
+                                parMembre: auth()->id(),
+                            );
 
                             Notification::make()
                                 ->title('Déploiement lancé')
                                 ->body("Le déploiement de « {$data['tenant_code']} » a été mis en file d'attente.")
                                 ->success()
                                 ->send();
+                        } catch (DeploiementDejaDemande $e) {
+                            Notification::make()->title('Déjà en cours')->body($e->getMessage())->warning()->send();
                         } catch (\Exception $e) {
                             Notification::make()
                                 ->title('Erreur')
@@ -260,19 +258,20 @@ class TenantDeploymentResource extends Resource
                     ->modalHeading('Re-déployer ce tenant')
                     ->modalDescription(fn ($record) => "Relancer le déploiement de « {$record->tenant?->name} » sur la branche « {$record->git_branch} » ?")
                     ->action(function ($record): void {
-                        $args = [
-                            'tenant' => $record->tenant?->code,
-                            '--branch' => $record->git_branch,
-                        ];
-
                         try {
-                            Artisan::queue('tenant:deploy', $args);
+                            app(DemanderDeploiement::class)->demander(
+                                $record->tenant,
+                                branche: $record->git_branch,
+                                parMembre: auth()->id(),
+                            );
 
                             Notification::make()
                                 ->title('Re-déploiement lancé')
                                 ->body("Le déploiement de « {$record->tenant?->name} » a été mis en file d'attente.")
                                 ->success()
                                 ->send();
+                        } catch (DeploiementDejaDemande $e) {
+                            Notification::make()->title('Déjà en cours')->body($e->getMessage())->warning()->send();
                         } catch (\Exception $e) {
                             Notification::make()
                                 ->title('Erreur')

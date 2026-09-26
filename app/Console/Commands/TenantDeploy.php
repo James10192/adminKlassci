@@ -15,7 +15,8 @@ class TenantDeploy extends Command
                             {--branch= : Branche Git à déployer (si différente de celle configurée)}
                             {--skip-backup : Ne pas créer de backup avant le déploiement}
                             {--skip-migrations : Ne pas exécuter les migrations}
-                            {--all : Forcer le déploiement de tous les tenants (actifs + suspendus)}';
+                            {--all : Forcer le déploiement de tous les tenants (actifs + suspendus)}
+                            {--par= : Identifiant du membre qui a demandé le déploiement (file d\'attente, CLI)}';
 
     protected $description = 'Déployer les mises à jour d\'un tenant (Git pull + Composer + Migrations + Cache)';
 
@@ -146,7 +147,8 @@ class TenantDeploy extends Command
             'git_branch' => $branch,
             'git_commit_hash' => null,
             'status' => 'in_progress',
-            'deployed_by_user_id' => auth()->id(),
+            // Depuis la file (CLI, webhook), personne n'est connecté : l'auteur arrive par --par.
+            'deployed_by_user_id' => $this->option('par') ?: auth()->id(),
             'started_at' => now(),
             'deployment_log' => [],
         ]);

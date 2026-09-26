@@ -32,6 +32,18 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
   de se passer et qui l'a fait. Ne sortent jamais : le titre, la description, les messages, les pièces
   jointes (ils peuvent nommer un élève), ni une demande restreinte pour raison de sécurité. L'envoi
   part après la réponse à l'école : un Slack lent ou en panne ne retarde ni ne fait échouer une demande.
+- API du CLI de l'équipe (`/api/cli/*`, commandes `klassci admin:*`) : établissements, santé,
+  déploiements (avec leurs étapes), sauvegardes, demandes Care, journal ; relancer la santé, les
+  stats, une sauvegarde, le scan des dossiers ; déployer une école ; requête SQL en lecture seule.
+  Un jeton par membre (`php artisan cli:jeton <email>`), aux capacités de son rôle : facturation
+  consulte, support opère et déploie, super_admin seul lit la base en SQL. Le rôle est revérifié à
+  chaque appel (un membre rétrogradé perd ses droits sans révoquer ses jetons) et chaque action est
+  journalisée à son nom. Les jetons expirent (180 jours par défaut, `--jours`). La lecture SQL
+  passe par un utilisateur MySQL dédié qui n'a que SELECT sur la base maître, sans les colonnes
+  d'identifiants (`DB_LECTURE_*`, `CLI_SQL_CONNEXION=lecture`) : tant qu'il n'existe pas, elle
+  reste fermée (503), car un alias ou un UNION déjouent tout filtre posé sur le texte d'une
+  requête. Elle n'admet qu'une instruction de lecture, sans commentaire, dans une transaction en
+  lecture seule.
 - `care:fonctionnalites <code>` affiche, active ou désactive les fonctionnalités KLASSCI Care d'une
   école (`--activer=tout`, `--desactiver=support_screenshot`). Elles étaient désactivées par défaut
   et ne s'activaient qu'en écrivant dans `tenant_features` à la main : une école munie de son
@@ -49,6 +61,17 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
     la rotation de septembre : six écoles à jour étaient « Dégradées — aucun fichier de log » ;
   - la connexion de test à la base était gardée ouverte d'une école à l'autre : chaque école était
     déclarée saine avec la base de la première vérifiée.
+- Les déploiements et sauvegardes mis en file (boutons du panneau, webhook GitHub) n'étaient jamais
+  exécutés : ni table `jobs`, ni tâche pour vider la file. Le planificateur la vide désormais chaque
+  minute (`queue:work --stop-when-empty --tries=1`), et le délai de reprise passe de 90 s à 35 min :
+  avec 90 s, un déploiement encore en cours aurait été relancé par-dessus lui-même.
+- Deux déploiements de la même école pouvaient s'enchaîner (un depuis le panneau, l'autre depuis le
+  webhook). Tous les points d'entrée passent désormais par une même demande, sous verrou, qui
+  refuse tant qu'un déploiement de l'école est en attente ou en cours. Les boutons « Déployer » de la
+  fiche école et de l'onglet Déploiements le faisaient dans la page, coupée à 30 s par l'hébergeur
+  en plein déploiement : ils le mettent en file. Le webhook répond 404 pour un code d'école inconnu.
+- La sortie d'un déploiement consultée par le CLI masque le jeton qu'une URL de dépôt privé peut
+  porter.
 - `tenant:verifier-restauration` n'avait jamais abouti en production : sur cPanel, l'utilisateur MySQL
   d'une instance ne peut pas créer de base, et la commande commençait par `DROP/CREATE DATABASE`.
   La base d'essai est désormais créée une fois dans cPanel (`SAUVEGARDE_BASE_ESSAI`, partagée par toutes
