@@ -1,0 +1,97 @@
+name: Opérations sur l'admin
+
+# Mettre l'admin (admin.klassci.com) à jour, ou lancer une opération prévue,
+# sans ouvrir de terminal cPanel. Le port SSH de LWS est souvent fermé depuis
+# les postes de l'équipe ; il ne l'est pas depuis GitHub.
+#
+# Liste fermée d'opérations : aucune commande libre ne passe par ce formulaire.
+# Secrets : SSH_HOST, SSH_PORT, SSH_USER, SSH_KEY, ADMIN_PATH.
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Opération"
+        required: true
+        type: choice
+        options:
+          - mettre-a-jour
+          - scanner-simulation
+          - scanner-appliquer
+          - sante-tout
+          - stats-tout
+          - configurer-env
+          - etat
+      ecole:
+        description: "Code de l'école (configurer-env seulement)"
+        required: false
+        default: ""
+
+concurrency:
+  group: admin-operations
+  cancel-in-progress: false
+
+jobs:
+  operer:
+    name: "admin : ${{ inputs.operation }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Préparer la clé SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_admin
+          chmod 600 ~/.ssh/id_admin
+          ssh-keyscan -p "${SSH_PORT:-22}" -T 15 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Les entrées passent par l'environnement, jamais par ${{ }} dans le
+      # script : une expression est collée dans le shell avant exécution.
+      - name: Exécuter sur le serveur
+        env:
+          OPERATION: ${{ inputs.operation }}
+          ECOLE: ${{ inputs.ecole }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          ADMIN_PATH: ${{ secrets.ADMIN_PATH }}
+        run: |
+          set -euo pipefail
+
+          if [ "$OPERATION" = "configurer-env" ] && ! printf '%s' "$ECOLE" | grep -Eq '^[a-z0-9][a-z0-9-]{0,49}$'; then
+            echo "Code d'école invalide : minuscules, chiffres et tirets."
+            exit 1
+          fi
+
+          # Le script distant est fixe ; seules des valeurs contrôlées y entrent.
+          case "$OPERATION" in
+            mettre-a-jour)
+              COMMANDES='git pull --ff-only origin main
+          composer install --no-dev --optimize-autoloader --no-interaction
+          php artisan migrate --force
+          php artisan optimize:clear
+          php artisan filament:optimize-clear || true
+          git log --oneline -1' ;;
+            scanner-simulation) COMMANDES='php artisan tenant:discover --dry-run' ;;
+            scanner-appliquer)  COMMANDES='php artisan tenant:discover' ;;
+            sante-tout)         COMMANDES='php artisan tenant:health-check --all' ;;
+            stats-tout)         COMMANDES='php artisan tenant:update-stats --all' ;;
+            configurer-env)     COMMANDES="php artisan tenant:configure-env $ECOLE --no-interaction" ;;
+            etat)               COMMANDES='git log --oneline -3
+          php artisan migrate:status | tail -15
+          php artisan queue:failed | tail -10 || true
+          grep -E "^QUEUE_CONNECTION=" .env || echo "QUEUE_CONNECTION absent"
+          php -m | grep -i pcntl || echo "pcntl absent"' ;;
+            *) echo "Opération inconnue"; exit 1 ;;
+          esac
+
+          ssh -i ~/.ssh/id_admin -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 \
+            "$SSH_USER@$SSH_HOST" "bash -s" <<EOF
+          set -e
+          cd "$ADMIN_PATH"
+          $COMMANDES
+          EOF
