@@ -2,6 +2,7 @@
 
 namespace App\Domain\Care\Tickets\Services;
 
+use App\Domain\Care\Notifications\AnnonceSlack;
 use App\Domain\Care\Tickets\Enums\TypeEvenement;
 use App\Domain\Care\Tickets\Models\SupportTicket;
 use App\Domain\Care\Tickets\Models\SupportTicketEvent;
@@ -9,6 +10,10 @@ use App\Domain\Care\Tickets\Models\SupportTicketEvent;
 /** Le seul point d'ecriture du journal d'une demande. */
 class Journal
 {
+    public function __construct(private readonly AnnonceSlack $slack)
+    {
+    }
+
     public function consigner(
         SupportTicket $ticket,
         TypeEvenement $type,
@@ -18,7 +23,7 @@ class Journal
         ?string $raison = null,
         array $details = [],
     ): SupportTicketEvent {
-        return SupportTicketEvent::create([
+        $evenement = SupportTicketEvent::create([
             'ticket_id' => $ticket->id,
             'type' => $type,
             'actor_type' => $acteur->type,
@@ -28,5 +33,10 @@ class Journal
             'reason' => $raison,
             'payload' => $details ?: null,
         ]);
+
+        // Tout passe ici : c'est le seul endroit d'où annoncer sans en oublier.
+        $this->slack->programmer($evenement);
+
+        return $evenement;
     }
 }
