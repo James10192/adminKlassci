@@ -1,0 +1,52 @@
+name: Deploy presentation once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/deploy-presentation-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-presentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Déployer le tenant presentation
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          DEPLOY_WEBHOOK_TOKEN: ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_WEBHOOK_URL"
+          test -n "$DEPLOY_WEBHOOK_TOKEN"
+
+          PAYLOAD='{"tenant_code":"presentation","branch":"presentation","skip_backup":false,"skip_migrations":false}'
+          RESPONSE=$(curl --silent --show-error \
+            --max-time 30 \
+            --retry 2 \
+            --retry-delay 3 \
+            -X POST "$DEPLOY_WEBHOOK_URL" \
+            -H "Authorization: Bearer $DEPLOY_WEBHOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Actor: $ACTOR" \
+            -H "X-GitHub-Run-ID: $RUN_ID" \
+            -d "$PAYLOAD" \
+            -w "\n%{http_code}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Réponse HTTP: $HTTP_CODE"
+          echo "Corps: $BODY"
+
+          if [ "$HTTP_CODE" != "202" ]; then
+            echo "Le webhook a refusé le déploiement (HTTP $HTTP_CODE)."
+            exit 1
+          fi
+
+          echo "Déploiement presentation mis en file avec backup et migrations activés."
