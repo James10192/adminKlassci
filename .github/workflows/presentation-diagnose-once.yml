@@ -28,12 +28,12 @@ jobs:
             echo '--- headers ---'
             sed -n '1,80p' /tmp/headers.txt || true
             echo '--- body ---'
-            sed -n '1,120p' /tmp/body.txt || true
+            sed -n '1,80p' /tmp/body.txt || true
             echo
           }
 
           probe 'https://presentation.klassci.com/'
           probe 'https://presentation.klassci.com/login'
-          probe 'https://presentation.klassci.com/api/public/inscription/choix'
+          probe 'https://presentation.klassci.com/esbtp/reinscription'
+          probe 'https://presentation.klassci.com/_e2e/reinscription-student'
           probe 'https://www.klassci.com/fr/inscription/universite/presentation'
-          probe 'https://www.klassci.com/api/inscription/presentation/choix'
