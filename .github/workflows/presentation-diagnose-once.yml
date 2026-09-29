@@ -14,36 +14,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Préparer la clé SSH
-        env:
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
+      - name: Sonder presentation et le proxy public
         run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_admin
-          chmod 600 ~/.ssh/id_admin
-          ssh-keyscan -p "${SSH_PORT:-22}" -T 15 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          set -u
+          probe() {
+            url="$1"
+            echo "===== $url ====="
+            curl -sS -L --max-time 25 \
+              -D /tmp/headers.txt \
+              -o /tmp/body.txt \
+              -w 'HTTP=%{http_code} TOTAL=%{time_total}s FINAL=%{url_effective}\n' \
+              "$url" || true
+            echo '--- headers ---'
+            sed -n '1,80p' /tmp/headers.txt || true
+            echo '--- body ---'
+            sed -n '1,120p' /tmp/body.txt || true
+            echo
+          }
 
-      - name: Diagnostiquer presentation
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          ADMIN_PATH: ${{ secrets.ADMIN_PATH }}
-        run: |
-          set -euo pipefail
-          ssh -i ~/.ssh/id_admin -p "${SSH_PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 \
-            "$SSH_USER@$SSH_HOST" "bash -s" <<EOF
-          set -e
-          cd "$ADMIN_PATH"
-          echo '=== HTTP ==='
-          php artisan tenant:health-check presentation --check=http_status || true
-          echo '=== DATABASE ==='
-          php artisan tenant:health-check presentation --check=database_connection || true
-          echo '=== APPLICATION ERRORS ==='
-          php artisan tenant:health-check presentation --check=application_errors || true
-          echo '=== DEPLOYMENTS RECENTS ==='
-          php artisan tinker --execute='App\\Models\\Tenant::where("code","presentation")->first()?->deployments()->latest()->limit(3)->get(["id","status","git_commit_hash","error_message","started_at","completed_at"])->each(fn($d)=>dump($d->toArray()));' || true
-          EOF
+          probe 'https://presentation.klassci.com/'
+          probe 'https://presentation.klassci.com/login'
+          probe 'https://presentation.klassci.com/api/public/inscription/choix'
+          probe 'https://www.klassci.com/fr/inscription/universite/presentation'
+          probe 'https://www.klassci.com/api/inscription/presentation/choix'
