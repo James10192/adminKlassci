@@ -26,6 +26,7 @@ jobs:
           test -n "$DEPLOY_WEBHOOK_URL"
           test -n "$DEPLOY_WEBHOOK_TOKEN"
 
+          # Redeploiement E2E du parcours de reinscription, 2026-09-29.
           PAYLOAD='{"tenant_code":"presentation","branch":"presentation","skip_backup":false,"skip_migrations":false}'
           RESPONSE=$(curl --silent --show-error \
             --max-time 30 \
