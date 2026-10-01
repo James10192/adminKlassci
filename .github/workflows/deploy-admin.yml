@@ -5,7 +5,8 @@ name: Opérations sur l'admin
 # les postes de l'équipe ; il ne l'est pas depuis GitHub.
 #
 # Liste fermée d'opérations : aucune commande libre ne passe par ce formulaire.
-# Secrets : SSH_HOST, SSH_PORT, SSH_USER, SSH_KEY, ADMIN_PATH.
+# Secrets : SSH_HOST, SSH_PORT, SSH_USER, SSH_KEY, ADMIN_PATH,
+# et CARE_SLACK_WEBHOOK pour l'opération configurer-slack.
 
 on:
   workflow_dispatch:
@@ -21,6 +22,7 @@ on:
           - sante-tout
           - stats-tout
           - configurer-env
+          - configurer-slack
           - etat
       ecole:
         description: "Code de l'école (configurer-env seulement)"
@@ -59,6 +61,7 @@ jobs:
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           ADMIN_PATH: ${{ secrets.ADMIN_PATH }}
+          CARE_SLACK_WEBHOOK: ${{ secrets.CARE_SLACK_WEBHOOK }}
         run: |
           set -euo pipefail
 
@@ -81,6 +84,22 @@ jobs:
             sante-tout)         COMMANDES='php artisan tenant:health-check --all' ;;
             stats-tout)         COMMANDES='php artisan tenant:update-stats --all' ;;
             configurer-env)     COMMANDES="php artisan tenant:configure-env $ECOLE --no-interaction" ;;
+            configurer-slack)
+              # Le webhook vient d'un secret GitHub, jamais d'un champ du
+              # formulaire : les entrées d'un lancement restent lisibles.
+              # Forme vérifiée avant d'entrer dans le script distant.
+              if ! printf '%s' "${CARE_SLACK_WEBHOOK:-}" | grep -Eq '^https://hooks\.slack\.com/services/[A-Za-z0-9/]+$'; then
+                echo "Secret CARE_SLACK_WEBHOOK absent ou mal formé (https://hooks.slack.com/services/...)."
+                exit 1
+              fi
+              COMMANDES="if grep -q '^CARE_SLACK_WEBHOOK=' .env; then
+            sed -i 's#^CARE_SLACK_WEBHOOK=.*#CARE_SLACK_WEBHOOK=$CARE_SLACK_WEBHOOK#' .env
+          else
+            printf '\\nCARE_SLACK_WEBHOOK=%s\\n' '$CARE_SLACK_WEBHOOK' >> .env
+          fi
+          php artisan config:clear
+          grep -c '^CARE_SLACK_WEBHOOK=https://hooks.slack.com/' .env
+          curl -sS -o /dev/null -w 'Slack : HTTP %{http_code}\\n' -X POST -H 'Content-Type: application/json' --data '{\"text\":\"KLASSCI Care est relié à ce canal : retours Nanan et demandes de support arriveront ici.\"}' '$CARE_SLACK_WEBHOOK'" ;;
             etat)               COMMANDES='git log --oneline -3
           php artisan migrate:status | tail -15
           php artisan queue:failed | tail -10 || true
