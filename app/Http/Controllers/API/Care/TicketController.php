@@ -66,7 +66,7 @@ class TicketController extends Controller
         $page = $this->requete($request, $filtres)
             ->with(['messagesPublics', 'piecesJointesPubliques'])
             ->when($request->boolean('ouverts'), fn ($q) => $q->ouverts())
-            ->when($depuis !== null, fn ($q) => $q->where('updated_at', '>', \Illuminate\Support\Carbon::parse($depuis)))
+            ->when($depuis !== null, fn ($q) => $q->where('updated_at', '>', $this->instant($depuis)))
             ->latest('updated_at')
             ->paginate(20);
 
@@ -74,6 +74,16 @@ class TicketController extends Controller
             'data' => $page->getCollection()->map(fn ($t) => $this->projection->resume($t))->values(),
             'meta' => ['page' => $page->currentPage(), 'pages' => $page->lastPage(), 'total' => $page->total()],
         ]);
+    }
+
+    /**
+     * Une date recue, ramenee au fuseau de l'application avant toute comparaison
+     * SQL : `updated_at` y est ecrit, et Eloquent lie le Carbon tel quel. Une
+     * ecole a UTC+1 qui envoie son heure locale manquerait sinon une heure de reponses.
+     */
+    private function instant(string $iso): \Illuminate\Support\Carbon
+    {
+        return \Illuminate\Support\Carbon::parse($iso)->setTimezone(config('app.timezone'));
     }
 
     public function show(Request $request, string $reference): JsonResponse

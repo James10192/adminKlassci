@@ -31,7 +31,7 @@ function retourNanan(array $surcharge = []): array
         'utilisateur' => ['id' => 42, 'nom' => 'Awa Koné', 'role' => 'secretaire'],
         'conversation_ref' => 'sess-abc',
         'message_ref' => 991,
-        'donne_le' => '2026-10-01T09:30:00+00:00',
+        'donne_le' => '2026-09-30T09:30:00+00:00',
     ], $surcharge);
 }
 
@@ -84,12 +84,30 @@ it('garde un seul avis par personne et par reponse, le dernier', function () {
 });
 
 it('ignore une version plus ancienne arrivee en retard', function () {
-    envoyerRetour($this, retourNanan(['donne_le' => '2026-10-01T10:00:00+00:00']), 'uuid-0001:2')->assertCreated();
+    envoyerRetour($this, retourNanan(['donne_le' => '2026-09-30T10:00:00+00:00']), 'uuid-0001:2')->assertCreated();
 
-    envoyerRetour($this, retourNanan(['avis' => 'utile', 'raison' => null, 'commentaire' => null, 'donne_le' => '2026-10-01T09:00:00+00:00']), 'uuid-0001')
+    envoyerRetour($this, retourNanan(['avis' => 'utile', 'raison' => null, 'commentaire' => null, 'donne_le' => '2026-09-30T09:00:00+00:00']), 'uuid-0001')
         ->assertOk()->assertHeader('Idempotent-Replayed', 'true');
 
     expect(RetourAssistant::count())->toBe(1)->and(RetourAssistant::first()->avis)->toBe(AvisAssistant::PasUtile);
+});
+
+it('compare les versions sur l instant, pas sur l heure locale de l ecole', function () {
+    // v1 a 09:30 UTC, v2 a 10:15 heure du Benin = 09:15 UTC : la v2 est plus ANCIENNE.
+    envoyerRetour($this, retourNanan(['donne_le' => '2026-09-30T09:30:00+00:00']), 'uuid-0002')->assertCreated();
+    envoyerRetour($this, retourNanan(['avis' => 'utile', 'raison' => null, 'commentaire' => null, 'donne_le' => '2026-09-30T10:15:00+01:00']), 'uuid-0002:2')
+        ->assertOk()->assertHeader('Idempotent-Replayed', 'true');
+    expect(RetourAssistant::first()->avis)->toBe(AvisAssistant::PasUtile);
+
+    // v3 a 10:45 heure du Benin = 09:45 UTC : plus recente, elle l'emporte.
+    envoyerRetour($this, retourNanan(['avis' => 'utile', 'raison' => null, 'commentaire' => null, 'donne_le' => '2026-09-30T10:45:00+01:00']), 'uuid-0002:3')
+        ->assertCreated();
+    expect(RetourAssistant::first())->avis->toBe(AvisAssistant::Utile)
+        ->and(RetourAssistant::first()->donne_le->utc()->format('H:i'))->toBe('09:45');
+});
+
+it('refuse un donne_le dans le futur', function () {
+    envoyerRetour($this, retourNanan(['donne_le' => now()->addHour()->toIso8601String()]))->assertStatus(422);
 });
 
 it('refuse un corps hors contrat', function () {
@@ -162,7 +180,7 @@ describe('dans le panneau', function () {
             ->callAction('traiter', ['note' => 'Date corrigée dans le calendrier.'])
             ->assertHasNoActionErrors();
 
-        expect($this->retour->fresh())->traite_par->toBe($this->support->id)->note_interne->toBe('Date corrigée dans le calendrier.')
+        expect($this->retour->fresh())->traite_par->toBe($this->support->id)->note_interne->toBe('Aïcha : Date corrigée dans le calendrier.')
             ->and(RetourAssistantResource::getNavigationBadge())->toBeNull();
     });
 
@@ -179,6 +197,47 @@ describe('dans le panneau', function () {
             ->and($ticket->description)->toContain('Quand ferme la saisie')
             ->and($this->retour->fresh()->support_ticket_id)->toBe($ticket->id)
             ->and($this->retour->fresh()->traite_le)->not->toBeNull();
+    });
+
+    it('ne double pas la demande sur un double clic', function () {
+        $this->actingAs($this->support);
+        $action = app(\App\Domain\Care\Retours\Actions\TransformerRetourEnDemande::class);
+
+        $premiere = $action->executer($this->retour, $this->support);
+        // Le retour change entre-temps : sans le lien pose dans la meme transaction,
+        // le second essai heurterait la cle d'idempotence.
+        $this->retour->forceFill(['commentaire' => 'Autre chose.'])->save();
+        $seconde = $action->executer($this->retour->fresh(), $this->support);
+
+        expect($seconde->id)->toBe($premiere->id)->and(SupportTicket::count())->toBe(1)
+            ->and($premiere->reporter_external_id)->toBe($this->retour->utilisateur_id_externe)
+            ->and($premiere->reporter_name_snapshot)->toBe('Awa Koné');
+    });
+
+    it('ne touche pas la note interne en creant la demande', function () {
+        $this->retour->forceFill(['note_interne' => 'Vu avec la directrice.'])->save();
+
+        app(\App\Domain\Care\Retours\Actions\TransformerRetourEnDemande::class)->executer($this->retour, $this->support);
+
+        expect($this->retour->fresh()->note_interne)->toBe('Vu avec la directrice.');
+    });
+
+    it('complete la note interne au lieu de l ecraser', function () {
+        $traiter = app(\App\Domain\Care\Retours\Actions\TraiterRetourAssistant::class);
+        $traiter->executer($this->retour, $this->support, 'Première lecture.');
+        $traiter->executer($this->retour->fresh(), $this->support, 'Corrigé.');
+
+        expect($this->retour->fresh()->note_interne)->toContain('Première lecture.')->toContain('Corrigé.')
+            ->and($this->retour->fresh()->traite_par)->toBe($this->support->id);
+    });
+
+    it('ne propose aucune action sans la capacite de traiter', function () {
+        $this->actingAs(User::create(['name' => 'B', 'email' => 'b2@klassci.com', 'password' => 'x', 'role' => 'billing', 'is_active' => true]));
+
+        Livewire::test(ViewRetourAssistant::class, ['record' => $this->retour->getRouteKey()])
+            ->assertSee('Quand ferme la saisie')
+            ->assertActionHidden('traiter')
+            ->assertActionHidden('demande');
     });
 
     it('ferme les retours a un role sans capacite', function () {

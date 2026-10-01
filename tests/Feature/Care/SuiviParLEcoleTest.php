@@ -76,3 +76,18 @@ it('rend le statut client RESOLU une fois la demande resolue', function () {
     $this->withToken($this->jeton)->getJson('/api/v1/support/tickets?scope=school')
         ->assertOk()->assertJsonPath('data.0.statut.code', 'RESOLU');
 });
+
+it('lit mis_a_jour_depuis dans le fuseau de l ecole', function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-01 10:00:00', 'UTC'));
+    $this->ticket->forceFill(['updated_at' => now()->subMinutes(30)])->saveQuietly();
+
+    // 10:00 au Benin = 09:00 UTC : la demande, touchee a 09:30 UTC, est posterieure.
+    Carbon::setTestNow(Carbon::parse('2026-10-01 09:50:00', 'UTC'));
+    app(RepondreTicket::class)->executer($this->ticket, $this->staff, 'Corrigé.', VisibiliteMessage::PublicClient);
+
+    $this->withToken($this->jeton)->getJson('/api/v1/support/tickets?scope=school&mis_a_jour_depuis='.urlencode('2026-10-01T10:00:00+01:00'))
+        ->assertOk()->assertJsonCount(1, 'data');
+    // 10:00 UTC : posterieur a la reponse de 09:50, rien.
+    $this->withToken($this->jeton)->getJson('/api/v1/support/tickets?scope=school&mis_a_jour_depuis='.urlencode('2026-10-01T10:00:00+00:00'))
+        ->assertOk()->assertJsonCount(0, 'data');
+});

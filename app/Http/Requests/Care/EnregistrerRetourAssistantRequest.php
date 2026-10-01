@@ -43,7 +43,9 @@ class EnregistrerRetourAssistantRequest extends FormRequest
             'utilisateur.role' => ['nullable', 'string', 'max:64'],
             'conversation_ref' => ['nullable', $ref],
             'message_ref' => ['required', $ref],
-            'donne_le' => ['required', 'date'],
+            // Borne haute : une horloge d'ecole tres en avance figerait le retour
+            // (une version plus recente selon donne_le serait ignoree).
+            'donne_le' => ['required', 'date', 'before_or_equal:'.now()->addMinutes(10)->toIso8601String()],
         ];
     }
 

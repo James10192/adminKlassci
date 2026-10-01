@@ -142,6 +142,11 @@ return [
             'incompris' => "La question n'a pas été comprise",
             'autre' => 'Autre',
         ],
+        // Catégorie de la demande créée depuis un 👎, selon la raison donnée.
+        // Une raison absente d'ici donne « Quelque chose ne fonctionne pas ».
+        'categorie_par_raison' => [
+            'faux' => 'INFORMATION_INCORRECTE',
+        ],
         // Fenêtre du badge de navigation (👎 non traités récents) et du taux de satisfaction.
         'badge_jours' => 7,
         'satisfaction_jours' => 30,

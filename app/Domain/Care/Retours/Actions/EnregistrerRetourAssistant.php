@@ -41,14 +41,14 @@ class EnregistrerRetourAssistant
         }
 
         try {
-            [$retour, $aAnnoncer, $ecrit] = DB::transaction(fn () => $this->ecrire($tenant, $donnees, $cle));
+            [$retour, $aAnnoncer, $ecrit] = DB::transaction(fn () => $this->ecrire($tenant, $donnees, $cle), 3);
         } catch (UniqueConstraintViolationException) {
             // Un envoi concurrent a gagné la course : sur la même clé, c'est un rejeu ;
             // sur le même message, la ligne existe maintenant et l'on met à jour.
             if ($existant = $this->parCle($tenant, $cle)) {
                 return new ResultatRetour($existant, true);
             }
-            [$retour, $aAnnoncer, $ecrit] = DB::transaction(fn () => $this->ecrire($tenant, $donnees, $cle));
+            [$retour, $aAnnoncer, $ecrit] = DB::transaction(fn () => $this->ecrire($tenant, $donnees, $cle), 3);
         }
 
         if ($aAnnoncer) {
@@ -80,7 +80,10 @@ class EnregistrerRetourAssistant
             'utilisateur_nom' => (string) $d['utilisateur']['nom'],
             'utilisateur_role' => $d['utilisateur']['role'] ?? null,
             'conversation_ref' => isset($d['conversation_ref']) ? (string) $d['conversation_ref'] : null,
-            'donne_le' => Carbon::parse($d['donne_le']),
+            // Dans le fuseau de l'application : Eloquent écrit le Carbon tel quel,
+            // sans conversion. Une école à UTC+1 (ucao-benin) enverrait sinon une
+            // heure de travers, et une v2 passerait pour plus ancienne que la v1.
+            'donne_le' => Carbon::parse($d['donne_le'])->setTimezone(config('app.timezone')),
         ];
 
         $retour = RetourAssistant::where('tenant_id', $tenant->id)
