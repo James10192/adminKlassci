@@ -23,6 +23,12 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 - Chaque annonce Slack d'une demande porte un bouton « Ouvrir dans adminKlassci ».
 - Une réponse publique du support marque la demande comme mise à jour ; une note interne non.
 
+### Corrections
+- Logo démesuré dans le menu latéral sur téléphone : un script maison effaçait la hauteur que Filament
+  pose sur le logo (`height: 2.5rem`), qui occupait alors toute la largeur du menu et en recouvrait
+  les premières entrées. Le script est retiré ; il visait à garder le logo visible en menu replié, ce qu'il n'a
+  jamais fait (Filament masque le logo dans ce cas).
+
 ## Septembre 2026
 
 ### Améliorations
