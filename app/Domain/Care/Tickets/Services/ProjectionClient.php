@@ -25,6 +25,11 @@ class ProjectionClient
             ? $ticket->messagesPublics->last()
             : $ticket->messagesPublics()->latest('id')->first();
 
+        $messages = $ticket->relationLoaded('messagesPublics') ? $ticket->messagesPublics : null;
+        $derniereDuSupport = $messages !== null
+            ? $messages->filter(fn ($m) => $m->author_type !== TypeActeur::Client)->last()
+            : $ticket->messagesPublics()->where('author_type', '!=', TypeActeur::Client->value)->latest('id')->first();
+
         return [
             'reference' => $ticket->reference,
             'titre' => $ticket->title,
@@ -34,6 +39,8 @@ class ProjectionClient
             'cree_le' => $ticket->created_at?->toIso8601String(),
             'mis_a_jour_le' => $ticket->updated_at?->toIso8601String(),
             'derniere_reponse' => $derniere ? $this->message($derniere) : null,
+            // Ajout v1 : ce que l'ecole compare a sa derniere lecture pour notifier.
+            'derniere_reponse_support_le' => $derniereDuSupport?->created_at?->toIso8601String(),
         ];
     }
 

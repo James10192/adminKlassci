@@ -2,6 +2,8 @@
 
 namespace App\Domain\Care\Notifications;
 
+use App\Domain\Care\Retours\Enums\AvisAssistant;
+use App\Domain\Care\Retours\Models\RetourAssistant;
 use App\Domain\Care\Tickets\Enums\Severite;
 use App\Domain\Care\Tickets\Enums\StatutTicket;
 use App\Domain\Care\Tickets\Enums\TypeActeur;
@@ -26,6 +28,10 @@ use Illuminate\Support\Facades\Log;
  *   (ils peuvent nommer un élève), et aucune trace d'une demande restreinte
  *   pour raison de sécurité ;
  * - rien ne part tant que CARE_SLACK_WEBHOOK n'est pas posé.
+ *
+ * Les retours 👍 / 👎 sur Nanan suivent les mêmes règles : ni la question, ni
+ * la réponse, ni le commentaire ne sortent. L'annonce dit qu'il y a quelque
+ * chose à lire, et le bouton mène au panneau où on le lit.
  */
 class AnnonceSlack
 {
@@ -58,22 +64,101 @@ class AnnonceSlack
             return;
         }
 
+        $this->poster($this->message($ticket, $evenement), ['ticket' => $ticket->reference]);
+    }
+
+    /**
+     * Un 👎 (ou un 👍 accompagné d'un commentaire) vient d'arriver d'une école.
+     * Même discipline que les demandes : après commit, après la réponse.
+     */
+    public function programmerRetour(RetourAssistant $retour): void
+    {
+        if (! $this->estActive() || ! $this->retourAnnonce($retour)) {
+            return;
+        }
+
+        DB::afterCommit(fn () => app()->terminating(fn () => $this->envoyerRetour($retour->getKey())));
+    }
+
+    public function envoyerRetour(int $id): void
+    {
+        $retour = RetourAssistant::with('tenant:id,code,name')->find($id);
+        if ($retour === null || ! $this->retourAnnonce($retour)) {
+            return;
+        }
+
+        $this->poster($this->messageRetour($retour), ['retour_assistant' => $retour->id]);
+    }
+
+    /** @return array{text: string, blocks: array<int, array<string, mixed>>} */
+    public function messageRetour(RetourAssistant $retour): array
+    {
+        $ecole = $retour->tenant?->name ?? 'École inconnue';
+        $quoi = $retour->avis === AvisAssistant::PasUtile
+            ? 'Réponse de Nanan jugée pas utile'
+            : 'Réponse de Nanan jugée utile, avec un commentaire';
+        $lien = route('filament.admin.resources.retours-assistant.view', $retour);
+
+        $contexte = array_filter([
+            $retour->raisonLibelle(),
+            $retour->utilisateur_role ? 'Rôle : '.$retour->utilisateur_role : null,
+            $retour->commentaire ? 'Commentaire à lire' : null,
+            $retour->modele ? 'Modèle : '.$retour->modele : null,
+        ]);
+
+        return [
+            'text' => $this->echapper("{$retour->avis->pictogramme()} {$ecole} · {$quoi}"),
+            'blocks' => [
+                [
+                    'type' => 'section',
+                    'text' => [
+                        'type' => 'mrkdwn',
+                        'text' => "{$retour->avis->pictogramme()} *{$this->echapper($ecole)}*\n{$this->echapper($quoi)}",
+                    ],
+                ],
+                [
+                    'type' => 'context',
+                    'elements' => [['type' => 'mrkdwn', 'text' => $this->echapper(implode(' · ', $contexte) ?: '—')]],
+                ],
+                $this->boutons($lien, 'Lire dans adminKlassci'),
+            ],
+        ];
+    }
+
+    private function retourAnnonce(RetourAssistant $retour): bool
+    {
+        return $retour->avis === AvisAssistant::PasUtile
+            ? (bool) config('care.slack.retours_assistant.pas_utile', true)
+            : filled($retour->commentaire) && (bool) config('care.slack.retours_assistant.utile_avec_commentaire', true);
+    }
+
+    /** @param array<string, mixed> $repere ce qui permet de retrouver l'objet dans le journal */
+    private function poster(array $message, array $repere): void
+    {
         try {
             $reponse = Http::timeout((int) config('care.slack.delai_secondes', 3))
-                ->post((string) config('care.slack.webhook'), $this->message($ticket, $evenement));
+                ->post((string) config('care.slack.webhook'), $message);
 
             if (! $reponse->successful()) {
-                Log::warning('Care : Slack a refusé une annonce', [
-                    'ticket' => $ticket->reference,
-                    'statut_http' => $reponse->status(),
-                ]);
+                Log::warning('Care : Slack a refusé une annonce', $repere + ['statut_http' => $reponse->status()]);
             }
         } catch (\Throwable $e) {
-            Log::warning('Care : annonce Slack impossible', [
-                'ticket' => $ticket->reference,
-                'erreur' => $e->getMessage(),
-            ]);
+            Log::warning('Care : annonce Slack impossible', $repere + ['erreur' => $e->getMessage()]);
         }
+    }
+
+    /** @return array<string, mixed> */
+    private function boutons(string $lien, string $libelle): array
+    {
+        return [
+            'type' => 'actions',
+            'elements' => [[
+                'type' => 'button',
+                'text' => ['type' => 'plain_text', 'text' => $libelle],
+                'url' => $lien,
+                'style' => 'primary',
+            ]],
+        ];
     }
 
     /** @return array{text: string, blocks: array<int, array<string, mixed>>} */
@@ -106,6 +191,7 @@ class AnnonceSlack
                     'type' => 'context',
                     'elements' => [['type' => 'mrkdwn', 'text' => $this->echapper(implode(' · ', $contexte) ?: '—')]],
                 ],
+                $this->boutons($lien, 'Ouvrir dans adminKlassci'),
             ],
         ];
     }

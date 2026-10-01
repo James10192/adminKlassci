@@ -484,7 +484,7 @@ the jury PV numbering.
 | Method | Path | Scope | Slice |
 |---|---|---|---|
 | POST | `/tickets` | support:create | 1 |
-| GET | `/tickets?reporter=<ext_id>&scope=mine\|school&page=` | support:read | 1 |
+| GET | `/tickets?reporter=<ext_id>&scope=mine\|school&page=&mis_a_jour_depuis=<ISO8601>` | support:read | 1 (filtre : oct. 2026) |
 | GET | `/tickets/{reference}?reporter=<ext_id>` | support:read | 1 |
 | POST | `/tickets/{reference}/messages` | support:update | 2 |
 | POST | `/tickets/{reference}/attachments` (multipart) | support:update | 2 |
@@ -493,6 +493,7 @@ the jury PV numbering.
 | POST | `/telemetry/errors` (batch ≤100) | telemetry:send | 3 |
 | GET | `/known-issues?module=` | support:read | 4 |
 | GET | `/bootstrap` (enabled support features, limits, API version) | support:read | 1 |
+| POST | `/retours-assistant` (👍 / 👎 sur Nanan, voir `RETOURS_NANAN_ET_SLACK.md`) | support:create | oct. 2026 |
 
 - Every read is scoped **server-side** to the credential's tenant. On top of that, the tenant
   passes the acting reporter id and the scope. The Master trusts the tenant backend to state

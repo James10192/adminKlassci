@@ -48,8 +48,14 @@ class RepondreTicket
             ]);
 
             $public = $visibilite === VisibiliteMessage::PublicClient;
-            if ($public && $courant->first_response_at === null) {
-                $courant->forceFill(['first_response_at' => now()])->save();
+            if ($public) {
+                // Toucher updated_at : l'ecole decouvre les reponses par
+                // GET /tickets?mis_a_jour_depuis=. Une note interne, elle, ne
+                // touche rien — l'ecole n'a rien de nouveau a lire.
+                $courant->forceFill(array_filter([
+                    'first_response_at' => $courant->first_response_at === null ? now() : null,
+                    'updated_at' => now(),
+                ]))->save();
             }
 
             $this->journal->consigner(
