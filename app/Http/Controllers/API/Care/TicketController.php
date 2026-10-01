@@ -52,11 +52,21 @@ class TicketController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $filtres = $this->filtres($request);
+        $filtres = $this->filtresLecture($request);
+        // L'ecole interroge ce point toutes les 5 minutes pour savoir ce que le
+        // support a fait depuis : une repondre ou un changement de statut touche
+        // updated_at. Borne : au-dela, elle relit la liste sans filtre.
+        $jours = (int) config('care.limites.mis_a_jour_depuis_jours_max');
+        $depuis = $request->validate([
+            'mis_a_jour_depuis' => ['nullable', 'date', 'after_or_equal:'.now()->subDays($jours)->toIso8601String()],
+        ], [
+            'mis_a_jour_depuis.after_or_equal' => "mis_a_jour_depuis ne peut remonter à plus de {$jours} jours.",
+        ])['mis_a_jour_depuis'] ?? null;
 
         $page = $this->requete($request, $filtres)
             ->with(['messagesPublics', 'piecesJointesPubliques'])
             ->when($request->boolean('ouverts'), fn ($q) => $q->ouverts())
+            ->when($depuis !== null, fn ($q) => $q->where('updated_at', '>', $this->instant($depuis)))
             ->latest('updated_at')
             ->paginate(20);
 
@@ -66,9 +76,19 @@ class TicketController extends Controller
         ]);
     }
 
+    /**
+     * Une date recue, ramenee au fuseau de l'application avant toute comparaison
+     * SQL : `updated_at` y est ecrit, et Eloquent lie le Carbon tel quel. Une
+     * ecole a UTC+1 qui envoie son heure locale manquerait sinon une heure de reponses.
+     */
+    private function instant(string $iso): \Illuminate\Support\Carbon
+    {
+        return \Illuminate\Support\Carbon::parse($iso)->setTimezone(config('app.timezone'));
+    }
+
     public function show(Request $request, string $reference): JsonResponse
     {
-        $filtres = $this->filtres($request);
+        $filtres = $this->filtresLecture($request);
 
         $ticket = $this->requete($request, $filtres)
             ->with(['messagesPublics', 'piecesJointesPubliques'])

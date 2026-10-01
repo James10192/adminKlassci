@@ -16,6 +16,19 @@ use Illuminate\Validation\Rule;
  */
 trait BorneALInstance
 {
+    /**
+     * Pour une lecture, le rapporteur n'est requis qu'en `scope=mine` : la vue
+     * de toute l'ecole (que l'ecole interroge pour notifier) n'en depend pas.
+     * Une ecriture, elle, l'exige toujours : c'est son auteur.
+     */
+    private function filtresLecture(Request $request): array
+    {
+        return $request->validate([
+            'reporter' => ['required_unless:scope,school', 'nullable', 'integer', 'min:1'],
+            'scope' => ['nullable', Rule::in(['mine', 'school'])],
+        ]);
+    }
+
     private function filtres(Request $request): array
     {
         return $request->validate([

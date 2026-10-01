@@ -53,6 +53,9 @@ return [
     ],
 
     'limites' => [
+        // Bornes du filtre `mis_a_jour_depuis` de GET /tickets : l'école interroge
+        // toutes les 5 minutes ; au-delà de cette fenêtre, elle relit la liste entière.
+        'mis_a_jour_depuis_jours_max' => 30,
         'description_min' => 10,
         // Une reponse peut etre courte (« Oui, en 2A. ») : pas le minimum d'un signalement.
         'reponse_min' => 2,
@@ -117,6 +120,36 @@ return [
             TypeEvenement::ReponseClient,
             TypeEvenement::PieceJointeClient,
         ],
+        // Retours 👍 / 👎 sur Nanan : un 👎 appelle une lecture, un 👍 seulement
+        // s'il porte un commentaire. Ni la question, ni la réponse, ni le
+        // commentaire ne partent : l'annonce mène au panneau.
+        'retours_assistant' => [
+            'pas_utile' => (bool) env('CARE_SLACK_RETOURS_PAS_UTILE', true),
+            'utile_avec_commentaire' => (bool) env('CARE_SLACK_RETOURS_UTILE_COMMENTES', true),
+        ],
+    ],
+
+    /*
+    | Retours 👍 / 👎 de Nanan, l'assistant IA des écoles
+    | (POST /api/v1/support/retours-assistant, App\Domain\Care\Retours).
+    | Les raisons sont des codes posés par l'école ; une raison absente d'ici
+    | s'affiche telle quelle, elle n'est pas refusée.
+    */
+    'retours_assistant' => [
+        'raisons' => [
+            'faux' => 'Une information est fausse',
+            'incomplet' => 'Il manque quelque chose',
+            'incompris' => "La question n'a pas été comprise",
+            'autre' => 'Autre',
+        ],
+        // Catégorie de la demande créée depuis un 👎, selon la raison donnée.
+        // Une raison absente d'ici donne « Quelque chose ne fonctionne pas ».
+        'categorie_par_raison' => [
+            'faux' => 'INFORMATION_INCORRECTE',
+        ],
+        // Fenêtre du badge de navigation (👎 non traités récents) et du taux de satisfaction.
+        'badge_jours' => 7,
+        'satisfaction_jours' => 30,
     ],
 
     /*

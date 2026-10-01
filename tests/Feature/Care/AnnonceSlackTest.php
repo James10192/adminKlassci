@@ -148,3 +148,15 @@ it('neutralise la mise en forme Slack dans le nom d’une école', function () {
         ->not->toContain('<https://piege.test|ici>')
         ->and($message['text'])->not->toContain('<https://piege.test|ici>');
 });
+
+it('porte un bouton qui ouvre le dossier dans adminKlassci', function () {
+    deposerDemande($this)->assertCreated();
+    $ticket = SupportTicket::firstOrFail();
+
+    $blocs = Http::recorded()->first()[0]['blocks'];
+    $actions = collect($blocs)->firstWhere('type', 'actions');
+
+    expect($actions)->not->toBeNull()
+        ->and($actions['elements'][0]['url'])->toBe(route('filament.admin.resources.support-tickets.view', $ticket))
+        ->and($actions['elements'][0]['text']['text'])->toBe('Ouvrir dans adminKlassci');
+});

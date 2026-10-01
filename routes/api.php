@@ -49,6 +49,11 @@ Route::prefix('v1/support')->name('api.care.')->group(function () {
         ->middleware(['care.instance:support:update', 'throttle:care-pieces'])
         ->name('tickets.attachments.store');
 
+    // Un 👍 / 👎 sur une réponse de Nanan, l'assistant IA de l'école.
+    Route::post('/retours-assistant', [\App\Http\Controllers\API\Care\RetourAssistantController::class, 'store'])
+        ->middleware(['care.instance:support:create', 'throttle:care-ecriture'])
+        ->name('retours-assistant.store');
+
     Route::middleware(['care.instance:support:read', 'throttle:care-lecture'])->group(function () {
         Route::get('/bootstrap', \App\Http\Controllers\API\Care\BootstrapController::class)->name('bootstrap');
         Route::get('/tickets', [\App\Http\Controllers\API\Care\TicketController::class, 'index'])->name('tickets.index');

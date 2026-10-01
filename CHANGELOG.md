@@ -6,6 +6,23 @@ supervision des instances KLASSCI) sont consignées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), groupé par mois.
 Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécurité.
 
+## Octobre 2026
+
+### Ajouts
+- Page « Retours Nanan » (groupe Support) : les 👍 / 👎 donnés dans les écoles sur les réponses de
+  l'assistant arrivent au Master (`POST /api/v1/support/retours-assistant`). Question et réponse
+  complètes, badge des 👎 non traités de la semaine, taux de satisfaction sur 30 jours, « Marquer
+  traité » avec note interne, et « Créer une demande » qui ouvre une demande au nom de la personne.
+- Annonces Slack des retours : chaque 👎 et chaque 👍 commenté, sans la question, la réponse ni le
+  commentaire (`CARE_SLACK_RETOURS_PAS_UTILE`, `CARE_SLACK_RETOURS_UTILE_COMMENTES`).
+- Suivi par l'école : `GET /api/v1/support/tickets` accepte `mis_a_jour_depuis` (30 jours au plus)
+  et `scope=school` sans rapporteur, et chaque demande indique `derniere_reponse_support_le`,
+  pour que l'école prévienne ses utilisateurs quand le support répond ou résout.
+
+### Améliorations
+- Chaque annonce Slack d'une demande porte un bouton « Ouvrir dans adminKlassci ».
+- Une réponse publique du support marque la demande comme mise à jour ; une note interne non.
+
 ## Septembre 2026
 
 ### Améliorations
