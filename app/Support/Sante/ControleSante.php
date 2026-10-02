@@ -20,7 +20,16 @@ final class ControleSante
         'ssl_certificate' => 'Certificat SSL',
         'application_errors' => "Erreurs de l'application",
         'queue_workers' => "Files d'attente",
+        'slow_actions' => 'Actions lentes',
     ];
+
+    /**
+     * Ce qui parle de la qualité de l'application, pas de la disponibilité du
+     * site : ces relevés ne décident ni du statut d'une école sur l'accueil,
+     * ni des alertes du portail des fondateurs. Ils restent visibles dans le
+     * tableau de santé et la liste des problèmes.
+     */
+    public const HORS_ETAT_DU_SITE = ['slow_actions'];
 
     /** Statuts écrits par tenant:health-check. */
     public const STATUTS = [

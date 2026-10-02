@@ -4,7 +4,7 @@
         <div>
             <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Type de vérification</p>
             <p class="mt-1 text-lg font-semibold">
-                {{ str_replace('_', ' ', ucfirst($record->check_type)) }}
+                {{ \App\Support\Sante\ControleSante::libelleType($record->check_type) }}
             </p>
         </div>
 
@@ -163,13 +163,33 @@
     @endif
     @endif
 
+    {{-- Actions lentes : les cinq plus fréquentes, telles que l'école les a mesurées --}}
+    @if($record->check_type === 'slow_actions' && ! empty($record->metadata['top']))
+    <div>
+        <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Actions les plus fréquentes (24 h)</p>
+        <div class="space-y-2">
+            @foreach($record->metadata['top'] as $action)
+                <div class="rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
+                    <p class="text-sm font-semibold text-gray-900 dark:text-gray-100 break-all">{{ $action['nom'] ?? '?' }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {{ $action['type'] ?? '' }} · {{ $action['nombre'] ?? 0 }} fois
+                        · médiane {{ $action['mediane_ms'] ?? '?' }} ms · p95 {{ $action['p95_ms'] ?? '?' }} ms
+                        · max {{ $action['max_ms'] ?? '?' }} ms · {{ $action['mediane_sql'] ?? '?' }} requêtes SQL
+                        @if(($action['echecs'] ?? 0) > 0) · <span class="text-red-600 dark:text-red-400">{{ $action['echecs'] }} échec(s)</span> @endif
+                    </p>
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
     {{-- Métadonnées génériques (pour autres types de checks) --}}
     @if($record->metadata && is_array($record->metadata) && count($record->metadata) > 0 && $record->check_type !== 'application_errors')
     <div>
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Métadonnées</p>
         <div class="rounded-lg bg-gray-50 dark:bg-gray-800 p-4 space-y-2">
             @foreach($record->metadata as $key => $value)
-                @if(!in_array($key, ['recent_errors', 'errors_by_level', 'errors_by_category', 'critical_score']))
+                @if(!in_array($key, ['recent_errors', 'errors_by_level', 'errors_by_category', 'critical_score', 'top']))
                 <div class="flex justify-between text-sm">
                     <span class="font-medium text-gray-600 dark:text-gray-300">{{ ucfirst(str_replace('_', ' ', $key)) }}:</span>
                     <span class="text-gray-900 dark:text-gray-100">

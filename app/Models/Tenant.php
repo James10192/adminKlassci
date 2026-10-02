@@ -46,6 +46,7 @@ class Tenant extends Model
         'group_id',
         'api_token',
         'api_token_created_at',
+        'cli_lecture_token',
     ];
 
     /**
@@ -56,6 +57,7 @@ class Tenant extends Model
     protected $hidden = [
         'api_token',
         'database_credentials',
+        'cli_lecture_token',
     ];
 
     protected $casts = [
@@ -65,6 +67,8 @@ class Tenant extends Model
         'subscription_start_date' => 'date',
         'subscription_end_date' => 'date',
         'api_token_created_at' => 'datetime',
+        // Écrit depuis la fiche, jamais réaffiché : il ouvre l'API de l'école.
+        'cli_lecture_token' => 'encrypted',
         'monthly_fee' => 'decimal:2',
         'max_users' => 'integer',
         'max_staff' => 'integer',
@@ -93,14 +97,18 @@ class Tenant extends Model
     }
 
     /**
-     * Latest health check across all check types — used by the group portal
+     * Latest health check across the availability types (slow_actions excluded,
+     * see ControleSante::HORS_ETAT_DU_SITE) — used by the group portal
      * stale-tenant detection (tenant hasn't checked in recently OR is flagged
      * unhealthy). latestOfMany() avoids the per-tenant subquery that naive
      * "$tenant->healthChecks->first()" would trigger on a group dashboard.
      */
     public function latestHealthCheck()
     {
-        return $this->hasOne(TenantHealthCheck::class)->latestOfMany('checked_at');
+        return $this->hasOne(TenantHealthCheck::class)->ofMany(
+            ['checked_at' => 'max'],
+            fn ($q) => $q->whereNotIn('check_type', \App\Support\Sante\ControleSante::HORS_ETAT_DU_SITE),
+        );
     }
 
     /**

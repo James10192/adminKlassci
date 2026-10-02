@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Sante\ControleSante;
 use App\Models\Tenant;
 use App\Models\TenantHealthCheck;
 use Filament\Notifications\Notification;
@@ -47,18 +48,11 @@ class HealthDashboard extends Page
     /** Check individuel en cours */
     public string $isRunningTenant = '';
 
-    private const CHECK_TYPES = [
-        'http_status',
-        'database_connection',
-        'disk_space',
-        'ssl_certificate',
-        'application_errors',
-        'queue_workers',
-    ];
 
     public static function getNavigationBadge(): ?string
     {
         $count = TenantHealthCheck::whereIn('status', ['degraded', 'unhealthy'])
+            ->whereNotIn('check_type', ControleSante::HORS_ETAT_DU_SITE)
             ->where('checked_at', '>=', now()->subHour())
             ->count();
 
@@ -68,6 +62,7 @@ class HealthDashboard extends Page
     public static function getNavigationBadgeColor(): ?string
     {
         $critical = TenantHealthCheck::where('status', 'unhealthy')
+            ->whereNotIn('check_type', ControleSante::HORS_ETAT_DU_SITE)
             ->where('checked_at', '>=', now()->subHour())
             ->count();
 
@@ -93,11 +88,18 @@ class HealthDashboard extends Page
             $tenantGlobalStatus = 'healthy';
             $lastCheck          = null;
 
-            foreach (self::CHECK_TYPES as $checkType) {
+            foreach (array_keys(ControleSante::TYPES) as $checkType) {
                 $latest = TenantHealthCheck::where('tenant_id', $tenant->id)
                     ->where('check_type', $checkType)
                     ->latest('checked_at')
                     ->first();
+
+                // Un relevé d'actions lentes n'est écrit que quand l'école répond :
+                // trop vieux, il ne dit plus rien de l'état d'aujourd'hui.
+                if ($latest && $checkType === 'slow_actions'
+                    && $latest->checked_at->lt(now()->subMinutes((int) config('klassci.actions_lentes.fraicheur_minutes', 180)))) {
+                    $latest = null;
+                }
 
                 $checks[$checkType] = [
                     'status'           => $latest?->status ?? 'unknown',
@@ -105,6 +107,13 @@ class HealthDashboard extends Page
                     'details'          => $latest?->details,
                     'checked_at'       => $latest?->checked_at,
                 ];
+
+                // Les actions lentes s'affichent dans leur cellule, mais ne font
+                // pas le statut de l'école : elles disent la qualité de
+                // l'application, pas la disponibilité du site.
+                if (in_array($checkType, ControleSante::HORS_ETAT_DU_SITE, true)) {
+                    continue;
+                }
 
                 if (($latest?->status ?? 'unknown') === 'unhealthy') {
                     $tenantGlobalStatus = 'unhealthy';

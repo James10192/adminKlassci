@@ -22,7 +22,10 @@ class TenantsWithIssues extends BaseWidget
     {
         $fraicheur = (int) config('klassci.health_freshness_minutes', 15);
 
+        // Le titre compte les écoles dont le site va mal, comme la tuile voisine :
+        // une action lente reste listée plus bas, sans faire compter l'école.
         $count = TenantHealthCheck::whereIn('status', ['degraded', 'unhealthy'])
+            ->whereNotIn('check_type', \App\Support\Sante\ControleSante::HORS_ETAT_DU_SITE)
             ->where('created_at', '>=', now()->subMinutes($fraicheur))
             ->distinct('tenant_id')
             ->count('tenant_id');

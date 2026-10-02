@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Models\TenantHealthCheck as TenantHealthCheckModel;
+use App\Support\Sante\ControleActionsLentes;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -12,10 +13,10 @@ class TenantHealthCheck extends Command
 {
     protected $signature = 'tenant:health-check
                             {tenant? : Code du tenant (si omis, vérifie tous les tenants actifs)}
-                            {--check= : Type de vérification spécifique (http_status, database_connection, disk_space, ssl_certificate, application_errors, queue_workers)}
+                            {--check= : Type de vérification spécifique (http_status, database_connection, disk_space, ssl_certificate, application_errors, queue_workers, slow_actions)}
                             {--all : Forcer la vérification de tous les tenants (actifs + suspendus)}';
 
-    protected $description = 'Vérifier la santé des tenants (HTTP, DB, stockage, SSL, erreurs, queues)';
+    protected $description = 'Vérifier la santé des tenants (HTTP, DB, stockage, SSL, erreurs, queues, actions lentes)';
 
     private const CHECKS = [
         'http_status',
@@ -24,6 +25,7 @@ class TenantHealthCheck extends Command
         'ssl_certificate',
         'application_errors',
         'queue_workers',
+        'slow_actions',
     ];
 
     public function handle()
@@ -100,7 +102,17 @@ class TenantHealthCheck extends Command
                 'ssl_certificate' => $this->checkSslCertificate($tenant),
                 'application_errors' => $this->checkApplicationErrors($tenant),
                 'queue_workers' => $this->checkQueueWorkers($tenant),
+                'slow_actions' => app(ControleActionsLentes::class)->verifier($tenant),
             };
+
+            // Rien de vrai à dire (pas de jeton de lecture, école pas encore
+            // à jour) : on n'écrit pas de ligne plutôt qu'un verdict inventé.
+            if ($result === null) {
+                if ($verbose) {
+                    $this->line("  · {$checkType} : non vérifié (jeton de lecture absent ou école pas à jour)");
+                }
+                continue;
+            }
 
             $results[] = $result;
 
@@ -115,7 +127,7 @@ class TenantHealthCheck extends Command
             ]);
         }
 
-        if ($verbose) {
+        if ($verbose && $results !== []) {
             $this->displayResults($results);
         }
     }
