@@ -3,90 +3,184 @@
 namespace App\Support\Sante;
 
 use App\Models\Tenant;
-use Illuminate\Contracts\Encryption\DecryptException;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\Http;
+use App\Services\TenantConnectionManager;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Le septième contrôle de santé : ce que l'école a elle-même noté comme lent.
  *
- * L'école mesure et filtre (KLASSCIv2, table traces_lentes, sous SES seuils) ;
- * la console ne fait que lire l'agrégat des dernières 24 heures et le classer.
- * Aucune base d'école n'est interrogée d'ici : une seule requête HTTPS, en
- * lecture, avec un jeton cli:read propre à l'école.
+ * L'école mesure et filtre (KLASSCIv2, table traces_lentes, sous SES seuils).
+ * La console lit cette table par la connexion qu'elle ouvre déjà chaque heure
+ * pour les statistiques (TenantConnectionManager) : aucun jeton à créer, et une
+ * école nouvellement provisionnée est couverte d'office. Lecture seule.
  *
- * Rend null quand il n'y a rien à dire de vrai : pas de jeton, ou une école
- * qui ne publie pas encore l'adresse (404, version antérieure). Une ligne
- * « saine » dans ces cas affirmerait ce que personne n'a vérifié, une ligne
- * « dégradée » mettrait toutes les écoles en alerte le jour de la mise en
- * service. Un site injoignable, lui, est déjà le constat de http_status.
+ * L'agrégat recopie celui de l'école (AgregatDesTraces, KLASSCIv2) : mêmes
+ * groupes, même centile, même définition de l'échec, même ordre. Rien ne
+ * vérifie la parité entre les deux dépôts : toute modification de l'un se
+ * reporte sur l'autre. Le test « agrège comme l'école » fige les valeurs
+ * attendues calculées à la main selon cette règle.
+ *
+ * Rend null quand il n'y a rien à dire de vrai : pas d'identifiants de base,
+ * base injoignable, ou table absente (école pas encore à jour). Une ligne
+ * « saine » affirmerait ce que personne n'a vérifié ; une base injoignable est
+ * déjà le constat de database_connection.
  */
 final class ControleActionsLentes
 {
-    public const CHEMIN = '/api/cli/traces/lentes';
+    public const TABLE = 'traces_lentes';
+
+    /** Au-delà, la lecture s'arrête et le relevé le dit (même borne que l'école). */
+    public const LIGNES_MAX = 50000;
+
+    public const REGLAGE_DUREE_MS = 'exploitation.traces_lentes.seuil_ms';
+
+    public const REGLAGE_REQUETES = 'exploitation.traces_lentes.seuil_requetes';
 
     /** Combien d'actions la fiche du contrôle garde en détail. */
     private const TOP = 5;
 
+    public function __construct(private readonly TenantConnectionManager $connexions)
+    {
+    }
+
     /** @return array{type:string,status:string,response_time_ms:?int,details:string,metadata:array}|null */
     public function verifier(Tenant $tenant): ?array
     {
-        // Un jeton illisible (clé de l'application changée, valeur abîmée) ne
-        // doit pas arrêter la tournée des autres écoles : on le dit, une fois.
-        try {
-            $jeton = $tenant->cli_lecture_token;
-        } catch (DecryptException $e) {
-            Log::warning('sante.actions_lentes.jeton_illisible', ['tenant' => $tenant->code]);
-
-            return $this->resultat('degraded', null, 'Jeton de lecture illisible : à ressaisir sur la fiche de l\'école', []);
-        }
-        if (blank($jeton)) {
-            return null;
-        }
-
+        $connexion = null;
         $debut = microtime(true);
         try {
-            $reponse = Http::withToken($jeton)
-                ->acceptJson()
-                ->timeout(15)
-                ->get($tenant->full_url . self::CHEMIN, ['jours' => 1, 'limite' => 100]);
-        } catch (ConnectionException) {
-            return null;
+            $connexion = $this->connexions->createConnection($tenant);
+            if (! DB::connection($connexion)->getSchemaBuilder()->hasTable(self::TABLE)) {
+                return null;
+            }
+            // L'heure de la console (UTC+0) borne la fenêtre ; une école réglée
+            // sur un autre fuseau (UTC+1 au Bénin) la voit décalée d'une heure,
+            // sans effet sur un relevé de 24 heures.
+            $agregat = self::agreger(DB::connection($connexion), now()->subDay(), now());
+            $seuils = self::seuilsDeLEcole(DB::connection($connexion));
         } catch (\Throwable $e) {
             Log::warning('sante.actions_lentes.lecture_impossible', ['tenant' => $tenant->code, 'erreur' => $e->getMessage()]);
 
             return null;
+        } finally {
+            if ($connexion !== null) {
+                $this->connexions->closeConnection($connexion);
+            }
         }
         $duree = (int) ((microtime(true) - $debut) * 1000);
 
-        if ($reponse->status() === 404) {
-            return null;
-        }
-
-        if (! $reponse->successful()) {
-            return $this->resultat('degraded', $duree, $this->lectureRefusee($reponse->status()), [
-                'http_status' => $reponse->status(),
-            ]);
-        }
-
-        // Une page de maintenance ou une route de repli répond 200 sans le
-        // contrat : la lire comme « aucune action lente » inventerait un verdict.
-        $actions = $reponse->json('data.actions');
-        if ($reponse->json('success') !== true || ! is_array($actions)) {
-            return null;
-        }
-        $actions = collect($actions);
-
-        return $this->classer($actions, $duree, (array) $reponse->json('data.seuils', []), (bool) $reponse->json('data.tronque', false));
+        return $this->classer(collect($agregat['actions']), $duree, $seuils, $agregat['tronque']);
     }
 
     /**
-     * Le classement, séparé de la lecture pour se tester sans réseau.
+     * Les actions lentes d'une période, groupées par (type, nom), comme
+     * AgregatDesTraces côté école. Les plus récentes d'abord : si la lecture
+     * s'arrête, c'est le passé lointain qu'elle laisse.
      *
-     * @param \Illuminate\Support\Collection<int, array<string, mixed>> $actions
+     * @return array{tronque: bool, actions: list<array<string, mixed>>}
      */
-    public function classer($actions, ?int $duree, array $seuils = [], bool $tronque = false): array
+    public static function agreger(\Illuminate\Database\ConnectionInterface $db, \DateTimeInterface $depuis, \DateTimeInterface $jusqua): array
+    {
+        $lignes = $db->table(self::TABLE)
+            ->whereBetween('created_at', [$depuis, $jusqua])
+            ->orderByDesc('id')
+            ->limit(self::LIGNES_MAX + 1)
+            ->select(['type', 'nom', 'duree_ms', 'requetes_sql', 'code', 'created_at'])
+            ->cursor();
+
+        $groupes = [];
+        $lues = 0;
+        foreach ($lignes as $ligne) {
+            if (++$lues > self::LIGNES_MAX) {
+                break;
+            }
+            $g = &$groupes[$ligne->type.'|'.$ligne->nom];
+            $g['type'] = $ligne->type;
+            $g['nom'] = $ligne->nom;
+            $g['durees'][] = (int) $ligne->duree_ms;
+            $g['sql'][] = (int) $ligne->requetes_sql;
+            $g['echecs'] = ($g['echecs'] ?? 0) + (self::estUnEchec($ligne->type, $ligne->code) ? 1 : 0);
+            $g['derniere'] = max($g['derniere'] ?? '', (string) $ligne->created_at);
+            unset($g);
+        }
+
+        $actions = array_map(fn (array $g) => [
+            'type' => $g['type'],
+            'nom' => $g['nom'],
+            'nombre' => count($g['durees']),
+            'mediane_ms' => self::centile($g['durees'], 50),
+            'p95_ms' => self::centile($g['durees'], 95),
+            'max_ms' => max($g['durees']),
+            'mediane_sql' => self::centile($g['sql'], 50),
+            'echecs' => $g['echecs'],
+            'derniere' => $g['derniere'],
+        ], array_values($groupes));
+
+        usort($actions, fn ($a, $b) => [$b['nombre'], $b['p95_ms']] <=> [$a['nombre'], $a['p95_ms']]);
+
+        return ['tronque' => $lues > self::LIGNES_MAX, 'actions' => $actions];
+    }
+
+    /** Un statut 5xx pour une page ; tout code non nul pour un travail ou une commande. */
+    public static function estUnEchec(string $type, mixed $code): bool
+    {
+        if ($code === null) {
+            return false;
+        }
+
+        return $type === 'requete' ? (int) $code >= 500 : (int) $code !== 0;
+    }
+
+    /**
+     * Centile par rang le plus proche ; la médiane d'un nombre pair de valeurs
+     * est la moyenne des deux du milieu.
+     *
+     * @param list<int> $valeurs
+     */
+    public static function centile(array $valeurs, int $centile): int
+    {
+        sort($valeurs);
+        $n = count($valeurs);
+        if ($centile === 50 && $n % 2 === 0) {
+            return (int) round(($valeurs[$n / 2 - 1] + $valeurs[$n / 2]) / 2);
+        }
+
+        return $valeurs[max(0, (int) ceil($centile / 100 * $n) - 1)];
+    }
+
+    /**
+     * Les seuils sous lesquels l'école ne trace rien, pour le détail du relevé.
+     * Mêmes replis et mêmes bornes que SeuilsDesTraces (KLASSCIv2). Illisibles,
+     * ils sont omis : ils renseignent, ils ne décident de rien.
+     *
+     * @return array{duree_ms?: int, requetes_sql?: int}
+     */
+    private static function seuilsDeLEcole(\Illuminate\Database\ConnectionInterface $db): array
+    {
+        try {
+            $valeurs = collect($db->table('settings')
+                ->whereIn('key', [self::REGLAGE_DUREE_MS, self::REGLAGE_REQUETES])
+                ->where('is_active', true)
+                ->pluck('value', 'key'));
+        } catch (\Throwable) {
+            return [];
+        }
+        $entier = fn ($brut, int $repli) => ($brut === null || trim((string) $brut) === '') ? $repli : (int) $brut;
+
+        return [
+            'duree_ms' => max(50, min(60000, $entier($valeurs->get(self::REGLAGE_DUREE_MS), 1000))),
+            'requetes_sql' => max(10, min(10000, $entier($valeurs->get(self::REGLAGE_REQUETES), 100))),
+        ];
+    }
+
+    /**
+     * Le classement, séparé de la lecture pour se tester sans base d'école.
+     *
+     * @param Collection<int, array<string, mixed>> $actions
+     */
+    public function classer(Collection $actions, ?int $duree, array $seuils = [], bool $tronque = false): array
     {
         $parJour = (int) config('klassci.actions_lentes.fois_par_jour', 10);
         $p95Critique = (int) config('klassci.actions_lentes.p95_critique_ms', 10000);
@@ -150,15 +244,6 @@ final class ControleActionsLentes
             'details' => $details,
             'metadata' => $metadata,
         ];
-    }
-
-    private function lectureRefusee(int $code): string
-    {
-        return match ($code) {
-            401 => 'Jeton de lecture refusé par l\'école (401) : à régénérer',
-            403 => 'Jeton sans la capacité cli:read (403)',
-            default => "Lecture des actions lentes impossible (HTTP {$code})",
-        };
     }
 
     private function secondes(int $ms): string

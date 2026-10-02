@@ -170,25 +170,6 @@ class TenantResource extends Resource
                                             ->helperText('Ces trois lignes vont dans le fichier .env de l\'école. Sans elles, l\'école n\'affiche pas l\'alerte de fin d\'abonnement.'),
                                     ])->columns(1),
 
-                                Forms\Components\Section::make('Lecture des actions lentes')
-                                    ->description('Jeton CLI de l\'école, avec la seule capacité cli:read. La santé du parc l\'utilise pour lire les actions lentes que l\'école a relevées (contrôle « Actions lentes »).')
-                                    ->schema([
-                                        Forms\Components\TextInput::make('cli_lecture_token')
-                                            ->label('Jeton de lecture CLI')
-                                            // Écrit, jamais relu : le champ arrive vide, et le
-                                            // laisser vide garde le jeton enregistré.
-                                            ->password()
-                                            ->autocomplete('new-password')
-                                            ->maxLength(255)
-                                            ->dehydrated(fn ($state) => filled($state))
-                                            ->placeholder(fn ($record) => $record?->cli_lecture_token
-                                                ? 'Enregistré — saisir un nouveau jeton pour le remplacer'
-                                                : 'Aucun jeton : le contrôle « Actions lentes » ne tourne pas')
-                                            ->suffixIcon(fn ($record) => $record?->cli_lecture_token ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')
-                                            ->suffixIconColor(fn ($record) => $record?->cli_lecture_token ? 'success' : 'gray')
-                                            ->disabled(fn ($livewire) => property_exists($livewire, 'isEditing') && ! $livewire->isEditing),
-                                    ])->columns(1),
-
                                 Forms\Components\Section::make('Git & Déploiement')
                                     ->extraAttributes(['style' => 'overflow: visible;'])
                                     ->schema([

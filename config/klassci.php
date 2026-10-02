@@ -50,8 +50,9 @@ return [
     | Actions lentes (contrôle slow_actions)
     |--------------------------------------------------------------------------
     |
-    | Lu sur les dernières 24 heures de GET /api/cli/traces/lentes, l'école
-    | ayant déjà filtré ce qui passe sous SES seuils (durée, requêtes SQL).
+    | Lu sur les dernières 24 heures de la table traces_lentes de l'école, par
+    | la connexion de base de la console (aucun jeton). L'école a déjà filtré
+    | ce qui passe sous SES seuils (durée, requêtes SQL).
     |
     | - fois_par_jour : au-delà, une action lente n'est plus un accident mais
     |   une habitude, et l'école passe en « dégradé ».
