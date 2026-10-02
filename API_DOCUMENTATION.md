@@ -64,7 +64,10 @@ Récupère les limites d'abonnement et l'utilisation actuelle d'un tenant.
   "tenant_code": "presentation",
   "tenant_name": "Test Présentation",
   "plan": "free",
+  "plan_label": "Free",
+  "monthly_fee": 0,
   "status": "active",
+  "admin_url": "https://admin.klassci.com/admin/tenants/3",
   "subscription": {
     "start_date": "2025-10-11",
     "end_date": "2026-10-11",
@@ -127,6 +130,19 @@ Récupère les limites d'abonnement et l'utilisation actuelle d'un tenant.
 > Vérifié au 3 septembre 2026 : aucun consommateur de ce champ dans KLASSCIv2
 > (`app/`, `resources/`). Le `PaywallMiddleware` lit `limits`, `current_usage` et
 > `quota_status`, jamais `last_stats_update`.
+
+> **`plan_label`, `monthly_fee`, `admin_url` (ajout, octobre 2026, non cassant).**
+>
+> - `plan_label` : le nom du plan rattaché (`subscription_plans.name`), sinon le
+>   code `plan` capitalisé, sinon `null`.
+> - `monthly_fee` : le tarif mensuel en FCFA, entier.
+> - `admin_url` : la fiche du tenant dans le panneau Filament, ou `null` si la
+>   route n'existe pas. L'instance l'affiche telle quelle : elle n'a pas à
+>   connaître le domaine du master.
+>
+> Consommateur : `/esbtp/paywall-config` de KLASSCIv2, qui lisait jusque-là un
+> plan, un tarif et des limites réglés à la main dans l'instance, et divergeait
+> de cette fiche.
 
 #### Réponses d'erreur
 
@@ -389,6 +405,10 @@ Actuellement, aucune limite de taux n'est appliquée. Une limite future pourrait
 - **Migration guide :** Voir Phase 4 - Part C dans CLAUDE.md
 
 ## Changelog
+
+### Octobre 2026
+- Ajout des champs `plan_label`, `monthly_fee` et `admin_url` à
+  `GET /api/tenants/{code}/limits` (non cassant : champs nouveaux seulement)
 
 ### Version 1.0.0 (11 octobre 2025)
 - Version initiale de l'API
