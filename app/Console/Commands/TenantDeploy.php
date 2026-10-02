@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Tenant;
 use App\Models\TenantDeployment;
 use App\Support\Git\NomDeBranche;
+use App\Support\Shell\BinairePhp;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
 
@@ -133,7 +134,7 @@ class TenantDeploy extends Command
         }
 
         // Detect PHP binary (cPanel uses versioned paths)
-        $phpBin = $this->detectPhpBinary();
+        $phpBin = BinairePhp::detecter();
         // Detect Composer binary
         $composerBin = $this->detectComposerBinary($tenantPath);
 
@@ -388,35 +389,6 @@ class TenantDeploy extends Command
     }
 
     /**
-     * Detect the correct PHP binary for cPanel shared hosting.
-     * cPanel uses ea-php** paths; fallback to system `php`.
-     */
-    private function detectPhpBinary(): string
-    {
-        // CloudLinux alt-php + cPanel PHP binary locations (ordered by preference)
-        $candidates = [
-            '/opt/alt/php83/usr/bin/php',   // CloudLinux PHP 8.3 CLI
-            '/opt/alt/php82/usr/bin/php',   // CloudLinux PHP 8.2 CLI
-            '/usr/local/bin/php',           // cPanel default symlink (LSAPI on LWS — may not work)
-            '/opt/cpanel/ea-php84/root/usr/bin/php',
-            '/opt/cpanel/ea-php83/root/usr/bin/php',
-            '/opt/cpanel/ea-php82/root/usr/bin/php',
-            'php',                          // System PATH fallback
-        ];
-
-        foreach ($candidates as $candidate) {
-            if ($candidate === 'php') {
-                return 'php'; // Always valid as PATH fallback
-            }
-            if (file_exists($candidate) && is_executable($candidate)) {
-                return $candidate;
-            }
-        }
-
-        return 'php';
-    }
-
-    /**
      * Detect Composer binary: prefer composer.phar in tenant dir, then system.
      * Returned as argv (the tenant path is never re-read by a shell).
      *
@@ -425,7 +397,7 @@ class TenantDeploy extends Command
     private function detectComposerBinary(string $tenantPath): array
     {
         if (file_exists("{$tenantPath}/composer.phar")) {
-            return [$this->detectPhpBinary(), "{$tenantPath}/composer.phar"];
+            return [BinairePhp::detecter(), "{$tenantPath}/composer.phar"];
         }
 
         foreach (['/usr/local/bin/composer', '/usr/bin/composer'] as $file) {

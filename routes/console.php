@@ -223,3 +223,12 @@ scheduleWithTimestamp(
     storage_path('logs/queue.log'),
     'queue:work'
 );
+
+// Planificateur des écoles — chaque minute. La tâche cron d'adminKlassci fait
+// tourner celle de chaque école (schedule:run dans son dossier), sauf l'école
+// qui a déjà la sienne. Plus de ligne cron à ajouter par instance :
+// tenant:planificateur --etat pour voir qui tourne et d'où.
+Schedule::command('tenant:planificateur')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->onFailure(fn () => \Log::error('❌ Échec du lancement des planificateurs des écoles'));

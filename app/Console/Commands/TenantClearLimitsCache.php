@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Support\Shell\BinairePhp;
 use Illuminate\Console\Command;
 
 class TenantClearLimitsCache extends Command
@@ -31,7 +32,7 @@ class TenantClearLimitsCache extends Command
         }
 
         $cacheKey  = 'paywall_limits_' . $code;
-        $phpBinary = $this->detectPhpBinary();
+        $phpBinary = BinairePhp::detecter();
 
         exec(
             "cd " . escapeshellarg($tenantPath) . " && {$phpBinary} artisan cache:forget " . escapeshellarg($cacheKey) . " 2>&1",
@@ -46,27 +47,4 @@ class TenantClearLimitsCache extends Command
         return 0;
     }
 
-    private function detectPhpBinary(): string
-    {
-        $candidates = [
-            '/opt/alt/php83/usr/bin/php',
-            '/opt/alt/php82/usr/bin/php',
-            '/usr/local/bin/php',
-            '/opt/cpanel/ea-php84/root/usr/bin/php',
-            '/opt/cpanel/ea-php83/root/usr/bin/php',
-            '/opt/cpanel/ea-php82/root/usr/bin/php',
-            'php',
-        ];
-
-        foreach ($candidates as $candidate) {
-            if ($candidate === 'php') {
-                return 'php';
-            }
-            if (file_exists($candidate) && is_executable($candidate)) {
-                return $candidate;
-            }
-        }
-
-        return 'php';
-    }
 }
