@@ -167,21 +167,22 @@ Score = (EMERGENCY × 10) + (ALERT × 8) + (CRITICAL × 5) + (ERROR × 2) + (WAR
 
 **7. Actions lentes** (`slow_actions`, octobre 2026) :
 
-Lit `GET {école}/api/cli/traces/lentes?jours=1` (KLASSCIv2, doc `docs/api/CLI_TRACES_LENTES.md`)
-avec le jeton CLI de l'école, capacité `cli:read` seule, saisi dans la fiche de l'établissement
-(section « Lecture des actions lentes », colonne chiffrée `tenants.cli_lecture_token`, jamais
-réaffichée). L'école filtre déjà sous SES seuils (1000 ms ou 100 requêtes SQL, réglables chez elle) ;
-la console ne fait que classer l'agrégat des 24 dernières heures :
+Lit la table `traces_lentes` de l'école (KLASSCIv2, doc `docs/api/CLI_TRACES_LENTES.md`) par la
+connexion de base que la console ouvre déjà pour les statistiques (`TenantConnectionManager`,
+identifiants `tenants.database_credentials`). **Aucun jeton à créer** : une école provisionnée est
+couverte d'office. L'agrégat reproduit `AgregatDesTraces` de l'école (mêmes groupes, centile au rang
+le plus proche, échec = 5xx pour une page, code non nul pour un travail ; 50 000 lignes au plus).
+L'école filtre déjà sous SES seuils (1000 ms ou 100 requêtes SQL, réglables chez elle, relus dans sa
+table `settings`) ; la console ne fait que classer l'agrégat des 24 dernières heures :
 - `unhealthy` : une action dont le p95 dépasse `KLASSCI_LENTES_P95_CRITIQUE_MS` (10 000), OU un
   travail ou une commande en échec au moins `KLASSCI_LENTES_ECHECS_CRITIQUES` fois (3) en 24 h
 - `degraded` : un travail en échec moins souvent que ce seuil (un envoi WhatsApp tombé une fois),
-  OU une action lente plus de `KLASSCI_LENTES_FOIS_PAR_JOUR` fois (10) en 24 h, OU un jeton refusé
-  (401/403) ou illisible (clé de l'application changée). Les passes d'une page en 500 ne comptent
+  OU une action lente plus de `KLASSCI_LENTES_FOIS_PAR_JOUR` fois (10) en 24 h. Les passes d'une page en 500 ne comptent
   pas comme lentes : elles relèvent du contrôle des erreurs.
 - `healthy` : sinon
-- **aucune ligne écrite** sans jeton, quand l'école ne publie pas encore l'adresse (404), ne
-  répond pas, ou répond 200 sans le contrat JSON (page de maintenance) : un verdict sain
-  affirmerait ce que personne n'a vérifié, et `http_status` dit déjà qu'un site est injoignable.
+- **aucune ligne écrite** sans identifiants de base, quand la base ne répond pas (c'est le constat de
+  `database_connection`) ou quand l'école n'a pas encore la table : un verdict sain affirmerait ce que
+  personne n'a vérifié.
 
 **Ce contrôle ne décide pas du statut d'une école** (`ControleSante::HORS_ETAT_DU_SITE`) : il est
 exclu de `Tenant::latestHealthCheck()` (lu par le portail des fondateurs et ses alertes), de la
@@ -191,14 +192,12 @@ disponibilité : une lenteur ne doit pas réveiller un fondateur. Il reste visib
 santé (sa cellule, masquée au-delà de `KLASSCI_LENTES_FRAICHEUR_MINUTES`, 180), dans les lignes
 de la liste des problèmes et le badge de la page des relevés (`TenantHealthCheckResource`), et dans `GET /api/cli/sante`, qui rend la date de chaque relevé (`le`) sans filtre
 de fraîcheur.
-Côté école, la route `api.cli.traces.lentes` ne se trace pas elle-même.
 
 `metadata.top` porte les cinq actions les plus fréquentes (nom, nombre, médiane, p95, max, médiane
 SQL, échecs), affichées dans le détail du contrôle. Code : `App\Support\Sante\ControleActionsLentes`.
 Seuils : `config/klassci.php`, clé `actions_lentes`.
 
-Mise en service d'une école : y émettre un jeton `cli:read` (le même mécanisme que les jetons du
-CLI), le coller dans sa fiche, puis `php artisan tenant:health-check <code> --check=slow_actions`.
+Rien à faire pour une école nouvelle. Vérifier : `php artisan tenant:health-check <code> --check=slow_actions`.
 
 **🔍 Note importante** : Si le fichier `laravel.log` n'existe pas, le statut est **degraded** car cela indique un problème de permissions d'écriture ou de configuration du logging Laravel.
 

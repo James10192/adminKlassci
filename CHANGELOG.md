@@ -10,10 +10,10 @@ Sections autorisées : Ajouts, Améliorations, Suppressions, Corrections, Sécur
 
 ### Ajouts
 - Septième contrôle de santé « Actions lentes » (`slow_actions`) : la console lit les actions que chaque
-  école a relevées comme lentes ou en échec (`/api/cli/traces/lentes`, 24 h) et la passe en dégradé
+  école a relevées comme lentes ou en échec (table `traces_lentes`, 24 h) et la passe en dégradé
   quand une action lente devient une habitude (plus de 10 fois par jour), en critique au-delà de 10 s
-  au 95e centile ou sur un travail en échec. Jeton de lecture par école, chiffré, dans la fiche de
-  l'établissement ; cinq actions détaillées dans le relevé ; tableau de bord santé à sept colonnes.
+  au 95e centile ou sur un travail en échec. Lecture par la connexion de base que la console ouvre
+  déjà : aucun jeton à créer, et une école nouvelle est couverte d'office ; cinq actions détaillées dans le relevé ; tableau de bord santé à sept colonnes.
 - Page « Retours Nanan » (groupe Support) : les 👍 / 👎 donnés dans les écoles sur les réponses de
   l'assistant arrivent au Master (`POST /api/v1/support/retours-assistant`). Question et réponse
   complètes, badge des 👎 non traités de la semaine, taux de satisfaction sur 30 jours, « Marquer
