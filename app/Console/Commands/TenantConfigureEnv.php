@@ -3,7 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Support\Shell\BinairePhp;
+use App\Support\Shell\EnvironnementEcole;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Process;
 
 class TenantConfigureEnv extends Command
 {
@@ -88,8 +91,11 @@ class TenantConfigureEnv extends Command
         file_put_contents($envPath, $content);
 
         // Vider le cache config du tenant
-        $phpBinary = PHP_BINARY;
-        exec("cd " . escapeshellarg($tenantPath) . " && {$phpBinary} artisan config:clear 2>&1", $output, $exitCode);
+        // Environnement de l'école, pas celui d'adminKlassci (voir EnvironnementEcole).
+        $exitCode = Process::path($tenantPath)
+            ->env(EnvironnementEcole::pour())
+            ->run([BinairePhp::detecter(), 'artisan', 'config:clear'])
+            ->exitCode();
 
         $this->info("✅ .env du tenant '{$code}' mis à jour :");
         foreach ($changed as $line) {

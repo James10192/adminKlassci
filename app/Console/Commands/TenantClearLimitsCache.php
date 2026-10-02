@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Support\Shell\BinairePhp;
+use App\Support\Shell\EnvironnementEcole;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Console\Command;
 
 class TenantClearLimitsCache extends Command
@@ -34,11 +36,12 @@ class TenantClearLimitsCache extends Command
         $cacheKey  = 'paywall_limits_' . $code;
         $phpBinary = BinairePhp::detecter();
 
-        exec(
-            "cd " . escapeshellarg($tenantPath) . " && {$phpBinary} artisan cache:forget " . escapeshellarg($cacheKey) . " 2>&1",
-            $output,
-            $exitCode
-        );
+        // Environnement de l'école : avec celui d'adminKlassci, `cache:forget`
+        // visait le cache d'adminKlassci (voir EnvironnementEcole).
+        $exitCode = Process::path($tenantPath)
+            ->env(EnvironnementEcole::pour())
+            ->run([$phpBinary, 'artisan', 'cache:forget', $cacheKey])
+            ->exitCode();
 
         if ($exitCode === 0) {
             $this->info("Cache invalide pour '{$code}' (cle : {$cacheKey})");

@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\TenantDeployment;
 use App\Support\Git\NomDeBranche;
 use App\Support\Shell\BinairePhp;
+use App\Support\Shell\EnvironnementEcole;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
 
@@ -375,17 +376,13 @@ class TenantDeploy extends Command
     }
 
     /**
-     * HOME doit être défini pour Composer (absent quand lancé via web/Artisan::call).
+     * Environnement de l'école, sans celui d'adminKlassci (voir EnvironnementEcole).
      *
-     * @return array<string, string>
+     * @return array<string, string|false>
      */
     private function environnement(): array
     {
-        if (getenv('HOME')) {
-            return [];
-        }
-
-        return ['HOME' => posix_getpwuid(posix_geteuid())['dir'] ?? '/tmp'];
+        return EnvironnementEcole::pour();
     }
 
     /**
