@@ -16,14 +16,19 @@ namespace App\Support\Shell;
  */
 final class EnvironnementEcole
 {
-    private const GARDEES = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TMPDIR', 'COMPOSER_HOME', 'SSH_AUTH_SOCK', 'GIT_SSH_COMMAND'];
+    /** Un proxy ou un certificat ajouté au serveur s'ajoute ici, sinon git échouera sans raison visible. */
+    private const GARDEES = [
+        'PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TMPDIR', 'XDG_CONFIG_HOME',
+        'COMPOSER_HOME', 'SSH_AUTH_SOCK', 'GIT_SSH_COMMAND', 'GIT_SSL_CAINFO', 'SSL_CERT_FILE',
+        'http_proxy', 'https_proxy', 'no_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY',
+    ];
 
     /** @return array<string, string|false> */
     public static function pour(): array
     {
         $env = [];
         foreach (array_keys(getenv() + $_ENV + $_SERVER) as $cle) {
-            if (is_string($cle) && ! in_array($cle, self::GARDEES, true) && preg_match('/^[A-Z_][A-Z0-9_]*$/i', $cle)) {
+            if (is_string($cle) && $cle !== '' && ! in_array($cle, self::GARDEES, true)) {
                 $env[$cle] = false;
             }
         }
