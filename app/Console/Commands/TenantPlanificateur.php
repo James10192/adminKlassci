@@ -71,12 +71,24 @@ class TenantPlanificateur extends Command
             return ['ignoree', 'Code antérieur au pouls : déployez l\'école'];
         }
 
+        if ($pouls->illisible()) {
+            return ['ignoree', 'Pouls illisible (storage/app/planificateur.json)'];
+        }
+
         $silenceCron = $pouls->silence('cron');
         if ($silenceCron !== null && $silenceCron <= self::SILENCE_MAX) {
             return ['cron_propre', "Sa tâche cron est passée il y a {$silenceCron} s"];
         }
 
         $silenceMaster = $pouls->silence('master');
+
+        // Code fraîchement déployé, aucun pouls encore : une école qui a sa
+        // tâche cron n'a pas eu le temps de le montrer. Lancer maintenant
+        // ferait tourner ses tâches deux fois dans la même minute, peut-être
+        // en plein déploiement. On attend que sa tâche cron se soit montrée.
+        if ($silenceCron === null && $silenceMaster === null && $pouls->ageDuCode() <= self::SILENCE_MAX) {
+            return ['attente', 'Code déployé il y a '.$pouls->ageDuCode().' s : on attend le pouls de sa tâche cron'];
+        }
 
         return ['lance', $silenceMaster === null
             ? 'Aucun planificateur ne tournait'
