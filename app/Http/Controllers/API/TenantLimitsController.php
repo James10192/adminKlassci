@@ -18,7 +18,7 @@ class TenantLimitsController extends Controller
     public function show(string $code): JsonResponse
     {
         // Find tenant by code
-        $tenant = Tenant::where('code', $code)
+        $tenant = Tenant::with('subscriptionPlan')->where('code', $code)
             ->where('status', '!=', 'deleted')
             ->first();
 
@@ -76,7 +76,16 @@ class TenantLimitsController extends Controller
             'tenant_code' => $tenant->code,
             'tenant_name' => $tenant->name,
             'plan' => $tenant->plan,
+            // Le libelle du plan tel que la fiche le montre, et son tarif : le
+            // paywall de l'instance les affiche au service technique au lieu
+            // de ses anciens reglages locaux, qui divergeaient de cette fiche.
+            'plan_label' => $tenant->subscriptionPlan?->name ?? ($tenant->plan ? ucfirst((string) $tenant->plan) : null),
+            'monthly_fee' => $tenant->monthly_fee !== null ? (int) round((float) $tenant->monthly_fee) : null,
             'status' => $tenant->status,
+            // L'adresse de la fiche du tenant dans ce panneau, calculee ici :
+            // l'instance n'a pas a connaitre le domaine du master ni la forme
+            // de ses URL Filament.
+            'admin_url' => $this->adresseDeLaFiche($tenant),
             'subscription' => [
                 'start_date' => $tenant->subscription_start_date?->format('Y-m-d'),
                 'end_date' => $tenant->subscription_end_date?->format('Y-m-d'),
@@ -138,5 +147,19 @@ class TenantLimitsController extends Controller
             // 3 septembre 2026.
             'last_stats_update' => $tenant->stats_measured_at?->toIso8601String(),
         ], 200);
+    }
+
+    /**
+     * La fiche du tenant dans le panneau, ou null si la route n'existe pas
+     * (panneau desactive, contexte de test). Une adresse manquante ne doit
+     * jamais faire echouer la lecture des limites, dont depend le paywall.
+     */
+    private function adresseDeLaFiche(Tenant $tenant): ?string
+    {
+        try {
+            return route('filament.admin.resources.tenants.view', ['record' => $tenant->getKey()]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
