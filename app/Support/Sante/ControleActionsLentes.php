@@ -16,9 +16,11 @@ use Illuminate\Support\Facades\Log;
  * pour les statistiques (TenantConnectionManager) : aucun jeton à créer, et une
  * école nouvellement provisionnée est couverte d'office. Lecture seule.
  *
- * L'agrégat reproduit celui de l'école (AgregatDesTraces, KLASSCIv2) : mêmes
- * groupes, même centile, même définition de l'échec, même ordre. Un test
- * compare les deux sur les mêmes lignes.
+ * L'agrégat recopie celui de l'école (AgregatDesTraces, KLASSCIv2) : mêmes
+ * groupes, même centile, même définition de l'échec, même ordre. Rien ne
+ * vérifie la parité entre les deux dépôts : toute modification de l'un se
+ * reporte sur l'autre. Le test « agrège comme l'école » fige les valeurs
+ * attendues calculées à la main selon cette règle.
  *
  * Rend null quand il n'y a rien à dire de vrai : pas d'identifiants de base,
  * base injoignable, ou table absente (école pas encore à jour). Une ligne
@@ -104,12 +106,10 @@ final class ControleActionsLentes
             unset($g);
         }
 
-        $jours = max(1.0, (\Carbon\Carbon::instance($jusqua)->getTimestamp() - \Carbon\Carbon::instance($depuis)->getTimestamp()) / 86400);
         $actions = array_map(fn (array $g) => [
             'type' => $g['type'],
             'nom' => $g['nom'],
             'nombre' => count($g['durees']),
-            'par_jour' => round(count($g['durees']) / $jours, 1),
             'mediane_ms' => self::centile($g['durees'], 50),
             'p95_ms' => self::centile($g['durees'], 95),
             'max_ms' => max($g['durees']),

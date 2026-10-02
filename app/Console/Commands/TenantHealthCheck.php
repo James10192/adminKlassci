@@ -105,11 +105,11 @@ class TenantHealthCheck extends Command
                 'slow_actions' => app(ControleActionsLentes::class)->verifier($tenant),
             };
 
-            // Rien de vrai à dire (pas de jeton de lecture, école pas encore
-            // à jour) : on n'écrit pas de ligne plutôt qu'un verdict inventé.
+            // Rien de vrai à dire (base injoignable, table traces_lentes pas
+            // encore créée) : on n'écrit pas de ligne plutôt qu'un verdict inventé.
             if ($result === null) {
                 if ($verbose) {
-                    $this->line("  · {$checkType} : non vérifié (jeton de lecture absent ou école pas à jour)");
+                    $this->line("  · {$checkType} : non vérifié (pas d'identifiants de base, base injoignable, ou table traces_lentes absente)");
                 }
                 continue;
             }
