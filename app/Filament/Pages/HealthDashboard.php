@@ -52,6 +52,7 @@ class HealthDashboard extends Page
     public static function getNavigationBadge(): ?string
     {
         $count = TenantHealthCheck::whereIn('status', ['degraded', 'unhealthy'])
+            ->whereNotIn('check_type', ControleSante::HORS_ETAT_DU_SITE)
             ->where('checked_at', '>=', now()->subHour())
             ->count();
 
@@ -61,6 +62,7 @@ class HealthDashboard extends Page
     public static function getNavigationBadgeColor(): ?string
     {
         $critical = TenantHealthCheck::where('status', 'unhealthy')
+            ->whereNotIn('check_type', ControleSante::HORS_ETAT_DU_SITE)
             ->where('checked_at', '>=', now()->subHour())
             ->count();
 
@@ -105,6 +107,13 @@ class HealthDashboard extends Page
                     'details'          => $latest?->details,
                     'checked_at'       => $latest?->checked_at,
                 ];
+
+                // Les actions lentes s'affichent dans leur cellule, mais ne font
+                // pas le statut de l'école : elles disent la qualité de
+                // l'application, pas la disponibilité du site.
+                if (in_array($checkType, ControleSante::HORS_ETAT_DU_SITE, true)) {
+                    continue;
+                }
 
                 if (($latest?->status ?? 'unknown') === 'unhealthy') {
                     $tenantGlobalStatus = 'unhealthy';

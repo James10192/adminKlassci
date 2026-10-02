@@ -184,10 +184,13 @@ la console ne fait que classer l'agrégat des 24 dernières heures :
   affirmerait ce que personne n'a vérifié, et `http_status` dit déjà qu'un site est injoignable.
 
 **Ce contrôle ne décide pas du statut d'une école** (`ControleSante::HORS_ETAT_DU_SITE`) : il est
-exclu de `Tenant::latestHealthCheck()` (lu par le portail des fondateurs et ses alertes) et de la
-tuile d'accueil `TenantHealthOverview`. Il parle de la qualité de l'application, pas de sa
+exclu de `Tenant::latestHealthCheck()` (lu par le portail des fondateurs et ses alertes), de la
+tuile d'accueil `TenantHealthOverview`, du statut global et des compteurs du tableau de santé, et
+du badge du menu. Il parle de la qualité de l'application, pas de sa
 disponibilité : une lenteur ne doit pas réveiller un fondateur. Il reste visible dans le tableau de
-santé (masqué au-delà de `KLASSCI_LENTES_FRAICHEUR_MINUTES`, 180) et dans la liste des problèmes.
+santé (sa cellule, masquée au-delà de `KLASSCI_LENTES_FRAICHEUR_MINUTES`, 180), dans la liste
+des problèmes, et dans `GET /api/cli/sante`, qui rend la date de chaque relevé (`le`) sans filtre
+de fraîcheur.
 Côté école, la route `api.cli.traces.lentes` ne se trace pas elle-même.
 
 `metadata.top` porte les cinq actions les plus fréquentes (nom, nombre, médiane, p95, max, médiane

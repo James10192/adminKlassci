@@ -100,7 +100,9 @@ final class ControleActionsLentes
         );
         $travauxEnEchecRepete = $travauxEchoues->filter(fn ($a) => (int) $a['echecs'] >= $echecsCritiques);
         // Une page en 500 est notée même rapide : elle relève du contrôle des
-        // erreurs, pas des lenteurs. Seules ses passes lentes sont comptées ici.
+        // erreurs, pas des lenteurs. Ses passes en échec sont donc retirées du
+        // compte, y compris les rares qui étaient aussi lentes : l'écart va
+        // dans le sens prudent (moins d'alertes, jamais une fausse).
         $habituelles = $actions->filter(fn ($a) => self::lentes($a) > $parJour);
 
         $statut = match (true) {
