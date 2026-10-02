@@ -64,6 +64,11 @@ return [
     'actions_lentes' => [
         'fois_par_jour' => (int) env('KLASSCI_LENTES_FOIS_PAR_JOUR', 10),
         'p95_critique_ms' => (int) env('KLASSCI_LENTES_P95_CRITIQUE_MS', 10000),
+        // Un travail (envoi, tâche, commande) en échec : orange dès le premier,
+        // rouge à partir de ce nombre d'échecs dans les 24 heures.
+        'echecs_critiques' => (int) env('KLASSCI_LENTES_ECHECS_CRITIQUES', 3),
+        // Au-delà, le dernier relevé n'est plus montré : il ne dit plus l'état.
+        'fraicheur_minutes' => (int) env('KLASSCI_LENTES_FRAICHEUR_MINUTES', 180),
     ],
 
 ];

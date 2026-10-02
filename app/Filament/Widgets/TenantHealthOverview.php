@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Tenant;
 use App\Models\TenantHealthCheck;
+use App\Support\Sante\ControleSante;
 use App\Services\Parc\EtatParcResolver;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -52,6 +53,7 @@ class TenantHealthOverview extends BaseWidget
         // plus élevé par tenant, puis les lignes correspondantes.
         $derniersIds = TenantHealthCheck::selectRaw('MAX(id) as id')
             ->whereIn('tenant_id', $etablissements->keys())
+            ->whereNotIn('check_type', ControleSante::HORS_ETAT_DU_SITE)
             ->groupBy('tenant_id')
             ->pluck('id');
 

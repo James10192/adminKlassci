@@ -92,6 +92,13 @@ class HealthDashboard extends Page
                     ->latest('checked_at')
                     ->first();
 
+                // Un relevé d'actions lentes n'est écrit que quand l'école répond :
+                // trop vieux, il ne dit plus rien de l'état d'aujourd'hui.
+                if ($latest && $checkType === 'slow_actions'
+                    && $latest->checked_at->lt(now()->subMinutes((int) config('klassci.actions_lentes.fraicheur_minutes', 180)))) {
+                    $latest = null;
+                }
+
                 $checks[$checkType] = [
                     'status'           => $latest?->status ?? 'unknown',
                     'response_time_ms' => $latest?->response_time_ms,

@@ -173,13 +173,22 @@ avec le jeton CLI de l'école, capacité `cli:read` seule, saisi dans la fiche d
 réaffichée). L'école filtre déjà sous SES seuils (1000 ms ou 100 requêtes SQL, réglables chez elle) ;
 la console ne fait que classer l'agrégat des 24 dernières heures :
 - `unhealthy` : une action dont le p95 dépasse `KLASSCI_LENTES_P95_CRITIQUE_MS` (10 000), OU un
-  travail ou une commande en échec (une page en 500 relève du contrôle des erreurs, pas de celui-ci)
-- `degraded` : une action lente plus de `KLASSCI_LENTES_FOIS_PAR_JOUR` fois (10) en 24 h, OU un jeton
-  refusé (401/403)
+  travail ou une commande en échec au moins `KLASSCI_LENTES_ECHECS_CRITIQUES` fois (3) en 24 h
+- `degraded` : un travail en échec moins souvent que ce seuil (un envoi WhatsApp tombé une fois),
+  OU une action lente plus de `KLASSCI_LENTES_FOIS_PAR_JOUR` fois (10) en 24 h, OU un jeton refusé
+  (401/403) ou illisible (clé de l'application changée). Les passes d'une page en 500 ne comptent
+  pas comme lentes : elles relèvent du contrôle des erreurs.
 - `healthy` : sinon
-- **aucune ligne écrite** sans jeton, ou quand l'école ne publie pas encore l'adresse (404) ou ne
-  répond pas : un verdict sain affirmerait ce que personne n'a vérifié, et `http_status` dit déjà
-  qu'un site est injoignable.
+- **aucune ligne écrite** sans jeton, quand l'école ne publie pas encore l'adresse (404), ne
+  répond pas, ou répond 200 sans le contrat JSON (page de maintenance) : un verdict sain
+  affirmerait ce que personne n'a vérifié, et `http_status` dit déjà qu'un site est injoignable.
+
+**Ce contrôle ne décide pas du statut d'une école** (`ControleSante::HORS_ETAT_DU_SITE`) : il est
+exclu de `Tenant::latestHealthCheck()` (lu par le portail des fondateurs et ses alertes) et de la
+tuile d'accueil `TenantHealthOverview`. Il parle de la qualité de l'application, pas de sa
+disponibilité : une lenteur ne doit pas réveiller un fondateur. Il reste visible dans le tableau de
+santé (masqué au-delà de `KLASSCI_LENTES_FRAICHEUR_MINUTES`, 180) et dans la liste des problèmes.
+Côté école, la route `api.cli.traces.lentes` ne se trace pas elle-même.
 
 `metadata.top` porte les cinq actions les plus fréquentes (nom, nombre, médiane, p95, max, médiane
 SQL, échecs), affichées dans le détail du contrôle. Code : `App\Support\Sante\ControleActionsLentes`.

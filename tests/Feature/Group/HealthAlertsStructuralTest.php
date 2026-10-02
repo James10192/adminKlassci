@@ -29,7 +29,9 @@ it('Tenant model exposes the two latestOfMany relations used by PR7b', function 
     $source = file_get_contents(app_path('Models/Tenant.php'));
 
     expect($source)->toContain('public function latestHealthCheck()');
-    expect($source)->toContain('latestOfMany(\'checked_at\')');
+    // Filtrée : les actions lentes ne font pas le statut vu par les fondateurs.
+    expect($source)->toContain("['checked_at' => 'max']");
+    expect($source)->toContain('HORS_ETAT_DU_SITE');
     expect($source)->toContain('public function latestSslHealthCheck()');
     expect($source)->toContain("'ssl_certificate'");
 });
