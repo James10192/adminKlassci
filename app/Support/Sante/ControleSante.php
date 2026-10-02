@@ -20,6 +20,7 @@ final class ControleSante
         'ssl_certificate' => 'Certificat SSL',
         'application_errors' => "Erreurs de l'application",
         'queue_workers' => "Files d'attente",
+        'slow_actions' => 'Actions lentes',
     ];
 
     /** Statuts écrits par tenant:health-check. */

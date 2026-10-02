@@ -301,7 +301,7 @@
                 </div>
 
                 {{-- Check types grid --}}
-                <div class="px-6 py-5 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div class="px-6 py-5 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                     @foreach ($checks as $checkType => $check)
                         @php
                             $checkIcon = match($checkType) {
@@ -311,6 +311,7 @@
                                 'ssl_certificate'     => 'heroicon-o-lock-closed',
                                 'application_errors'  => 'heroicon-o-bug-ant',
                                 'queue_workers'       => 'heroicon-o-queue-list',
+                                'slow_actions'        => 'heroicon-o-clock',
                                 default               => 'heroicon-o-question-mark-circle',
                             };
                             $checkLabel = match($checkType) {
@@ -320,6 +321,7 @@
                                 'ssl_certificate'     => 'SSL',
                                 'application_errors'  => 'Erreurs app',
                                 'queue_workers'       => 'Files d\'attente',
+                                'slow_actions'        => 'Actions lentes',
                                 default               => $checkType,
                             };
                             $statusValue = $check['status'] ?? 'unknown';

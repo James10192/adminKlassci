@@ -46,6 +46,7 @@ class Tenant extends Model
         'group_id',
         'api_token',
         'api_token_created_at',
+        'cli_lecture_token',
     ];
 
     /**
@@ -56,6 +57,7 @@ class Tenant extends Model
     protected $hidden = [
         'api_token',
         'database_credentials',
+        'cli_lecture_token',
     ];
 
     protected $casts = [
@@ -65,6 +67,8 @@ class Tenant extends Model
         'subscription_start_date' => 'date',
         'subscription_end_date' => 'date',
         'api_token_created_at' => 'datetime',
+        // Écrit depuis la fiche, jamais réaffiché : il ouvre l'API de l'école.
+        'cli_lecture_token' => 'encrypted',
         'monthly_fee' => 'decimal:2',
         'max_users' => 'integer',
         'max_staff' => 'integer',

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Support\Sante\ControleSante;
 use App\Models\Tenant;
 use App\Models\TenantHealthCheck;
 use Filament\Notifications\Notification;
@@ -47,14 +48,6 @@ class HealthDashboard extends Page
     /** Check individuel en cours */
     public string $isRunningTenant = '';
 
-    private const CHECK_TYPES = [
-        'http_status',
-        'database_connection',
-        'disk_space',
-        'ssl_certificate',
-        'application_errors',
-        'queue_workers',
-    ];
 
     public static function getNavigationBadge(): ?string
     {
@@ -93,7 +86,7 @@ class HealthDashboard extends Page
             $tenantGlobalStatus = 'healthy';
             $lastCheck          = null;
 
-            foreach (self::CHECK_TYPES as $checkType) {
+            foreach (array_keys(ControleSante::TYPES) as $checkType) {
                 $latest = TenantHealthCheck::where('tenant_id', $tenant->id)
                     ->where('check_type', $checkType)
                     ->latest('checked_at')
