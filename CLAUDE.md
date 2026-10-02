@@ -186,10 +186,10 @@ la console ne fait que classer l'agrégat des 24 dernières heures :
 **Ce contrôle ne décide pas du statut d'une école** (`ControleSante::HORS_ETAT_DU_SITE`) : il est
 exclu de `Tenant::latestHealthCheck()` (lu par le portail des fondateurs et ses alertes), de la
 tuile d'accueil `TenantHealthOverview`, du statut global et des compteurs du tableau de santé, et
-du badge du menu. Il parle de la qualité de l'application, pas de sa
+du badge du tableau de santé et du titre de la liste « établissements à regarder ». Il parle de la qualité de l'application, pas de sa
 disponibilité : une lenteur ne doit pas réveiller un fondateur. Il reste visible dans le tableau de
-santé (sa cellule, masquée au-delà de `KLASSCI_LENTES_FRAICHEUR_MINUTES`, 180), dans la liste
-des problèmes, et dans `GET /api/cli/sante`, qui rend la date de chaque relevé (`le`) sans filtre
+santé (sa cellule, masquée au-delà de `KLASSCI_LENTES_FRAICHEUR_MINUTES`, 180), dans les lignes
+de la liste des problèmes et le badge de la page des relevés (`TenantHealthCheckResource`), et dans `GET /api/cli/sante`, qui rend la date de chaque relevé (`le`) sans filtre
 de fraîcheur.
 Côté école, la route `api.cli.traces.lentes` ne se trace pas elle-même.
 
