@@ -78,14 +78,22 @@ class HealthDashboard extends Page
     {
         $tenants = Tenant::active()->orderBy('name')->get();
 
-        // Fetch the latest checks for the whole fleet once instead of doing
-        // one query per (tenant, check type). Keep just the newest record.
-        $latestChecks = TenantHealthCheck::query()
+        // Latest timestamp per tenant/check type, then one bounded fetch.
+        // This avoids loading the full history into PHP on large fleets.
+        $latestTimestamps = TenantHealthCheck::query()
             ->whereIn('tenant_id', $tenants->pluck('id'))
             ->whereIn('check_type', array_keys(ControleSante::TYPES))
-            ->orderByDesc('checked_at')
-            ->orderByDesc('id')
-            ->get(['id', 'tenant_id', 'check_type', 'status', 'response_time_ms', 'details', 'checked_at'])
+            ->selectRaw('tenant_id, check_type, MAX(checked_at) as latest_at')
+            ->groupBy('tenant_id', 'check_type');
+
+        $latestChecks = TenantHealthCheck::query()
+            ->joinSub($latestTimestamps, 'latest', function ($join) {
+                $join->on('tenant_health_checks.tenant_id', '=', 'latest.tenant_id')
+                    ->on('tenant_health_checks.check_type', '=', 'latest.check_type')
+                    ->on('tenant_health_checks.checked_at', '=', 'latest.latest_at');
+            })
+            ->orderByDesc('tenant_health_checks.id')
+            ->get(['tenant_health_checks.*'])
             ->unique(fn (TenantHealthCheck $check) => $check->tenant_id . ':' . $check->check_type)
             ->groupBy('tenant_id');
 
