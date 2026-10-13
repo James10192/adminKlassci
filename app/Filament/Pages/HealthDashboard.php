@@ -78,6 +78,25 @@ class HealthDashboard extends Page
     {
         $tenants = Tenant::active()->orderBy('name')->get();
 
+        // Latest timestamp per tenant/check type, then one bounded fetch.
+        // This avoids loading the full history into PHP on large fleets.
+        $latestTimestamps = TenantHealthCheck::query()
+            ->whereIn('tenant_id', $tenants->pluck('id'))
+            ->whereIn('check_type', array_keys(ControleSante::TYPES))
+            ->selectRaw('tenant_id, check_type, MAX(checked_at) as latest_at')
+            ->groupBy('tenant_id', 'check_type');
+
+        $latestChecks = TenantHealthCheck::query()
+            ->joinSub($latestTimestamps, 'latest', function ($join) {
+                $join->on('tenant_health_checks.tenant_id', '=', 'latest.tenant_id')
+                    ->on('tenant_health_checks.check_type', '=', 'latest.check_type')
+                    ->on('tenant_health_checks.checked_at', '=', 'latest.latest_at');
+            })
+            ->orderByDesc('tenant_health_checks.id')
+            ->get(['tenant_health_checks.*'])
+            ->unique(fn (TenantHealthCheck $check) => $check->tenant_id . ':' . $check->check_type)
+            ->groupBy('tenant_id');
+
         $tenantChecks   = [];
         $healthyCount   = 0;
         $degradedCount  = 0;
@@ -89,10 +108,7 @@ class HealthDashboard extends Page
             $lastCheck          = null;
 
             foreach (array_keys(ControleSante::TYPES) as $checkType) {
-                $latest = TenantHealthCheck::where('tenant_id', $tenant->id)
-                    ->where('check_type', $checkType)
-                    ->latest('checked_at')
-                    ->first();
+                $latest = $latestChecks->get($tenant->id, collect())->firstWhere('check_type', $checkType);
 
                 // Un relevé d'actions lentes n'est écrit que quand l'école répond :
                 // trop vieux, il ne dit plus rien de l'état d'aujourd'hui.
