@@ -78,6 +78,17 @@ class HealthDashboard extends Page
     {
         $tenants = Tenant::active()->orderBy('name')->get();
 
+        // Fetch the latest checks for the whole fleet once instead of doing
+        // one query per (tenant, check type). Keep just the newest record.
+        $latestChecks = TenantHealthCheck::query()
+            ->whereIn('tenant_id', $tenants->pluck('id'))
+            ->whereIn('check_type', array_keys(ControleSante::TYPES))
+            ->orderByDesc('checked_at')
+            ->orderByDesc('id')
+            ->get(['id', 'tenant_id', 'check_type', 'status', 'response_time_ms', 'details', 'checked_at'])
+            ->unique(fn (TenantHealthCheck $check) => $check->tenant_id . ':' . $check->check_type)
+            ->groupBy('tenant_id');
+
         $tenantChecks   = [];
         $healthyCount   = 0;
         $degradedCount  = 0;
@@ -89,10 +100,7 @@ class HealthDashboard extends Page
             $lastCheck          = null;
 
             foreach (array_keys(ControleSante::TYPES) as $checkType) {
-                $latest = TenantHealthCheck::where('tenant_id', $tenant->id)
-                    ->where('check_type', $checkType)
-                    ->latest('checked_at')
-                    ->first();
+                $latest = $latestChecks->get($tenant->id, collect())->firstWhere('check_type', $checkType);
 
                 // Un relevé d'actions lentes n'est écrit que quand l'école répond :
                 // trop vieux, il ne dit plus rien de l'état d'aujourd'hui.
