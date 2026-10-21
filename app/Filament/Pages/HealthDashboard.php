@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Support\Sante\ControleSante;
+use App\Services\Parc\EtatSanteDetailResolver;
 use App\Models\Tenant;
 use App\Models\TenantHealthCheck;
 use Filament\Notifications\Notification;
@@ -24,7 +25,7 @@ class HealthDashboard extends Page
     protected static ?string $title = 'Santé du parc';
 
     public array $tenantChecks = [];
-    public array $stats = ['healthy' => 0, 'degraded' => 0, 'unhealthy' => 0];
+    public array $stats = ['healthy' => 0, 'degraded' => 0, 'unhealthy' => 0, 'unknown' => 0];
     public mixed $lastCheckedAt = null;
 
     public int $logRotateDays = 30;
@@ -78,26 +79,46 @@ class HealthDashboard extends Page
     {
         $tenants = Tenant::active()->orderBy('name')->get();
 
+        // Latest timestamp per tenant/check type, then one bounded fetch.
+        // This avoids loading the full history into PHP on large fleets.
+        $latestTimestamps = TenantHealthCheck::query()
+            ->whereIn('tenant_id', $tenants->pluck('id'))
+            ->whereIn('check_type', array_keys(ControleSante::TYPES))
+            ->selectRaw('tenant_id, check_type, MAX(checked_at) as latest_at')
+            ->groupBy('tenant_id', 'check_type');
+
+        $latestChecks = TenantHealthCheck::query()
+            ->joinSub($latestTimestamps, 'latest', function ($join) {
+                $join->on('tenant_health_checks.tenant_id', '=', 'latest.tenant_id')
+                    ->on('tenant_health_checks.check_type', '=', 'latest.check_type')
+                    ->on('tenant_health_checks.checked_at', '=', 'latest.latest_at');
+            })
+            ->orderByDesc('tenant_health_checks.id')
+            ->get(['tenant_health_checks.*'])
+            ->unique(fn (TenantHealthCheck $check) => $check->tenant_id . ':' . $check->check_type)
+            ->groupBy('tenant_id');
+
         $tenantChecks   = [];
         $healthyCount   = 0;
         $degradedCount  = 0;
         $unhealthyCount = 0;
+        $unknownCount   = 0;
+        $horizonDisponibilite = now()->subMinutes(max(1, (int) config('klassci.health_freshness_minutes', 15)));
+        $horizonLenteur = now()->subMinutes(max(1, (int) config('klassci.actions_lentes.fraicheur_minutes', 180)));
+        $etatResolver = app(EtatSanteDetailResolver::class);
 
         foreach ($tenants as $tenant) {
-            $checks             = [];
-            $tenantGlobalStatus = 'healthy';
-            $lastCheck          = null;
+            $checks = [];
+            $lastCheck = null;
+            $statutsDisponibilite = [];
 
             foreach (array_keys(ControleSante::TYPES) as $checkType) {
-                $latest = TenantHealthCheck::where('tenant_id', $tenant->id)
-                    ->where('check_type', $checkType)
-                    ->latest('checked_at')
-                    ->first();
+                $latest = $latestChecks->get($tenant->id, collect())->firstWhere('check_type', $checkType);
 
-                // Un relevé d'actions lentes n'est écrit que quand l'école répond :
-                // trop vieux, il ne dit plus rien de l'état d'aujourd'hui.
-                if ($latest && $checkType === 'slow_actions'
-                    && $latest->checked_at->lt(now()->subMinutes((int) config('klassci.actions_lentes.fraicheur_minutes', 180)))) {
+                // Ne pas confondre un ancien verdict sain avec une mesure
+                // actuelle. Les lenteurs ont une fenêtre distincte.
+                $horizon = $checkType === 'slow_actions' ? $horizonLenteur : $horizonDisponibilite;
+                if ($latest && $latest->checked_at->lt($horizon)) {
                     $latest = null;
                 }
 
@@ -111,20 +132,16 @@ class HealthDashboard extends Page
                 // Les actions lentes s'affichent dans leur cellule, mais ne font
                 // pas le statut de l'école : elles disent la qualité de
                 // l'application, pas la disponibilité du site.
-                if (in_array($checkType, ControleSante::HORS_ETAT_DU_SITE, true)) {
-                    continue;
-                }
-
-                if (($latest?->status ?? 'unknown') === 'unhealthy') {
-                    $tenantGlobalStatus = 'unhealthy';
-                } elseif (($latest?->status ?? 'unknown') === 'degraded' && $tenantGlobalStatus !== 'unhealthy') {
-                    $tenantGlobalStatus = 'degraded';
+                if (! in_array($checkType, ControleSante::HORS_ETAT_DU_SITE, true)) {
+                    $statutsDisponibilite[] = $latest?->status;
                 }
 
                 if ($latest && (! $lastCheck || $latest->checked_at > $lastCheck)) {
                     $lastCheck = $latest->checked_at;
                 }
             }
+
+            $tenantGlobalStatus = $etatResolver->resoudre($statutsDisponibilite);
 
             $tenantChecks[] = [
                 'tenant'        => $tenant,
@@ -137,12 +154,13 @@ class HealthDashboard extends Page
                 'healthy'   => $healthyCount++,
                 'degraded'  => $degradedCount++,
                 'unhealthy' => $unhealthyCount++,
+                'unknown'   => $unknownCount++,
                 default     => null,
             };
         }
 
         usort($tenantChecks, function ($a, $b) {
-            $order = ['unhealthy' => 0, 'degraded' => 1, 'healthy' => 2];
+            $order = ['unhealthy' => 0, 'degraded' => 1, 'unknown' => 2, 'healthy' => 3];
             return ($order[$a['global_status']] ?? 3) <=> ($order[$b['global_status']] ?? 3);
         });
 
@@ -151,6 +169,7 @@ class HealthDashboard extends Page
             'healthy'   => $healthyCount,
             'degraded'  => $degradedCount,
             'unhealthy' => $unhealthyCount,
+            'unknown'   => $unknownCount,
         ];
 
         $latest              = TenantHealthCheck::latest('checked_at')->first();
