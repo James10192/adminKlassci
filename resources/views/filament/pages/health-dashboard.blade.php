@@ -124,9 +124,10 @@
             ['n' => $stats['healthy'], 'libelle' => 'Établissements sains', 'icone' => 'heroicon-o-check-circle', 'teinte' => 'rgb(var(--success-600))', 'fond' => 'rgba(var(--success-500), .1)'],
             ['n' => $stats['degraded'], 'libelle' => 'À surveiller', 'icone' => 'heroicon-o-exclamation-triangle', 'teinte' => 'rgb(var(--warning-600))', 'fond' => 'rgba(var(--warning-500), .1)'],
             ['n' => $stats['unhealthy'], 'libelle' => 'Critiques', 'icone' => 'heroicon-o-x-circle', 'teinte' => 'rgb(var(--danger-600))', 'fond' => 'rgba(var(--danger-500), .1)'],
+            ['n' => $stats['unknown'], 'libelle' => 'Sans relevé récent', 'icone' => 'heroicon-o-question-mark-circle', 'teinte' => '#64748b', 'fond' => '#f1f5f9'],
         ];
     @endphp
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
         @foreach ($etatsParc as $etat)
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
                 <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: {{ $etat['fond'] }};">
@@ -205,11 +206,13 @@
                 $borderStyle = match($globalStatus) {
                     'unhealthy' => 'border-left: 4px solid #ef4444;',
                     'degraded'  => 'border-left: 4px solid #f59e0b;',
+                    'unknown'   => 'border-left: 4px solid #94a3b8;',
                     default     => 'border-left: 4px solid #10b981;',
                 };
                 $headerBgStyle = match($globalStatus) {
                     'unhealthy' => 'background-color:#fef2f2;',
                     'degraded'  => 'background-color:#fffbeb;',
+                    'unknown'   => 'background-color:#f8fafc;',
                     default     => 'background-color:#f0fdf4;',
                 };
 
@@ -231,21 +234,25 @@
                 $statusLabel = match($globalStatus) {
                     'unhealthy' => 'Critique',
                     'degraded'  => 'Dégradé',
+                    'unknown'   => 'Sans relevé récent',
                     default     => 'Sain',
                 };
                 $statusBadgeStyle = match($globalStatus) {
                     'unhealthy' => 'background-color:#ef4444;color:white;',
                     'degraded'  => 'background-color:#f59e0b;color:white;',
+                    'unknown'   => 'background-color:#64748b;color:white;',
                     default     => 'background-color:#10b981;color:white;',
                 };
                 $statusIconComp = match($globalStatus) {
                     'unhealthy' => 'heroicon-o-x-circle',
                     'degraded'  => 'heroicon-o-exclamation-triangle',
+                    'unknown'   => 'heroicon-o-question-mark-circle',
                     default     => 'heroicon-o-check-circle',
                 };
                 $statusIconStyle = match($globalStatus) {
                     'unhealthy' => 'color:#ef4444;',
                     'degraded'  => 'color:#f59e0b;',
+                    'unknown'   => 'color:#64748b;',
                     default     => 'color:#10b981;',
                 };
             @endphp
