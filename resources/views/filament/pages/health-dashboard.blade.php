@@ -127,7 +127,7 @@
             ['n' => $stats['unknown'], 'libelle' => 'Sans relevé récent', 'icone' => 'heroicon-o-question-mark-circle', 'teinte' => '#64748b', 'fond' => '#f1f5f9'],
         ];
     @endphp
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
         @foreach ($etatsParc as $etat)
             <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm px-6 py-5 flex items-center gap-4">
                 <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: {{ $etat['fond'] }};">
