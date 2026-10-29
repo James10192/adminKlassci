@@ -28,7 +28,9 @@ it('ouvre la vraie page de définition du mot de passe sans erreur 500', functio
         ->assertOk()
         ->assertSee('Nouveau mot de passe')
         ->assertSee('password_confirmation')
-        ->assertSee('csrf', false);
+        ->assertSee('name="_token"', false)
+        ->assertSee('data-password-toggle="password"', false)
+        ->assertSee('data-password-toggle="password_confirmation"', false);
 });
 
 it('un visiteur non authentifié ne voit pas la page de création de mot de passe', function () {
