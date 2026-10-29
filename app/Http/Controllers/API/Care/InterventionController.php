@@ -18,6 +18,9 @@ final class InterventionController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        // Ne jamais annoncer une intervention comme prête tant que le
+        // protocole de livraison et les contrôles end-to-end ne sont pas actifs.
+        abort_unless(config('care.interventions.routing_preview_enabled', false), 404);
         $tenant = $this->instance($request);
         $page = SupportTicketIntervention::query()
             ->where('tenant_id', $tenant->getKey())
