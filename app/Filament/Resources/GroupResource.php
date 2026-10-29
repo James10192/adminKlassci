@@ -178,9 +178,11 @@ class GroupResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('name')
+            ->recordUrl(fn (Group $record): string => static::getUrl('edit', ['record' => $record]))
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->label('Gérer le groupe'),
                 Tables\Actions\DeleteAction::make()
                     ->requiresConfirmation(),
             ])
