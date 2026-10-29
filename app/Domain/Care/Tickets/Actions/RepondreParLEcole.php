@@ -66,7 +66,11 @@ class RepondreParLEcole
             ]);
             $this->journal->consigner($courant, TypeEvenement::ReponseClient, $acteur, details: ['message_id' => $message->id]);
 
-            $this->etats->rendreLaMainAuSupport($courant, $acteur);
+            // Une intervention de l'étudiant ne satisfait pas à sa place une
+            // demande expressément adressée à la scolarité.
+            if ($courant->waiting_on !== 'school_staff' || $personnelEtablissement) {
+                $this->etats->rendreLaMainAuSupport($courant, $acteur);
+            }
 
             $ticket->setRawAttributes($courant->getAttributes(), true);
 
