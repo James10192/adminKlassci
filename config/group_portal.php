@@ -180,6 +180,11 @@ return [
      */
     'tenant_domain' => env('GROUP_PORTAL_TENANT_DOMAIN', 'klassci.com'),
 
+    // Mise en place du mot de passe membre : même règle côté HTML et Laravel.
+    'member_password_min_length' => max(8, (int) env('GROUP_PORTAL_MEMBER_PASSWORD_MIN_LENGTH', 10)),
+    'member_reset_max_attempts' => max(1, (int) env('GROUP_PORTAL_MEMBER_RESET_MAX_ATTEMPTS', 3)),
+    'member_reset_window_seconds' => max(60, (int) env('GROUP_PORTAL_MEMBER_RESET_WINDOW_SECONDS', 3600)),
+
     /*
     |--------------------------------------------------------------------------
     | Storage ingestion (PR7e)

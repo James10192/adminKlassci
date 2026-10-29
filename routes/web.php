@@ -54,6 +54,18 @@ Route::middleware(['web', 'auth:group', 'throttle:30,1'])
     })
     ->name('groupe.alerts.unacknowledge');
 
+// Réinitialisation initiée par un administrateur pour un membre existant :
+// jeton signé temporaire, sans mot de passe dans le courriel et sans login préalable.
+Route::middleware(['web', 'signed', 'throttle:6,1'])
+    ->get('/groupe/reinitialiser-mot-de-passe/{member}', [\App\Http\Controllers\Group\GroupPasswordRecoveryController::class, 'show'])
+    ->whereNumber('member')
+    ->name('groupe.password-reset.show');
+
+Route::middleware(['web', 'signed', 'throttle:6,1'])
+    ->post('/groupe/reinitialiser-mot-de-passe/{member}', [\App\Http\Controllers\Group\GroupPasswordRecoveryController::class, 'store'])
+    ->whereNumber('member')
+    ->name('groupe.password-reset.store');
+
 // Signed unsubscribe link included in every notification email — adds the
 // alert type to the member's `disabled_alert_types` so future notifications
 // of that type are skipped by AlertNotificationDispatcher. No auth: the

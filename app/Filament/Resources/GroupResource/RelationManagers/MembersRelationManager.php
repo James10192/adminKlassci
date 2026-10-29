@@ -3,6 +3,11 @@
 namespace App\Filament\Resources\GroupResource\RelationManagers;
 
 use App\Enums\GroupMemberRole;
+use App\Models\GroupMember;
+use App\Services\Group\GroupMemberAccessReset;
+use App\Services\Group\TemporaryPasswordGenerator;
+use App\Services\Saas\SaasCapabilities;
+use Illuminate\Support\Facades\Gate;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -19,7 +24,7 @@ class MembersRelationManager extends RelationManager
 
     public function isReadOnly(): bool
     {
-        return false;
+        return ! Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS);
     }
 
     public function form(Form $form): Form
@@ -34,6 +39,7 @@ class MembersRelationManager extends RelationManager
                 Forms\Components\TextInput::make('email')
                     ->label('Email')
                     ->email()
+                    ->live(onBlur: true)
                     ->unique(ignoreRecord: true)
                     ->maxLength(255)
                     ->helperText('Laissez vide si le membre n\'a pas d\'email — un nom d\'utilisateur sera généré automatiquement.'),
@@ -45,14 +51,24 @@ class MembersRelationManager extends RelationManager
                     ->alphaDash()
                     ->helperText('Généré automatiquement si vide et pas d\'email. Utilisé pour la connexion lorsqu\'il n\'y a pas d\'email.'),
 
+                // Jamais de mot de passe ni hash dans la modale d'édition.
+                // La création manuelle demeure disponible uniquement quand
+                // l'invitation par email n'est pas possible.
                 Forms\Components\TextInput::make('password')
-                    ->label('Mot de passe')
+                    ->label('Mot de passe initial')
                     ->password()
                     ->revealable()
-                    ->dehydrated(fn ($state) => filled($state))
-                    ->helperText(fn () => config('group_portal.invite_flow_enabled')
-                        ? 'Laissez vide — un mot de passe temporaire sera généré et envoyé par email.'
-                        : 'Laisser vide pour ne pas modifier.'),
+                    ->autocomplete('new-password')
+                    ->visible(fn (string $operation, Forms\Get $get): bool =>
+                        $operation === 'create'
+                        && (! config('group_portal.invite_flow_enabled') || blank($get('email'))))
+                    ->required(fn (string $operation, Forms\Get $get): bool =>
+                        $operation === 'create'
+                        && (! config('group_portal.invite_flow_enabled') || blank($get('email'))))
+                    ->dehydrated(fn (string $operation, $state): bool =>
+                        $operation === 'create' && filled($state))
+                    ->minLength(8)
+                    ->helperText("À communiquer uniquement par un canal vérifié. Le membre devra personnaliser son mot de passe à la connexion."),
 
                 Forms\Components\Select::make('role')
                     ->label('Rôle')
@@ -92,6 +108,16 @@ class MembersRelationManager extends RelationManager
                     ->color(fn (string $state): string => GroupMemberRole::tryFrom($state)?->badgeColor() ?? 'gray')
                     ->formatStateUsing(fn (string $state): string => GroupMemberRole::tryFrom($state)?->label() ?? $state),
 
+                Tables\Columns\TextColumn::make('access_state')
+                    ->label('Accès')
+                    ->state(fn (GroupMember $record): string => $record->password_changed_at !== null
+                        ? 'Mot de passe défini'
+                        : ($record->invitation_sent_at !== null ? 'Activation en attente' : 'Accès à initialiser'))
+                    ->badge()
+                    ->color(fn (GroupMember $record): string => $record->password_changed_at !== null
+                        ? 'success'
+                        : 'warning')
+                    ->toggleable(),
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Actif')
                     ->boolean(),
@@ -103,29 +129,56 @@ class MembersRelationManager extends RelationManager
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->label('Ajouter un membre'),
+                    ->label('Ajouter un membre')
+                    ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS))
+                    ->before(fn () => Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS))
+                    ->mutateFormDataUsing(function (array $data): array {
+                        // NOT NULL en base. L'observer remplace ensuite le
+                        // secret provisoire par une invitation si activée.
+                        if (blank($data['password'] ?? null)) {
+                            $data['password'] = app(TemporaryPasswordGenerator::class)->generate();
+                        }
+
+                        return $data;
+                    }),
             ])
             ->actions([
-                Tables\Actions\Action::make('resendInvitation')
-                    ->label('Renvoyer l\'invitation')
-                    ->icon('heroicon-o-envelope')
-                    ->color('info')
+                Tables\Actions\Action::make('resetAccess')
+                    ->label('Réinitialiser l’accès')
+                    ->icon('heroicon-o-key')
+                    ->color('warning')
                     ->requiresConfirmation()
-                    ->modalHeading('Renvoyer l\'invitation')
-                    ->modalDescription(fn ($record) => "Un nouveau mot de passe temporaire sera généré et envoyé à {$record->email}. L'ancien mot de passe sera invalidé.")
-                    ->visible(fn ($record) => config('group_portal.invite_flow_enabled')
-                        && ! empty($record->email))
-                    ->action(function ($record) {
-                        app(\App\Services\Group\GroupMemberInvitationService::class)->invite($record);
+                    ->modalHeading('Réinitialiser l’accès du membre ?')
+                    ->modalDescription(
+                        "Un lien sécurisé à usage unique sera envoyé à l’adresse e-mail du membre. Son mot de passe actuel reste utilisable jusqu’à sa confirmation."
+                    )
+                    ->modalSubmitActionLabel('Confirmer la réinitialisation')
+                    ->visible(fn (GroupMember $record): bool =>
+                        Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS)
+                        && config('group_portal.invite_flow_enabled', false)
+                        && $record->is_active
+                        && filled($record->email))
+                    ->action(function (GroupMember $record): void {
+                        Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS);
+
+                        app(GroupMemberAccessReset::class)->reset(
+                            auth()->user(),
+                            (int) $this->getOwnerRecord()->getKey(),
+                            (int) $record->getKey(),
+                        );
 
                         \Filament\Notifications\Notification::make()
                             ->success()
-                            ->title('Invitation envoyée')
-                            ->body("Nouveau lien d'activation envoyé à {$record->email}.")
+                            ->title('Réinitialisation prise en compte')
+                            ->body("Le lien sécurisé a été mis en file d’envoi. Sa livraison n’est pas encore confirmée.")
                             ->send();
                     }),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS))
+                    ->before(fn () => Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS)),
                 Tables\Actions\DeleteAction::make()
+                    ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS))
+                    ->before(fn () => Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS))
                     ->requiresConfirmation(),
             ]);
     }
