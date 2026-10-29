@@ -62,6 +62,17 @@ it('separe une sollicitation de scolarite des messages visibles par l etudiant',
         ->assertJsonStructure(['derniere_demande_etablissement_le']);
 });
 
+it('un message scolaire informatif sans action ne declenche pas d alerte de traitement', function () {
+    $this->actingAs($this->staff);
+    app(\App\Domain\Care\Tickets\Actions\RepondreTicket::class)
+        ->executer($this->ticket, $this->staff, 'Information pour le service de scolarité.', VisibiliteMessage::Administration);
+
+    $this->withToken($this->jeton)->getJson("/api/v1/support/tickets/{$this->reference}?scope=school")
+        ->assertOk()->assertJsonPath('action_cible', 'DEMANDEUR')
+        ->assertJsonPath('derniere_demande_etablissement_le', null)
+        ->assertJsonPath('messages.0.destinataire', 'ETABLISSEMENT');
+});
+
 it('ne signale pas une note interne a l ecole', function () {
     Carbon::setTestNow(now()->addHour());
     $repere = now()->toIso8601String();
