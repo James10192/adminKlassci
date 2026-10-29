@@ -59,7 +59,7 @@ Dans **KLASSCIv2** : centre de tâches \`Mes interventions\` avec carte compacte
 
 ## Ordre et conditions de fusion
 
-- Étape A (présente PR Master) : migration additive + service de préparation **non connecté aux UI ni à l'API**, tests de permissions, idempotence, sécurité et journaux.
+- Étape A (présente PR Master) : migration additive + service de préparation **non connecté aux UI** ; point de lecture `GET /v1/support/interventions` **minimal, read-only, filtré par instance** pour les tâches `PENDING_ROUTING` ; tests de permission, idempotence, sécurité et journal. Aucun envoi ni action de clôture disponible.
 - Étape B (présente PR instance) : résolution des destinataires (permission effective, inactifs/ambiguïtés/refus), correction de la priorité du message \`ACTION_REQUISE\`. Aucune livraison d'intervention avant contrat v2.
 - Étape C : protocole API authentifié, pagination, minimisation, permissions renouvelées, gestion des statuts, tests inter-tenant.
 - Étape D : outbox durable, notifications et reprise ; tests de panne après commit, révoqué, destinataire supprimé, deux workers concurrents.
