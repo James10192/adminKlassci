@@ -10,7 +10,7 @@ final class SaasServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        foreach ([SaasCapabilities::VIEW, SaasCapabilities::PROPOSE, SaasCapabilities::REVIEW] as $ability) {
+        foreach ([SaasCapabilities::VIEW, SaasCapabilities::PROPOSE, SaasCapabilities::REVIEW, SaasCapabilities::MANAGE_CATALOG] as $ability) {
             Gate::define($ability, fn ($user) => SaasCapabilities::allows($user, $ability));
         }
     }
