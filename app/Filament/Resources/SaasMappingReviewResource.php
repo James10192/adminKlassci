@@ -18,6 +18,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Parcours humain : propositions avec preuves -> contre-verification ->
@@ -36,7 +37,7 @@ final class SaasMappingReviewResource extends Resource
 
     public static function canViewAny(): bool
     {
-        return Gate::allows(SaasCapabilities::VIEW);
+        return Gate::allows(SaasCapabilities::VIEW) && Schema::hasTable('saas_mapping_reviews');
     }
 
     public static function canCreate(): bool
@@ -95,7 +96,7 @@ final class SaasMappingReviewResource extends Resource
                 ->label('Instance historique à examiner')
                 ->options(fn () => Tenant::query()->orderBy('code')->limit(500)->pluck('code', 'id')->all())
                 ->searchable()
-                ->required()
+                ->required($creating)
                 ->disabled(! $creating)
                 ->dehydrated($creating)
                 ->helperText("Les instances déjà rapprochées et archivées seront bloquées par les contrôles."),
