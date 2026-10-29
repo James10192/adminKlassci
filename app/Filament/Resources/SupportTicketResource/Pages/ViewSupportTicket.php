@@ -344,7 +344,7 @@ class ViewSupportTicket extends ViewRecord
     {
         return array_map(fn ($v) => $v->value, array_values(array_filter([
             VisibiliteMessage::PublicClient,
-            VisibiliteMessage::Administration,
+            Gate::allows('support.tickets.reply') ? VisibiliteMessage::Administration : null,
             Gate::allows('support.internal_notes') ? VisibiliteMessage::InterneSupport : null,
             Gate::allows('support.internal_notes') ? VisibiliteMessage::Technique : null,
             Gate::allows('support.security.view') ? VisibiliteMessage::Securite : null,
