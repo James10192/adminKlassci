@@ -64,6 +64,7 @@ class SupportTicket extends Model
             'severity' => Severite::class,
             'priority' => Priorite::class,
             'is_security_restricted' => 'boolean',
+            'waiting_on' => 'string',
             'first_response_at' => 'datetime',
             'triaged_at' => 'datetime',
             'resolved_at' => 'datetime',
@@ -94,6 +95,12 @@ class SupportTicket extends Model
     public function messagesPublics(): HasMany
     {
         return $this->messages()->where('visibility', VisibiliteMessage::PublicClient->value);
+    }
+
+    /** Messages visibles seulement par le personnel habilité de cette instance. */
+    public function messagesEtablissement(): HasMany
+    {
+        return $this->messages()->whereIn('visibility', [VisibiliteMessage::PublicClient->value, VisibiliteMessage::Administration->value]);
     }
 
     public function piecesJointes(): HasMany
