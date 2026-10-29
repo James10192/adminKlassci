@@ -25,7 +25,7 @@ final class PreparerIntervention
         string $permission,
         ?int $destinataire = null,
     ): SupportTicketIntervention {
-        abort_unless(Gate::forUser($operateur)->allows('support.tickets.manage'), 403);
+        abort_unless($operateur->is_active && Gate::forUser($operateur)->allows('support.tickets.manage'), 403);
         $cle = trim($cle);
         $titre = trim($titre);
         $instructions = trim($instructions);
