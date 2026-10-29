@@ -93,14 +93,18 @@ class TicketStateMachine
      * l'appelant a charge : deux agents sur le meme dossier ne peuvent pas
      * s'ecraser, et le journal consigne l'etat de depart reel.
      */
-    public function franchir(SupportTicket $ticket, S $vers, Acteur $acteur, ?string $motif = null): SupportTicket
+    public function franchir(SupportTicket $ticket, S $vers, Acteur $acteur, ?string $motif = null, ?string $destinataire = null): SupportTicket
     {
         $motif = $motif !== null ? trim($motif) : null;
         if (in_array($vers, self::MOTIF_REQUIS, true) && ! self::motifSuffisant($motif)) {
             throw new TransitionRefusee('Un motif d\'au moins '.self::motifMin()." caractères est requis pour passer à « {$vers->libelle()} ».");
         }
 
-        return DB::transaction(function () use ($ticket, $vers, $acteur, $motif) {
+        if ($vers === S::WaitingCustomer && $destinataire !== null && ! in_array($destinataire, ['reporter', 'school_staff'], true)) {
+            throw new TransitionRefusee('Destinataire de la demande d’action invalide.');
+        }
+
+        return DB::transaction(function () use ($ticket, $vers, $acteur, $motif, $destinataire) {
             $courant = SupportTicket::whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
             $depuis = $courant->status;
 
@@ -108,7 +112,8 @@ class TicketStateMachine
                 throw new TransitionRefusee("Passage impossible de « {$depuis->libelle()} » à « {$vers->libelle()} ».");
             }
 
-            $courant->forceFill(['status' => $vers] + $this->jalons($courant, $depuis, $vers))->save();
+            $courant->forceFill(['status' => $vers, 'waiting_on' => $vers === S::WaitingCustomer ? ($destinataire ?? 'reporter') : null]
+                + $this->jalons($courant, $depuis, $vers))->save();
             $this->journal->consigner($courant, TypeEvenement::StatutChange, $acteur, $depuis->value, $vers->value, $motif);
 
             $ticket->setRawAttributes($courant->getAttributes(), true);
