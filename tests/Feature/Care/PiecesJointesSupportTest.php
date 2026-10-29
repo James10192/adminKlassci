@@ -51,6 +51,19 @@ it('ouvre une image par le lien signe, jamais sans signature', function () {
     $this->get('/care/pieces/'.$this->piece->id)->assertForbidden();
 });
 
+it('offre un telechargement explicite pour les images sur mobile', function () {
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->assertSee('Voir l\'image')
+        ->assertSee('Télécharger')
+        ->assertSee('telecharger=1', false);
+
+    $this->get(PieceJointeSupportController::lien($this->piece, true))
+        ->assertOk()
+        ->assertHeader('Content-Disposition', 'attachment; filename=ecran.png');
+});
+
 it('garde restreinte la piece d un dossier restreint', function () {
     $this->ticket->forceFill(['is_security_restricted' => true])->save();
     $this->actingAs($this->support);
