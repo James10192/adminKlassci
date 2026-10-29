@@ -55,8 +55,9 @@ final class ReconciliationDraftFields
             ->label('Groupe commercial proposé (facultatif)')
             ->searchable()
             ->getSearchResultsUsing(fn (string $search): array =>
-                Group::query()->where('name', 'like', '%'.$search.'%')
-                    ->orWhere('code', 'like', '%'.$search.'%')
+                Group::query()->where(fn ($query) => $query
+                    ->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('code', 'like', '%'.$search.'%'))
                     ->orderBy('name')->limit(30)->pluck('name', 'id')->all())
             ->getOptionLabelUsing(fn ($value): ?string =>
                 Group::query()->whereKey($value)->value('name'))
