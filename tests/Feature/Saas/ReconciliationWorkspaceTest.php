@@ -33,6 +33,7 @@ function saasWorkspaceTenant(string $code, ?Group $group = null): Tenant
         'database_name' => 'test_'.$code,
         'database_credentials' => ['password' => 'NE_JAMAIS_EXPOSER_MDP'],
         'api_token' => 'NE_JAMAIS_EXPOSER_JETON_'.$code,
+        'git_branch' => 'presentation',
         'group_id' => $group?->id,
     ]);
 }
