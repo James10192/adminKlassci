@@ -64,8 +64,11 @@ pas déduites de la chaîne '{slug}.klassci.com'.
 ## 4. Invariants multi-tenant et commerciaux
 
 - Une organisation possède un ou plusieurs établissements.
-- Un établissement peut acheter plusieurs produits ; chaque instance a un
-  tenant métier distinct et des identifiants de credentials indépendants.
+- Un **groupe/organisation** peut disposer de plusieurs établissements de
+  catégories différentes. Chaque établissement a **un seul produit et une
+  seule instance métier**. Exemple : groupe Rostan → Rostan Collège
+  (FastAPI), USAT Université LMD et ISLG Grande école BTS (KLASSCIv2).
+  Les identifiants techniques et permissions demeurent isolés par école.
 - Plan, contrat et tarification historiques ne sont jamais réécrits par
   import/discovery d'instances existantes. Mode import: READ_ONLY jusqu'à
   approbation des correspondances.
