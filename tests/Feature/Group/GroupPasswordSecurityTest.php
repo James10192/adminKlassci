@@ -82,3 +82,18 @@ it('n’expose pas le hash d’un membre lors du montage de son formulaire d’�
     ])->mountTableAction('edit', $this->member)
         ->assertDontSee($this->member->password);
 });
+
+
+it('ne permet pas de réécrire le mot de passe via la route de première activation après succès', function () {
+    $this->member->forceFill(['password_changed_at' => now()])->save();
+    $before = $this->member->password;
+    $this->actingAs($this->member, 'group');
+
+    $this->get('/groupe/definir-mot-de-passe')->assertRedirect();
+    $this->post('/groupe/definir-mot-de-passe', [
+        'password' => 'ShouldNotReplace123',
+        'password_confirmation' => 'ShouldNotReplace123',
+    ])->assertRedirect();
+
+    expect($this->member->fresh()->password)->toBe($before);
+});
