@@ -123,7 +123,7 @@ it('impose un autre valideur et exige d expliquer une difference de groupe USAT'
     expect($accepted->state)->toBe('approved')
         ->and($accepted->reviewed_by)->toBe($checker->id)
         ->and($accepted->events()->count())->toBe(3)
-        ->and($accepted->events()->latest('id')->first()->details['discrepancy_acknowledged'])->toBeTrue()
+        ->and($accepted->events()->reorder('id', 'desc')->first()->details['discrepancy_acknowledged'])->toBeTrue()
         ->and(Tenant::findOrFail($tenant->id)->group_id)->toBeNull()
         ->and(SaasProductInstance::count())->toBe(0);
 });
