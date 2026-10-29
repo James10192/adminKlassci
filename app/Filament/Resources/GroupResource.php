@@ -39,6 +39,9 @@ class GroupResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Informations du groupe')
+                    ->description('Dépliez pour modifier les coordonnées et les paramètres du groupe.')
+                    ->collapsible()
+                    ->collapsed(fn (string $operation): bool => $operation === 'edit')
                     ->columns(2)
                     ->schema([
                         Forms\Components\TextInput::make('name')
@@ -91,7 +94,9 @@ class GroupResource extends Resource
                     ]),
 
                 Forms\Components\Section::make('Identité visuelle du portail')
-                    ->description('Ce que voient les membres du groupe en se connectant. Laissé vide, le portail porte la marque KLASSCI.')
+                    ->description('Personnalisation facultative. Dépliez pour modifier le logo et les couleurs.')
+                    ->collapsible()
+                    ->collapsed(fn (string $operation): bool => $operation === 'edit')
                     ->columns(2)
                     ->schema([
                         Forms\Components\FileUpload::make('logo_path')
@@ -173,9 +178,11 @@ class GroupResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('name')
+            ->recordUrl(fn (Group $record): string => static::getUrl('edit', ['record' => $record]))
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->label('Gérer le groupe'),
                 Tables\Actions\DeleteAction::make()
                     ->requiresConfirmation(),
             ])
