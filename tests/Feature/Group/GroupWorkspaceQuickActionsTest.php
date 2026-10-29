@@ -79,7 +79,7 @@ it('affiche les actions rapides également depuis Voir le groupe', function () {
 it('permet de rattacher directement un établissement par modale sans changer son contrat', function () {
     $group = groupWorkspaceGroup();
     $tenant = groupWorkspaceTenant('workspace1');
-    $oldPlan = $tenant->plan;
+    $oldPlan = $tenant->fresh()->plan;
     $this->actingAs(groupWorkspaceAdmin());
 
     Livewire::test(EditGroup::class, ['record' => $group->getRouteKey()])
