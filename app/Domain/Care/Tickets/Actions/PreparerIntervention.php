@@ -52,8 +52,11 @@ final class PreparerIntervention
             // A privileged internal ticket must not get a task whose details
             // might later be routed to ordinary school accounts.
             abort_if($courant->is_security_restricted, 409, 'Intervention impossible sur un dossier restreint.');
-            abort_unless($courant->status->estOuvert(), 409, 'Intervention impossible sur un dossier résolu ou fermé.');
 
+            // Une tentative déjà validée reste idempotente même si le ticket
+            // a depuis été résolu : l'appelant récupère le même résultat.
+            // La restriction de sécurité reste prioritaire et interdit toute
+            // lecture de la tâche lorsqu'elle a été activée entre-temps.
             $existante = SupportTicketIntervention::query()
                 ->where('ticket_id', $courant->getKey())
                 ->where('idempotency_key', $cle)
@@ -65,6 +68,8 @@ final class PreparerIntervention
 
                 return $existante;
             }
+
+            abort_unless($courant->status->estOuvert(), 409, 'Intervention impossible sur un dossier résolu ou fermé.');
 
             $intervention = SupportTicketIntervention::create([
                 'tenant_id' => $courant->tenant_id,
