@@ -79,7 +79,8 @@ final class MailPulseClient
         if (! is_array($parts)
             || ($parts['scheme'] ?? '') !== 'https'
             || empty($parts['host'])
-            || isset($parts['user'], $parts['pass'])
+            || isset($parts['user'])
+            || isset($parts['pass'])
             || isset($parts['query'])
             || isset($parts['fragment'])
             || $key === ''
