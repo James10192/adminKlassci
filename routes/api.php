@@ -62,6 +62,8 @@ Route::prefix('v1/support')->name('api.care.')->group(function () {
     Route::middleware(['care.instance:support:read', 'throttle:care-lecture'])->group(function () {
         Route::get('/bootstrap', \App\Http\Controllers\API\Care\BootstrapController::class)->name('bootstrap');
         Route::get('/tickets', [\App\Http\Controllers\API\Care\TicketController::class, 'index'])->name('tickets.index');
+        // Interventions: projection minimale pour le seul backend de l'instance.
+        Route::get('/interventions', [\App\Http\Controllers\API\Care\InterventionController::class, 'index'])->name('interventions.index');
         Route::get('/tickets/{reference}', [\App\Http\Controllers\API\Care\TicketController::class, 'show'])
             ->where('reference', 'KC-\d{4}-\d{6,}')
             ->name('tickets.show');
