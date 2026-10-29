@@ -6,6 +6,8 @@ Ce document décrit la cible **non encore activée** du workflow inter-rôles. U
 
 Références : OWASP Authorization Cheat Sheet (deny by default, permissions à chaque requête), Laravel 12 Queues/afterCommit, Spatie Permission (permissions effectives, multi-rôles). Liens : https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html ; https://laravel.com/docs/12.x/queues ; https://spatie.be/docs/laravel-permission/v6/basic-usage/direct-permissions
 
+**Garde-fou de déploiement :** `CARE_INTERVENTIONS_ROUTING_PREVIEW_ENABLED` vaut `false` par défaut. Le endpoint de routage `GET /v1/support/interventions` répond `404` tant que ce drapeau n'est pas volontairement activé après les phases C–F. La préparation d'intervention reste inaccessible via l'API publique et l'UI ; aucune notification inter-rôles n'est lancée.
+
 ## Autorité de chaque système
 
 | Donnée / responsabilité | AdminKlassci Master | Instance KLASSCIv2 |
