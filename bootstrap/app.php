@@ -55,5 +55,6 @@ return Application::configure(basePath: dirname(__DIR__))
         \App\Providers\Filament\GroupPanelProvider::class,
         \App\Providers\GroupServiceProvider::class,
         \App\Providers\CareServiceProvider::class,
+        \App\Providers\SaasServiceProvider::class,
     ])
     ->create();
