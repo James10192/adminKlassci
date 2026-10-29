@@ -22,6 +22,7 @@ class SetPasswordController extends Controller
     public function show(): \Illuminate\Http\Response|RedirectResponse
     {
         $member = auth('group')->user();
+        abort_unless($member?->is_active, 403);
 
         // Short-circuit if the member has already rotated — shouldn't happen
         // because the middleware skips them, but defensive against session
@@ -40,6 +41,13 @@ class SetPasswordController extends Controller
     {
         $member = auth('group')->user();
         abort_unless($member?->is_active, 403);
+
+        // Cette route est réservée à la première activation ou à une
+        // réinitialisation administrateur, pas au changement libre sans
+        // vérification du mot de passe actuel.
+        if (! $member->mustChangePassword()) {
+            return redirect()->to(\App\Filament\Group\Pages\GroupDashboard::getUrl(panel: 'group'));
+        }
 
         $validated = $request->validate([
             'password' => [
