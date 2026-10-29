@@ -48,19 +48,23 @@ class RepondreTicket
             ]);
 
             $public = $visibilite === VisibiliteMessage::PublicClient;
-            if ($public) {
+            if ($public || $visibilite === VisibiliteMessage::Administration) {
+                // Toucher updated_at : l'instance découvre les messages destinés
+                // au demandeur ou à l'administration par le polling. Seuls
+                // les premiers sont envoyés au rapporteur. Les notes internes
+                // ne touchent pas la demande.
                 // Toucher updated_at : l'ecole decouvre les reponses par
                 // GET /tickets?mis_a_jour_depuis=. Une note interne, elle, ne
                 // touche rien — l'ecole n'a rien de nouveau a lire.
                 $courant->forceFill(array_filter([
-                    'first_response_at' => $courant->first_response_at === null ? now() : null,
+                    'first_response_at' => $public && $courant->first_response_at === null ? now() : null,
                     'updated_at' => now(),
                 ]))->save();
             }
 
             $this->journal->consigner(
                 $courant,
-                $public ? TypeEvenement::ReponseSupport : TypeEvenement::NoteInterne,
+                $public ? TypeEvenement::ReponseSupport : ($visibilite === VisibiliteMessage::Administration ? TypeEvenement::DemandeAdministration : TypeEvenement::NoteInterne),
                 $acteur,
                 vers: $visibilite->value,
                 details: ['message_id' => $message->id],

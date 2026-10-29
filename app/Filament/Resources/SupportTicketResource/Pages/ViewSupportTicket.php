@@ -94,8 +94,8 @@ class ViewSupportTicket extends ViewRecord
         return Actions\Action::make('repondre')
             ->label('Écrire un message')
             ->icon('heroicon-o-chat-bubble-left-right')
-            ->modalHeading('Réponse à l’école ou note interne')
-            ->modalDescription("Une réponse publique apparaîtra dans le suivi de l'école. Une note interne ou technique reste réservée au personnel habilité.")
+            ->modalHeading('Choisir le destinataire du message')
+            ->modalDescription("Répondez au demandeur (étudiant ou personnel), sollicitez l'administration autorisée, ou rédigez une note interne. Les destinataires ne sont pas interchangeables.")
             ->modalSubmitActionLabel('Valider le message')
             ->color('primary')
             ->visible(fn () => Gate::allows('support.tickets.reply') || Gate::allows('support.internal_notes'))
@@ -110,7 +110,8 @@ class ViewSupportTicket extends ViewRecord
                     ->required()
                     ->options(fn () => collect($this->visibilitesAutorisees())->mapWithKeys(fn ($v) => [$v->value => $v->libelle()]))
                     ->descriptions([
-                        VisibiliteMessage::PublicClient->value => "Réponse envoyée au suivi de l'école.",
+                        VisibiliteMessage::PublicClient->value => 'Visible par le demandeur du ticket, y compris un étudiant.',
+                        VisibiliteMessage::Administration->value => "Réservée au personnel pouvant consulter les demandes de l'établissement.",
                         VisibiliteMessage::InterneSupport->value => 'Réservée au personnel support habilité.',
                         VisibiliteMessage::Technique->value => 'Réservée au personnel technique habilité.',
                         VisibiliteMessage::Securite->value => 'Réservée aux personnes habilitées à la sécurité.',
@@ -119,12 +120,13 @@ class ViewSupportTicket extends ViewRecord
                     ->validationMessages([
                         'required' => 'Sélectionnez qui pourra lire le message avant de continuer.',
                     ])
-                    ->helperText("Aucun destinataire n'est choisi par défaut. Une note interne n'est jamais envoyée à l'école.")
+                    ->helperText("Aucun destinataire n'est choisi par défaut. Une note interne ne part ni au demandeur, ni à l'administration.")
                     ->live(),
                 Forms\Components\Placeholder::make('destination')
                     ->label('Conséquence de cet envoi')
                     ->content(fn (Forms\Get $get) => match ($get('visibilite')) {
-                        VisibiliteMessage::PublicClient->value => "Cette réponse sera visible par l'école dans son suivi. Son instance notifiera le rapporteur si le suivi automatique est actif.",
+                        VisibiliteMessage::PublicClient->value => 'Le demandeur initial verra cette réponse et sera notifié si son suivi est actif. Cela ne sollicite PAS la scolarité.',
+                        VisibiliteMessage::Administration->value => "Ce message est réservé au personnel habilité de l'établissement. Pour déclencher une alerte d'intervention et attendre sa réponse, activez « Demander une action à l'administration ». Le demandeur ne le verra pas.",
                         VisibiliteMessage::InterneSupport->value => "Cette note restera interne au support et ne sera pas visible par l'école.",
                         VisibiliteMessage::Technique->value => "Cette note sera réservée au personnel technique habilité et ne sera pas visible par l'école.",
                         VisibiliteMessage::Securite->value => "Cette note sera réservée aux personnes habilitées à la sécurité et ne sera pas visible par l'école.",
@@ -139,23 +141,31 @@ class ViewSupportTicket extends ViewRecord
                 // silence (le message partirait seul). La machine a etats tranche alors sous
                 // verrou, et un refus garde le texte saisi.
                 Forms\Components\Toggle::make('attendre_ecole')
-                    ->label("J'attends une réponse de l'école")
+                    ->label(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::Administration->value
+                        ? "Demander une action à l'administration" : 'Attendre une réponse du demandeur')
+                    ->helperText(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::Administration->value
+                        ? "Le dossier attendra le personnel habilité de l'établissement, pas l'étudiant. Une réponse de ce personnel le rendra au support."
+                        : 'À activer seulement si la personne qui a ouvert ce ticket doit fournir une réponse. Sinon, laissez désactivé.')
                     ->dehydratedWhenHidden()
-                    ->visible(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
+                    ->visible(fn (Forms\Get $get) => in_array($get('visibilite'), [VisibiliteMessage::PublicClient->value, VisibiliteMessage::Administration->value], true)
                         && Gate::allows('support.tickets.manage')
                         && app(TicketStateMachine::class)->peut($this->record->status, StatutTicket::WaitingCustomer)),
             ])
             ->action(function (array $data, Actions\Action $action) {
                 $visibilite = VisibiliteMessage::from($data['visibilite']);
                 abort_unless(in_array($visibilite, $this->visibilitesAutorisees(), true), 403);
-                $attendre = $visibilite === VisibiliteMessage::PublicClient && ! empty($data['attendre_ecole'])
+                $attendre = in_array($visibilite, [VisibiliteMessage::PublicClient, VisibiliteMessage::Administration], true) && ! empty($data['attendre_ecole'])
                     && Gate::allows('support.tickets.manage');
                 $this->tenter(fn () => DB::transaction(function () use ($data, $visibilite, $attendre) {
                     app(RepondreTicket::class)->executer($this->record, auth()->user(), $data['corps'], $visibilite);
                     if ($attendre) {
-                        app(TicketStateMachine::class)->franchir($this->record, StatutTicket::WaitingCustomer, Acteur::personnel(auth()->user()));
+                        app(TicketStateMachine::class)->franchir($this->record, StatutTicket::WaitingCustomer, Acteur::personnel(auth()->user()), destinataire: $visibilite === VisibiliteMessage::Administration ? 'school_staff' : 'reporter');
                     }
-                }), $visibilite === VisibiliteMessage::PublicClient ? "Réponse publiée dans le suivi de l'école." : 'Note interne enregistrée (non visible par l’école).', garder: $action);
+                }), match ($visibilite) {
+                    VisibiliteMessage::PublicClient => 'Réponse publiée pour le demandeur.',
+                    VisibiliteMessage::Administration => "Message destiné à l'administration de l'établissement enregistré.",
+                    default => 'Note interne enregistrée (non visible par le demandeur).',
+                }, garder: $action);
             });
     }
 
@@ -269,7 +279,9 @@ class ViewSupportTicket extends ViewRecord
                     Infolists\Components\TextEntry::make('customer_category')->label('Catégorie choisie')
                         ->formatStateUsing(fn ($state) => $state->libelle()),
                     Infolists\Components\TextEntry::make('status')->label('Statut')->badge()
-                        ->formatStateUsing(fn ($state) => $state->libelle())->color(fn ($state) => $state->ton()),
+                        ->formatStateUsing(fn ($state, $record) => $state === StatutTicket::WaitingCustomer
+                            ? ($record->waiting_on === 'school_staff' ? "Action scolarité attendue" : "Réponse du demandeur attendue")
+                            : $state->libelle())->color(fn ($state) => $state->ton()),
                     Infolists\Components\TextEntry::make('tenant.name')->label('Instance')
                         ->url(fn ($record) => route('filament.admin.resources.tenants.view', $record->tenant_id)),
                     Infolists\Components\TextEntry::make('reporter_name_snapshot')->label('Signalé par')->placeholder('—')
@@ -322,6 +334,7 @@ class ViewSupportTicket extends ViewRecord
     {
         return array_values(array_filter([
             Gate::allows('support.tickets.reply') ? VisibiliteMessage::PublicClient : null,
+            Gate::allows('support.tickets.reply') ? VisibiliteMessage::Administration : null,
             Gate::allows('support.internal_notes') ? VisibiliteMessage::InterneSupport : null,
             Gate::allows('support.internal_notes') ? VisibiliteMessage::Technique : null,
             Gate::allows('support.security.view') ? VisibiliteMessage::Securite : null,
@@ -333,6 +346,7 @@ class ViewSupportTicket extends ViewRecord
     {
         return array_map(fn ($v) => $v->value, array_values(array_filter([
             VisibiliteMessage::PublicClient,
+            Gate::allows('support.tickets.reply') ? VisibiliteMessage::Administration : null,
             Gate::allows('support.internal_notes') ? VisibiliteMessage::InterneSupport : null,
             Gate::allows('support.internal_notes') ? VisibiliteMessage::Technique : null,
             Gate::allows('support.security.view') ? VisibiliteMessage::Securite : null,

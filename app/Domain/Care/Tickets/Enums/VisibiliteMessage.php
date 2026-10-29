@@ -12,6 +12,7 @@ namespace App\Domain\Care\Tickets\Enums;
 enum VisibiliteMessage: string
 {
     case PublicClient = 'PUBLIC_TO_CUSTOMER';
+    case Administration = 'SCHOOL_STAFF';
     case InterneSupport = 'INTERNAL_SUPPORT';
     case Technique = 'ENGINEERING_ONLY';
     case Securite = 'SECURITY_RESTRICTED';
@@ -19,7 +20,8 @@ enum VisibiliteMessage: string
     public function libelle(): string
     {
         return match ($this) {
-            self::PublicClient => "Visible par l'école",
+            self::PublicClient => 'Répondre au demandeur',
+            self::Administration => "Administration de l'établissement",
             self::InterneSupport => 'Note interne (support)',
             self::Technique => 'Note technique',
             self::Securite => 'Sécurité (restreint)',

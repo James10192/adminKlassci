@@ -3,6 +3,9 @@
 namespace App\Domain\Care\Tickets\Services;
 
 use App\Domain\Care\Tickets\Enums\TypeActeur;
+use App\Domain\Care\Tickets\Enums\VisibiliteMessage;
+use App\Domain\Care\Tickets\Enums\StatutTicket;
+use App\Domain\Care\Tickets\Enums\StatutClient;
 use App\Domain\Care\Tickets\Models\SupportTicket;
 use App\Domain\Care\Tickets\Models\SupportTicketAttachment;
 use App\Domain\Care\Tickets\Models\SupportTicketMessage;
@@ -18,9 +21,14 @@ use App\Domain\Care\Tickets\Models\SupportTicketMessage;
  */
 class ProjectionClient
 {
-    public function resume(SupportTicket $ticket): array
+    public function resume(SupportTicket $ticket, bool $personnelEtablissement = false): array
     {
-        $statut = $ticket->status->statutClient();
+        // Une demande destinée à la scolarité ne doit pas afficher « action
+        // requise de votre part » à l'étudiant à l'origine du ticket.
+        $statut = $ticket->status === StatutTicket::WaitingCustomer
+            && $ticket->waiting_on === 'school_staff'
+            && ! $personnelEtablissement
+            ? StatutClient::EnAnalyse : $ticket->status->statutClient();
         $derniere = $ticket->relationLoaded('messagesPublics')
             ? $ticket->messagesPublics->last()
             : $ticket->messagesPublics()->latest('id')->first();
@@ -29,6 +37,13 @@ class ProjectionClient
         $derniereDuSupport = $messages !== null
             ? $messages->filter(fn ($m) => $m->author_type !== TypeActeur::Client)->last()
             : $ticket->messagesPublics()->where('author_type', '!=', TypeActeur::Client->value)->latest('id')->first();
+
+        $derniereAdministration = $personnelEtablissement
+            && $ticket->status === StatutTicket::WaitingCustomer
+            && $ticket->waiting_on === 'school_staff'
+            ? $ticket->messages()->where('visibility', VisibiliteMessage::Administration->value)
+                ->where('author_type', '!=', TypeActeur::Client->value)->latest('id')->first()
+            : null;
 
         return [
             'reference' => $ticket->reference,
@@ -41,14 +56,20 @@ class ProjectionClient
             'derniere_reponse' => $derniere ? $this->message($derniere) : null,
             // Ajout v1 : ce que l'ecole compare a sa derniere lecture pour notifier.
             'derniere_reponse_support_le' => $derniereDuSupport?->created_at?->toIso8601String(),
+            // Uniquement pour le personnel autorisé (scope=school).
+            ...($personnelEtablissement ? [
+                'action_cible' => $ticket->waiting_on === 'school_staff' ? 'ETABLISSEMENT' : 'DEMANDEUR',
+                'derniere_demande_etablissement_le' => $derniereAdministration?->created_at?->toIso8601String(),
+            ] : []),
         ];
     }
 
-    public function detail(SupportTicket $ticket): array
+    public function detail(SupportTicket $ticket, bool $personnelEtablissement = false): array
     {
-        return $this->resume($ticket) + [
+        return $this->resume($ticket, $personnelEtablissement) + [
             'description' => $ticket->description,
-            'messages' => $ticket->messagesPublics->map(fn ($m) => $this->message($m))->values()->all(),
+            'messages' => ($personnelEtablissement ? $ticket->messagesEtablissement : $ticket->messagesPublics)
+                ->map(fn ($m) => $this->message($m))->values()->all(),
             'pieces_jointes' => $ticket->piecesJointesPubliques->map(fn ($p) => $this->piece($p))->values()->all(),
         ];
     }
@@ -69,6 +90,7 @@ class ProjectionClient
     {
         return [
             'auteur' => $m->author_type === TypeActeur::Client ? 'ECOLE' : 'SUPPORT',
+            'destinataire' => $m->visibility === VisibiliteMessage::Administration ? 'ETABLISSEMENT' : 'DEMANDEUR',
             'nom' => $m->author_type === TypeActeur::Client ? $m->author_name : 'Support KLASSCI',
             'corps' => $m->body,
             'le' => $m->created_at?->toIso8601String(),

@@ -114,7 +114,9 @@ class SupportTicketResource extends Resource
                 Tables\Columns\TextColumn::make('title')->label('Demande')->limit(60)->tooltip(fn ($record) => $record->title)->searchable()
                     ->description(fn ($record) => $record->customer_category->libelle()),
                 Tables\Columns\TextColumn::make('status')->label('Statut')->badge()
-                    ->formatStateUsing(fn (StatutTicket $state) => $state->libelle())
+                    ->formatStateUsing(fn (StatutTicket $state, $record) => $state === StatutTicket::WaitingCustomer
+                        ? ($record->waiting_on === 'school_staff' ? "Action scolarité attendue" : "Réponse du demandeur attendue")
+                        : $state->libelle())
                     ->color(fn (StatutTicket $state) => $state->ton()),
                 Tables\Columns\TextColumn::make('severity')->label('Sév.')->badge()
                     ->formatStateUsing(fn (?Severite $state) => $state?->value)

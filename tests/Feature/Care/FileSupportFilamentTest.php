@@ -71,6 +71,35 @@ it('pose la demande en attente de l ecole quand le support lui pose une question
     Livewire::test(ListSupportTickets::class)->set('activeTab', 'attente_client')->assertCanSeeTableRecords([$this->ticket]);
 });
 
+it('adresse une action a la scolarite sans l envoyer au rapporteur', function () {
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->callAction('repondre', [
+            'visibilite' => VisibiliteMessage::Administration->value,
+            'corps' => "Merci à la scolarité de vérifier l'inscription.",
+            'attendre_ecole' => true,
+        ])
+        ->assertHasNoActionErrors();
+
+    $ticket = $this->ticket->fresh();
+    expect($ticket->status)->toBe(StatutTicket::WaitingCustomer)
+        ->and($ticket->waiting_on)->toBe('school_staff')
+        ->and($ticket->messages()->first()->visibility)->toBe(VisibiliteMessage::Administration);
+});
+
+it('indique clairement qui est attendu selon le destinataire du message', function () {
+    $this->actingAs($this->support);
+    $page = Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->mountAction('repondre');
+
+    $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
+        ->assertSee('Attendre une réponse du demandeur');
+    $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::Administration->value)
+        ->assertSee("Demander une action à l'administration")
+        ->assertSee('Le demandeur ne le verra pas');
+});
+
 it('ne publie rien quand le dossier a change d etat avant l envoi', function () {
     // La page est ouverte sur un dossier qui peut attendre l'ecole ; entre-temps
     // un autre agent le passe en cours. La transition est relue sous verrou :
@@ -106,7 +135,7 @@ it('ne donne aucune fausse impression de destinataire selectionne avant le choix
         ->assertSet('mountedActionsData.0.visibilite', null)
         ->assertSee("Choisissez d'abord le destinataire")
         ->assertDontSee("Cette note restera interne au support")
-        ->assertDontSee("Cette réponse sera visible par l'école");
+        ->assertDontSee('Le demandeur initial verra cette réponse');
 });
 
 it('affiche immediatement la bonne destination et garde la valeur choisie', function () {
@@ -116,7 +145,7 @@ it('affiche immediatement la bonne destination et garde la valeur choisie', func
         ->mountAction('repondre');
 
     $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
-        ->assertSee("Cette réponse sera visible par l'école")
+        ->assertSee('Le demandeur initial verra cette réponse')
         ->assertSet('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value);
 
     $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::InterneSupport->value)

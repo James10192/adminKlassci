@@ -12,6 +12,7 @@ enum TypeEvenement: string
     case PrioriteChangee = 'PRIORITY_CHANGED';
     case Assigne = 'ASSIGNED';
     case ReponseSupport = 'SUPPORT_REPLIED';
+    case DemandeAdministration = 'SCHOOL_ACTION_REQUESTED';
     case NoteInterne = 'INTERNAL_NOTE_ADDED';
     case ReponseClient = 'CUSTOMER_REPLIED';
     case PieceJointeClient = 'CUSTOMER_ATTACHED';

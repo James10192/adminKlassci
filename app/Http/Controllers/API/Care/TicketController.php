@@ -63,6 +63,7 @@ class TicketController extends Controller
             'mis_a_jour_depuis.after_or_equal' => "mis_a_jour_depuis ne peut remonter à plus de {$jours} jours.",
         ])['mis_a_jour_depuis'] ?? null;
 
+        $personnel = ($filtres['scope'] ?? 'mine') === 'school';
         $page = $this->requete($request, $filtres)
             ->with(['messagesPublics', 'piecesJointesPubliques'])
             ->when($request->boolean('ouverts'), fn ($q) => $q->ouverts())
@@ -71,7 +72,7 @@ class TicketController extends Controller
             ->paginate(20);
 
         return response()->json([
-            'data' => $page->getCollection()->map(fn ($t) => $this->projection->resume($t))->values(),
+            'data' => $page->getCollection()->map(fn ($t) => $this->projection->resume($t, $personnel))->values(),
             'meta' => ['page' => $page->currentPage(), 'pages' => $page->lastPage(), 'total' => $page->total()],
         ]);
     }
@@ -90,15 +91,16 @@ class TicketController extends Controller
     {
         $filtres = $this->filtresLecture($request);
 
+        $personnel = ($filtres['scope'] ?? 'mine') === 'school';
         $ticket = $this->requete($request, $filtres)
-            ->with(['messagesPublics', 'piecesJointesPubliques'])
+            ->with(['messagesPublics', 'messagesEtablissement', 'piecesJointesPubliques'])
             ->where('reference', $reference)
             ->first();
 
         // 404 et non 403 : ne pas confirmer qu'une reference existe ailleurs.
         abort_if($ticket === null, 404);
 
-        return response()->json($this->projection->detail($ticket));
+        return response()->json($this->projection->detail($ticket, $personnel));
     }
 
     /**
@@ -118,20 +120,21 @@ class TicketController extends Controller
             'author_name' => ['nullable', 'string', 'max:160'],
         ]);
         $filtres = $this->filtres($request);
+        $personnel = ($filtres['scope'] ?? 'mine') === 'school';
 
         $ticket = $this->requete($request, $filtres)->where('reference', $reference)->first();
         abort_if($ticket === null, 404);
 
         try {
-            $rejoue = $repondre->executer($ticket, (int) $filtres['reporter'], $v['author_name'] ?? null, $v['body'], $cle);
+            $rejoue = $repondre->executer($ticket, (int) $filtres['reporter'], $v['author_name'] ?? null, $v['body'], $cle, $personnel);
         } catch (CleIdempotenceReutilisee $e) {
             return response()->json(['error' => 'idempotency_key_reused', 'message' => $e->getMessage()], 422);
         } catch (DemandeClose $e) {
-            return response()->json(['error' => 'ticket_closed', 'message' => $e->getMessage()], 409);
+            return response()->json(['error' => $personnel ? 'school_action_closed' : 'ticket_closed', 'message' => $e->getMessage()], 409);
         }
 
         return response()
-            ->json($this->projection->detail($ticket->fresh(['messagesPublics', 'piecesJointesPubliques'])), $rejoue ? 200 : 201)
+            ->json($this->projection->detail($ticket->fresh(['messagesPublics', 'messagesEtablissement', 'piecesJointesPubliques']), $personnel), $rejoue ? 200 : 201)
             ->header('Idempotent-Replayed', $rejoue ? 'true' : 'false');
     }
 }
