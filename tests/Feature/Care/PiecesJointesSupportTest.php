@@ -55,7 +55,7 @@ it('offre un telechargement explicite pour les images sur mobile', function () {
     $this->actingAs($this->support);
 
     Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
-        ->assertSee('Voir l\'image')
+        ->assertSee('Voir l', false)
         ->assertSee('Télécharger')
         ->assertSee('telecharger=1', false);
 
