@@ -106,3 +106,13 @@ it('refuse même le rejeu d une intervention devenue restreinte', function () {
         ->toThrow(\Symfony\Component\HttpKernel\Exception\HttpException::class);
     expect(SupportTicketIntervention::count())->toBe(1);
 });
+
+
+it('refuse un agent support désactivé même s il conserve ses anciens droits', function () {
+    $this->support->update(['is_active' => false]);
+
+    expect(fn () => preparerTestIntervention($this->ticket, $this->support))
+        ->toThrow(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+
+    expect(SupportTicketIntervention::count())->toBe(0);
+});
