@@ -1,47 +1,53 @@
-# Registre multi-produit KLASSCI — lot fondation (migration additive)
+# Registre KLASSCI : groupe / établissement / produit / instance
 
-Épic de suivi : https://github.com/James10192/adminKlassci/issues/131
+Suivi transverse : https://github.com/James10192/adminKlassci/issues/131
+PR de mise en place : https://github.com/James10192/adminKlassci/pull/135
 
-## Objectif
+## Décision métier impérative du 29 octobre 2026
 
-Distinguer le client commercial (organisation), l'établissement physique,
-le produit vendu (Université ou Collège) et l'instance technique. On peut
-donc associer plusieurs produits au même établissement sans mettre les
-bases métier dans une base commune.
+**Un établissement appartient à une seule catégorie et utilise un seul produit KLASSCI.**
+Un groupe peut détenir plusieurs établissements différents et mutualiser l'accès au
+pilotage commercial. Il ne faut **jamais** afficher « Collège + Université »
+sur une même fiche établissement.
 
-## Tables ajoutées
+Exemple :
+- Groupe **Rostan** (organisation cliente/facturable).
+  - **Rostan Collège** : catégorie « collège » ; plateforme `fastapi-college`.
+  - **USAT** : catégorie « université LMD » ; plateforme `laravel-v2`.
+  - **ISLG** : catégorie « grande école BTS » ; plateforme `laravel-v2`.
 
-- saas_organizations : client commercial.
-- saas_establishments : établissements rattachés au client.
-- saas_products : catalogue technique, avec code et adapter_key; inactif par défaut.
-- saas_product_instances : référence chaque instance produit. La clé
-  external_tenant_code est unique **par produit**, pas mondialement.
-  Le legacy_tenant_id optionnel relie l'ancien modèle Tenant pour KLASSCIv2,
-  mais n'est pas nécessaire pour Collège.
+Une école indépendante possède aussi un compte organisation, mais avec un
+seul établissement. L'organisation est un conteneur de propriété/facturation,
+PAS une instance technique ni une catégorie scolaire.
 
-## Impact sur les clients existants
+## Contraintes de données
 
-**Aucune mise à jour ni conversion automatique de tenants.** La migration
-ajoute quatre tables, sans changer les données ni colonnes des tenants
-historiques. Aucun job, écran, endpoint, abonnement, DNS ou connexion DB
-métier n'est activé. Le catalogue est vide à l'installation, de façon
-délibérée pour éviter qu'un nouveau produit fictif se retrouve actif.
+- `saas_organizations` : compte commercial, supporte plusieurs établissements.
+- `saas_products` : 1 code commercial par catégorie `establishment_type` ;
+  l'adaptateur technique `adapter_key` peut être partagé (LMD + BTS).
+  Les catégories sont des données de catalogue, jamais déduites du sous-domaine.
+- `saas_establishments` : appartient à une organisation et à **exactement un
+  produit** (FK product_id NOT NULL).
+- `saas_product_instances` : au maximum **une instance par établissement**
+  (contrainte UNIQUE establishment_id). Une FK composite
+  (establishment_id, product_id) force le produit de l'instance à être celui
+  de l'établissement. Les codes tenant sont uniques par produit.
 
-Prochaine migration contrôlée à écrire : rapprochement des établissements
-existants avec leur organisation, validation manuelle des correspondances
-incertaines (ISLG/rostan, branches par tenant, anciens slugs), puis
-import College. Ne pas attribuer le plan Free par défaut à un tenant
-découvert : cf. issue #73.
+Ne pas exposer d'édition libre du produit/catégorie après activation sans
+workflow de migration explicite (nouvelle instance, validation, audit).
+Ne pas confondre groupe et établissement dans l'authentification : un
+responsable groupe peut voir plusieurs établissements, mais chaque rôle
+et jeton d'accès est contrôlé par établissement.
 
-## Invariants
+## Compatibilité et migration
 
-- Un établissement peut être client des deux produits.
-- Deux produits peuvent utiliser le même code tenant externe ; dans un
-  même produit, le code n'est pas réutilisé.
-- Un établissement ne porte qu'une instance par produit dans ce modèle
-  initial. Évaluer le cas multi-campus avant évolution.
-- Les produits restent inactifs tant que leurs adaptateurs ne passent pas
-  les tests de contrat.
-- Aucune clé d'infrastructure ou de DB ne vit dans ce registre public.
-- Le plan, les droits et la facturation sont hors portée du lot : ne pas
-  interpréter cette migration comme un système de subscription opérationnel.
+Migration **strictement additive** : aucune écriture sur les tables historiques
+`tenants`, abonnements ou bases métiers. Aucune création ou import automatique
+des vraies écoles : exemple Rostan = scénarios de test uniquement.
+Le catalogue est volontairement vide et désactivé : pas de trial ni billing
+activé par cette PR. Les rapprochements entre les vrais codes historiques
+et les structures groupe demandent un inventaire avant import.
+
+**Next** : orchestration B2B groupe/école, parcours d'inscription distinct pour
+une école indépendante ou un groupe avec plusieurs écoles, entitlement/quotas
+par école, vue consolidée groupe, adapter collège et adapter v2 LMD/BTS.
