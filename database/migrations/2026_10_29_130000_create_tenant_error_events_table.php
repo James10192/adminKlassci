@@ -22,7 +22,8 @@ return new class extends Migration
             $table->unsignedSmallInteger('db_errno')->nullable();
             $table->string('status', 20)->default('new');
             $table->timestamp('resolved_at')->nullable();
-            $table->foreignId('resolved_by')->nullable()->constrained('users')->nullOnDelete();
+            // La table users appartient au schema historique, absent de certaines bases de test.
+            $table->unsignedBigInteger('resolved_by')->nullable();
             $table->timestamp('occurred_at');
             $table->timestamps();
 
