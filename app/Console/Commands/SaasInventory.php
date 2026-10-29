@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Services\Saas\LegacyInventoryReport;
+use App\Services\Saas\SaasInventorySchemaInspector;
 use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
+use PDOException;
 
 final class SaasInventory extends Command
 {
@@ -13,7 +15,7 @@ final class SaasInventory extends Command
 
     protected $description = 'Inventaire groupe/etablissement/produit en lecture seule, sans importer de tenant';
 
-    public function handle(LegacyInventoryReport $inventory): int
+    public function handle(LegacyInventoryReport $inventory, SaasInventorySchemaInspector $schema): int
     {
         $format = (string) $this->option('format');
         if (! in_array($format, ['table', 'json'], true)) {
@@ -23,10 +25,47 @@ final class SaasInventory extends Command
         }
 
         try {
+            $inspection = $schema->inspect();
+
+            if (! $inspection['ready']) {
+                // Les noms de table et colonne proviennent d'une liste fermee
+                // de schemas attendus ; jamais de message SQL brut.
+                if ($format === 'json') {
+                    $this->line(json_encode([
+                        'ok' => false,
+                        'error_code' => 'saas_schema_incomplete',
+                        'missing_tables' => $inspection['missing_tables'],
+                        'missing_columns' => $inspection['missing_columns'],
+                        'next_step' => 'php artisan migrate:status',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+                } else {
+                    $this->error('Inventaire impossible : schema du master incomplet.');
+                    if ($inspection['missing_tables'] !== []) {
+                        $this->warn('Tables absentes : '.implode(', ', $inspection['missing_tables']));
+                    }
+                    if ($inspection['missing_columns'] !== []) {
+                        $this->warn('Colonnes absentes : '.implode(', ', $inspection['missing_columns']));
+                    }
+                    $this->line('Verifier : php artisan migrate:status');
+                    $this->line('Ne pas utiliser migrate:fresh ou migrate:refresh en production.');
+                }
+
+                return self::FAILURE;
+            }
+
             $report = $inventory->generate();
-        } catch (QueryException) {
-            // Ne pas renvoyer le SQL, un nom de DB ou la connexion aux logs.
-            $this->error('Inventaire indisponible : verifier les migrations du master.');
+        } catch (QueryException|PDOException) {
+            // Ni SQL brut ni identifiants de connexion dans la sortie.
+            if ($format === 'json') {
+                $this->line(json_encode([
+                    'ok' => false,
+                    'error_code' => 'master_database_unavailable_or_query_failed',
+                    'next_step' => 'php artisan migrate:status',
+                ], JSON_THROW_ON_ERROR));
+            } else {
+                $this->error('Inventaire impossible : connexion, droits de lecture ou requete master a verifier.');
+                $this->line('Verifier : php artisan migrate:status');
+            }
 
             return self::FAILURE;
         }
