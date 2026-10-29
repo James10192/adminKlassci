@@ -9,6 +9,7 @@ final class SaasCapabilities
     public const VIEW = 'saas.reconciliation.view';
     public const PROPOSE = 'saas.reconciliation.propose';
     public const REVIEW = 'saas.reconciliation.review';
+    public const MANAGE_CATALOG = 'saas.catalog.manage';
 
     public static function allows(?User $user, string $ability): bool
     {
