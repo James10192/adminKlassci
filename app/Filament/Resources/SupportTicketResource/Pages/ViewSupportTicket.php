@@ -55,17 +55,48 @@ class ViewSupportTicket extends ViewRecord
         return Actions\Action::make('prendre')
             ->label('Prendre en charge')
             ->icon('heroicon-o-hand-raised')
+            ->requiresConfirmation()
+            ->modalDescription("La demande sera assignée à votre compte. Lorsqu'elle est prête à être traitée, elle passera aussi « En cours » ; l'école verra ce changement dans son suivi.")
+            ->modalSubmitActionLabel('Confirmer la prise en charge')
             ->visible(fn () => Gate::allows('support.tickets.manage') && $this->record->assigned_admin_id !== auth()->id())
             ->action(fn () => $this->tenter(
-                fn () => app(AssignerTicket::class)->executer($this->record, auth()->user(), auth()->user()),
-                'Demande assignée à vous.'));
+                fn () => $this->prendreEnCharge(),
+                "Prise en charge enregistrée. L'école verra le statut lors de la synchronisation."));
+    }
+
+    /**
+     * Un clic sur « Prendre en charge » doit modifier le suivi, pas seulement
+     * une affectation interne invisible pour l'école. Transition conditionnelle
+     * et atomique : ne jamais effacer une attente d'action de l'école.
+     */
+    private function prendreEnCharge(): void
+    {
+        DB::transaction(function () {
+            app(AssignerTicket::class)->executer($this->record, auth()->user(), auth()->user());
+
+            if (in_array($this->record->status, [
+                StatutTicket::TriagePending,
+                StatutTicket::Triaged,
+                StatutTicket::WaitingSupport,
+                StatutTicket::Confirmed,
+            ], true) && app(TicketStateMachine::class)->peut($this->record->status, StatutTicket::InProgress)) {
+                app(TicketStateMachine::class)->franchir(
+                    $this->record,
+                    StatutTicket::InProgress,
+                    Acteur::personnel(auth()->user()),
+                );
+            }
+        });
     }
 
     private function actionRepondre(): Actions\Action
     {
         return Actions\Action::make('repondre')
-            ->label('Répondre')
+            ->label('Écrire un message')
             ->icon('heroicon-o-chat-bubble-left-right')
+            ->modalHeading('Réponse à l’école ou note interne')
+            ->modalDescription("Une réponse publique apparaîtra dans le suivi de l'école. Une note interne ou technique reste réservée au personnel habilité.")
+            ->modalSubmitActionLabel('Valider le message')
             ->color('primary')
             ->visible(fn () => Gate::allows('support.tickets.reply') || Gate::allows('support.internal_notes'))
             ->form([
@@ -75,8 +106,14 @@ class ViewSupportTicket extends ViewRecord
                     ->required()
                     ->inline()
                     ->options(fn () => collect($this->visibilitesAutorisees())->mapWithKeys(fn ($v) => [$v->value => $v->libelle()]))
-                    ->colors([VisibiliteMessage::PublicClient->value => 'warning'])
+                    ->colors([VisibiliteMessage::PublicClient->value => 'success'])
+                    ->helperText("Choisissez « Visible par l'école » pour lui répondre. Les autres types ne lui sont jamais transmis.")
                     ->live(),
+                Forms\Components\Placeholder::make('destination')
+                    ->label('Conséquence de cet envoi')
+                    ->content(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
+                        ? "L'école pourra lire cette réponse dans son espace support. Son instance notifiera le rapporteur si le suivi automatique est actif."
+                        : "La note sera conservée dans ce dossier et ne sera pas visible par l'école."),
                 Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
                 // Une question posee a l'ecole : la demande passe en « Action requise » chez elle,
                 // et sa reponse la ramene d'elle-meme en attente support.
@@ -102,7 +139,7 @@ class ViewSupportTicket extends ViewRecord
                     if ($attendre) {
                         app(TicketStateMachine::class)->franchir($this->record, StatutTicket::WaitingCustomer, Acteur::personnel(auth()->user()));
                     }
-                }), $visibilite === VisibiliteMessage::PublicClient ? "Réponse envoyée à l'école." : 'Note enregistrée.', garder: $action);
+                }), $visibilite === VisibiliteMessage::PublicClient ? "Réponse publiée dans le suivi de l'école." : 'Note interne enregistrée (non visible par l’école).', garder: $action);
             });
     }
 
@@ -111,6 +148,8 @@ class ViewSupportTicket extends ViewRecord
         return Actions\Action::make('statut')
             ->label('Changer le statut')
             ->icon('heroicon-o-arrow-path')
+            ->modalDescription("Le nouveau statut sera affiché dans l'espace support de l'école. Les changements importants déclenchent une notification sur l'instance si son suivi est actif.")
+            ->modalSubmitActionLabel('Appliquer le statut')
             ->visible(fn () => Gate::allows('support.tickets.manage'))
             ->form([
                 Forms\Components\Select::make('vers')
@@ -125,7 +164,7 @@ class ViewSupportTicket extends ViewRecord
             ])
             ->action(fn (array $data) => $this->tenter(fn () => app(TicketStateMachine::class)->franchir(
                 $this->record, StatutTicket::from($data['vers']), Acteur::personnel(auth()->user()), $data['motif'] ?? null,
-            ), 'Statut mis à jour.'));
+            ), "Statut mis à jour. L'école verra sa nouvelle situation après synchronisation."));
     }
 
     private function actionQualifier(): Actions\Action
@@ -133,6 +172,8 @@ class ViewSupportTicket extends ViewRecord
         return Actions\Action::make('qualifier')
             ->label('Qualifier')
             ->icon('heroicon-o-tag')
+            ->modalDescription("Classement interne pour prioriser le traitement. Il ne publie aucun message à l'école et ne lui envoie pas de notification.")
+            ->modalSubmitActionLabel('Enregistrer la qualification')
             ->visible(fn () => Gate::allows('support.tickets.manage'))
             ->fillForm(fn () => [
                 'categorie' => $this->record->internal_category?->value,
@@ -168,6 +209,8 @@ class ViewSupportTicket extends ViewRecord
         return Actions\Action::make('assigner')
             ->label('Assigner')
             ->icon('heroicon-o-user-plus')
+            ->modalDescription("Affecte un membre de l'équipe à la demande. Cette affectation interne n'envoie pas de notification à l'école.")
+            ->modalSubmitActionLabel('Confirmer l’assignation')
             ->color('gray')
             ->visible(fn () => Gate::allows('support.tickets.manage'))
             ->form([

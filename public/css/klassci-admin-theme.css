@@ -870,3 +870,170 @@ a.fi-sidebar-item-button.bg-primary-50 {
     bottom: calc(100% + 2px) !important;
     top: auto !important;
 }
+
+
+/* ================================================================
+   KLASSCI Care — theme sombre et menu mobile
+   Sur Filament, html.dark est la source de verite du theme. Les
+   overrides Sequence qui imposaient du blanc masquaient le contenu.
+   ================================================================ */
+html.dark {
+    color-scheme: dark;
+    --bg: #0b1220;
+    --card: #111c30;
+    --border: #334155;
+    --k-ink: #f1f5f9;
+    --k-unknown: #cbd5e1;
+    --s-bg: #101a2c;
+    --s-border: #334155;
+    --s-hover: #1d2a40;
+    --s-text: #cbd5e1;
+    --s-hover-t: #ffffff;
+    --s-muted: #94a3b8;
+    --k-primary-soft: rgba(96,165,250,.16);
+}
+html.dark .fi-topbar,
+html.dark header.fi-topbar {
+    background: rgba(15,23,42,.97) !important;
+    border-bottom-color: var(--border) !important;
+}
+html.dark .fi-header-heading,
+html.dark .fi-section-header-heading,
+html.dark .fi-in-text-item-label,
+html.dark .fi-wi-stats-overview-stat-value,
+html.dark .fi-wi-table .fi-ta-content-ctn > .px-4.py-3 {
+    color: #f1f5f9 !important;
+}
+html.dark .fi-header-subheading,
+html.dark .fi-breadcrumbs,
+html.dark .fi-wi-stats-overview-stat-label,
+html.dark .fi-in-entry-wrp-label,
+html.dark .fi-ta-empty-state-heading {
+    color: #cbd5e1 !important;
+}
+html.dark .fi-in-entry-wrp,
+html.dark .fi-ta-search-input,
+html.dark .fi-pagination-items-per-page-select {
+    background: #1b2a40 !important;
+    border-color: #415169 !important;
+    color: #f1f5f9 !important;
+}
+html.dark .fi-in-entry-wrp:hover,
+html.dark .fi-ta-row:hover .fi-ta-cell {
+    background: #24364e !important;
+}
+html.dark .fi-ta-header-cell {
+    background: #1b2a40 !important;
+    color: #e2e8f0 !important;
+    border-bottom-color: #415169 !important;
+}
+html.dark .fi-ta-cell {
+    color: #e2e8f0 !important;
+    border-bottom-color: #334155 !important;
+}
+html.dark .fi-fo-field-wrp-label,
+html.dark .fi-dropdown-list-item-label {
+    color: #e2e8f0 !important;
+}
+html.dark .fi-dropdown-panel {
+    background: #111c30 !important;
+    border-color: #475569 !important;
+}
+html.dark .fi-sidebar-item-button:not(.fi-active):not([aria-current="page"]),
+html.dark .fi-sidebar-item-label {
+    color: #cbd5e1 !important;
+}
+html.dark .fi-sidebar-item-active .fi-sidebar-item-label {
+    color: #ffffff !important;
+}
+html.dark .fi-sidebar-item-button:hover,
+html.dark .fi-sidebar-item-button:focus-visible {
+    background: #1b2a40 !important;
+    color: #ffffff !important;
+}
+html.dark .fi-sidebar-item-active .fi-sidebar-item-button,
+html.dark .fi-sidebar-item-button[aria-current="page"] {
+    background: var(--k-primary) !important;
+}
+html.dark .fi-btn-color-gray,
+html.dark .fi-btn-color-gray:hover {
+    background: #24364e !important;
+    color: #f8fafc !important;
+    border-color: #475569 !important;
+}
+html.dark .fi-ta-search-input:focus { background: #24364e !important; }
+html.dark .fi-wi-stats-overview-stat:hover { background: rgba(96,165,250,.06) !important; }
+html.dark .fi-simple-layout { background: #0b1220 !important; }
+html.dark .fi-simple-main { background: #111c30 !important; border-color: #334155 !important; }
+html.dark .fi-simple-main h1,
+html.dark .fi-simple-main [class*="heading"] { color: #f8fafc !important; }
+html.dark .fi-simple-main label,
+html.dark .fi-simple-main [class*="label"]:not(.fi-btn-label) { color: #e2e8f0 !important; }
+html.dark .fi-simple-main input[type="email"],
+html.dark .fi-simple-main input[type="password"],
+html.dark .fi-simple-main input[type="text"],
+html.dark .fi-simple-main .fi-input {
+    background: #1b2a40 !important;
+    color: #f8fafc !important;
+    border-color: #475569 !important;
+}
+
+/* La topbar doit passer devant les cartes animees (transform cree un
+   stacking context). Ne pas relever fi-main ni ecraser les modales. */
+.fi-topbar, header.fi-topbar {
+    z-index: 60 !important;
+    overflow: visible !important;
+}
+.fi-topbar .fi-dropdown-panel {
+    z-index: 65 !important;
+}
+@media (max-width: 640px) {
+    .fi-topbar .fi-dropdown-panel {
+        max-width: calc(100vw - 1rem) !important;
+        max-height: calc(100dvh - 5rem) !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+}
+
+/* Pieces jointes Care : affichage lisible sur petits ecrans, deux gestes
+   explicites (ouvrir une image / telecharger), sans texte tronque. */
+.k-care-piece {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+    padding: .75rem;
+    border: 1px solid var(--border);
+    border-radius: .65rem;
+    min-width: 0;
+}
+.k-care-piece-infos { flex: 1 1 13rem; min-width: 0; }
+.k-care-piece-nom { overflow-wrap: anywhere; font-weight: 600; color: var(--k-ink); }
+.k-care-piece-meta { display: block; margin-top: .25rem; font-size: .75rem; color: var(--s-text); }
+.k-care-piece-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.k-care-piece-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: .5rem .8rem;
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    background: var(--card);
+    color: var(--k-ink);
+    font-weight: 600;
+    text-decoration: none;
+}
+.k-care-piece-actions a.k-care-primary {
+    background: var(--k-primary);
+    border-color: var(--k-primary);
+    color: #fff;
+}
+.k-care-piece-actions a:focus-visible { outline-offset: 3px; }
+@media (max-width: 640px) {
+    .k-care-piece { align-items: stretch; flex-direction: column; }
+    .k-care-piece-actions { width: 100%; }
+    .k-care-piece-actions a { flex: 1 1 auto; }
+}

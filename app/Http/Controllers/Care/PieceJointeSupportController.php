@@ -20,9 +20,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class PieceJointeSupportController extends Controller
 {
-    public static function lien(SupportTicketAttachment $piece): string
+    public static function lien(SupportTicketAttachment $piece, bool $telecharger = false): string
     {
-        return URL::temporarySignedRoute('care.pieces.ouvrir', now()->addMinutes(10), ['piece' => $piece->getKey()]);
+        $parametres = ['piece' => $piece->getKey()];
+        if ($telecharger) {
+            $parametres['telecharger'] = 1;
+        }
+
+        return URL::temporarySignedRoute('care.pieces.ouvrir', now()->addMinutes(10), $parametres);
     }
 
     public function __invoke(SupportTicketAttachment $piece): StreamedResponse
@@ -33,7 +38,8 @@ class PieceJointeSupportController extends Controller
             abort(404);
         }
 
-        $disposition = $piece->estImage() ? 'inline' : 'attachment';
+        // Le parametre de telechargement fait partie de la signature URL.
+        $disposition = $piece->estImage() && ! request()->boolean('telecharger') ? 'inline' : 'attachment';
 
         return Storage::disk($piece->disk)->response($piece->path, $piece->original_name, [
             'Content-Type' => $piece->mime,
