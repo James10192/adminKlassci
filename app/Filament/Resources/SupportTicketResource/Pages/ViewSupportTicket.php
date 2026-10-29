@@ -279,7 +279,9 @@ class ViewSupportTicket extends ViewRecord
                     Infolists\Components\TextEntry::make('customer_category')->label('Catégorie choisie')
                         ->formatStateUsing(fn ($state) => $state->libelle()),
                     Infolists\Components\TextEntry::make('status')->label('Statut')->badge()
-                        ->formatStateUsing(fn ($state) => $state->libelle())->color(fn ($state) => $state->ton()),
+                        ->formatStateUsing(fn ($state, $record) => $state === StatutTicket::WaitingCustomer
+                            ? ($record->waiting_on === 'school_staff' ? "Action scolarité attendue" : "Réponse du demandeur attendue")
+                            : $state->libelle())->color(fn ($state) => $state->ton()),
                     Infolists\Components\TextEntry::make('tenant.name')->label('Instance')
                         ->url(fn ($record) => route('filament.admin.resources.tenants.view', $record->tenant_id)),
                     Infolists\Components\TextEntry::make('reporter_name_snapshot')->label('Signalé par')->placeholder('—')
