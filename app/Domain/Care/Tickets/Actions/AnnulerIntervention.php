@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Annule uniquement une intervention non exécutée dans le registre Master.
+ * Annule uniquement une intervention encore en attente de routage dans le registre Master.
  * Aucun message, livraison ou accusé côté école n'est prétendu ici.
  */
 final class AnnulerIntervention
@@ -42,9 +42,7 @@ final class AnnulerIntervention
             // la vérification support / réouverture du ticket.
             abort_unless(in_array($intervention->status, [
                 SupportTicketIntervention::PENDING_ROUTING,
-                SupportTicketIntervention::WAITING_ASSIGNEE,
-                SupportTicketIntervention::IN_PROGRESS,
-            ], true), 409);
+             ], true), 409);
 
             $precedent = $intervention->status;
             $intervention->forceFill(['status' => SupportTicketIntervention::CANCELLED])->save();
