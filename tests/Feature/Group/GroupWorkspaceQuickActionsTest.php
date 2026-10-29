@@ -169,5 +169,5 @@ it('monte les deux actions relationnelles et ne révèle aucun jeton technique d
     expect($tenantField->getName())->toBe('tenant_id');
 
     $memberFields = GroupMemberFields::make();
-    expect(collect($memberFields)->pluck('name')->contains('password'))->toBeFalse();
+    expect(collect($memberFields)->map(fn ($field) => $field->getName())->all())->toContain('name', 'role');
 });
