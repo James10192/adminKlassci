@@ -129,7 +129,7 @@
                 </div>
 
                 <button class="submit" type="submit">Enregistrer et accéder au portail</button>
-                <p class="privacy">Votre mot de passe est enregistré sous forme chiffrée irréversible (hachage).</p>
+                <p class="privacy">Votre mot de passe est protégé par un hachage non réversible.</p>
             </form>
         </section>
     </main>
