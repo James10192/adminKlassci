@@ -157,5 +157,5 @@ it('la fenêtre Filament ajouter un établissement se monte sans action AttachAc
         'pageClass' => EditGroup::class,
     ])->mountTableAction('associate_tenant')
       ->assertSet('mountedTableActions.0', 'associate_tenant')
-      ->assertSee('Établissement à rattacher');
+      ->assertSee('Établissement existant');
 });
