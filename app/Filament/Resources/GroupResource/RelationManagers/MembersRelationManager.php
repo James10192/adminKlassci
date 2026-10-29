@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\GroupResource\RelationManagers;
 
 use App\Enums\GroupMemberRole;
+use Livewire\Attributes\On;
 use App\Models\GroupMember;
 use App\Services\Group\GroupMemberAccessReset;
 use App\Services\Group\TemporaryPasswordGenerator;
@@ -24,7 +25,15 @@ class MembersRelationManager extends RelationManager
 
     public function isReadOnly(): bool
     {
-        return ! Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS);
+        // Autorisation au niveau de chaque action, pas via read-only global
+        // qui ferait disparaître des raccourcis dans certains contextes.
+        return false;
+    }
+
+    #[On('group-workspace-updated')]
+    public function refreshWorkspace(): void
+    {
+        // Filament recharge la table après une action rapide de la page.
     }
 
     public function form(Form $form): Form
