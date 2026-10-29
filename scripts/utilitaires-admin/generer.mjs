@@ -41,7 +41,8 @@ const vues = (dossier, acc = []) => {
 };
 
 // Classes propres au projet (namespaces CSS maison), jamais du Tailwind.
-const maison = /^(fi-|gp-|ga-|cell-|x-)/;
+// k-care-* est defini dans klassci-admin-theme.css, pas dans Tailwind.
+const maison = /^(fi-|gp-|ga-|cell-|k-care-|x-)/;
 const echapper = (c) => '.' + c.replace(/([:/.[\]%#])/g, '\\$1');
 const connueDeFilament = (c) => [' ', '{', ':', ','].some((suite) => cssFilament.includes(echapper(c) + suite));
 
