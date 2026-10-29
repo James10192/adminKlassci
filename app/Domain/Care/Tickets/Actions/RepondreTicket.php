@@ -48,12 +48,12 @@ class RepondreTicket
             ]);
 
             $public = $visibilite === VisibiliteMessage::PublicClient;
-            if ($public) {
+            if ($public || $visibilite === VisibiliteMessage::Administration) {
                 // Toucher updated_at : l'ecole decouvre les reponses par
                 // GET /tickets?mis_a_jour_depuis=. Une note interne, elle, ne
                 // touche rien — l'ecole n'a rien de nouveau a lire.
                 $courant->forceFill(array_filter([
-                    'first_response_at' => $courant->first_response_at === null ? now() : null,
+                    'first_response_at' => $public && $courant->first_response_at === null ? now() : null,
                     'updated_at' => now(),
                 ]))->save();
             }
