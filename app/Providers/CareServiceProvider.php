@@ -23,6 +23,7 @@ class CareServiceProvider extends ServiceProvider
 
         RateLimiter::for('care-ecriture', fn (Request $r) => Limit::perMinute((int) config('care.limites.tickets_par_minute'))->by($parInstance($r)));
         RateLimiter::for('care-pieces', fn (Request $r) => Limit::perMinute((int) config('care.pieces_jointes.par_minute'))->by($parInstance($r)));
+        RateLimiter::for('care-telemetrie', fn (Request $r) => Limit::perMinute(60)->by($parInstance($r)));
         RateLimiter::for('care-lecture', fn (Request $r) => Limit::perMinute((int) config('care.limites.lectures_par_minute'))->by($parInstance($r)));
     }
 }

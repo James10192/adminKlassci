@@ -28,6 +28,7 @@ class TenantApiCredential extends Model
         'support:create',
         'support:read',
         'support:update',
+        'telemetry:send',
     ];
 
     protected $table = 'tenant_api_credentials';

@@ -49,6 +49,11 @@ Route::prefix('v1/support')->name('api.care.')->group(function () {
         ->middleware(['care.instance:support:update', 'throttle:care-pieces'])
         ->name('tickets.attachments.store');
 
+    // Telemetrie technique : zero corps, SQL ou PII ; portee independante du support.
+    Route::post('/incidents', [\App\Http\Controllers\API\Care\IncidentTechniqueController::class, 'store'])
+        ->middleware(['care.instance:telemetry:send', 'throttle:care-telemetrie'])
+        ->name('incidents.store');
+
     // Un 👍 / 👎 sur une réponse de Nanan, l'assistant IA de l'école.
     Route::post('/retours-assistant', [\App\Http\Controllers\API\Care\RetourAssistantController::class, 'store'])
         ->middleware(['care.instance:support:create', 'throttle:care-ecriture'])
