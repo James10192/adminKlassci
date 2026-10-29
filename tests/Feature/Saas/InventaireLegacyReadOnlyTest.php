@@ -24,7 +24,7 @@ function saasLegacyTenant(string $code, ?Group $group = null): Tenant
         ],
         'git_branch' => 'presentation',
         'group_id' => $group?->id,
-        'api_token' => 'NE_JAMAIS_AFFICHER_TOKEN',
+        'api_token' => 'NE_JAMAIS_AFFICHER_TOKEN_'.$code,
     ]);
 }
 
