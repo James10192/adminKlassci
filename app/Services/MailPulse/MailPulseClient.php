@@ -32,8 +32,10 @@ final class MailPulseClient
     }
 
     /**
-     * Synchronise un contact. L'opt-in marketing est facultatif et JAMAIS
-     * presume : seules les decisions explicites passent subscribed=true/false.
+     * MailPulse cree actuellement des contacts subscribed=true par defaut.
+     * Exiger un etat de consentement EXPLICITE pour eviter un opt-in invente.
+     * L'appelant doit d'abord charger l'etat du consentement stocke afin de
+     * conserver un opt-in existant lors d'une mise a jour transactionnelle.
      *
      * @return array{ok: bool, status: string, message_id: ?string, error_code: ?string}
      */
@@ -47,11 +49,16 @@ final class MailPulseClient
             return $this->failure('invalid_payload');
         }
 
-        $payload = ['email' => $email, 'external_id' => $externalId, 'language' => 'fr'];
-
-        if ($subscribed !== null) {
-            $payload['subscribed'] = $subscribed;
+        if ($subscribed === null) {
+            return $this->failure('consent_required');
         }
+
+        $payload = [
+            'email' => $email,
+            'external_id' => $externalId,
+            'language' => 'fr',
+            'subscribed' => $subscribed,
+        ];
 
         return $this->request('contacts', $payload, $idempotencyKey);
     }
