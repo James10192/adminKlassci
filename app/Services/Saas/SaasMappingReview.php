@@ -51,12 +51,23 @@ final class SaasMappingReview
                 continue;
             }
 
-            $code = trim((string) ($proposal['tenant_code'] ?? ''));
+            // JSON est une entree non fiable : aucune conversion de tableaux
+            // vers string (warnings PHP convertibles en exceptions).
+            $codeValue = $proposal['tenant_code'] ?? null;
+            $typeValue = $proposal['establishment_type'] ?? null;
+            $groupValue = $proposal['group_code'] ?? null;
+            $evidenceValue = $proposal['evidence_reference'] ?? null;
+
+            $code = is_string($codeValue) ? trim($codeValue) : '';
             $kind = $proposal['kind'] ?? '';
-            $type = trim((string) ($proposal['establishment_type'] ?? ''));
-            $groupCode = trim((string) ($proposal['group_code'] ?? ''));
-            $evidence = trim((string) ($proposal['evidence_reference'] ?? ''));
+            $type = is_string($typeValue) ? trim($typeValue) : '';
+            $groupCode = is_string($groupValue) ? trim($groupValue) : '';
+            $evidence = is_string($evidenceValue) ? trim($evidenceValue) : '';
             $key = strtolower($code);
+
+            if ($groupValue !== null && ! is_string($groupValue)) {
+                $issues[] = 'invalid_group_code';
+            }
 
             if ($code === '' || strlen($code) > 100 || ! preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]*$/', $code)) {
                 $issues[] = 'invalid_tenant_code';
