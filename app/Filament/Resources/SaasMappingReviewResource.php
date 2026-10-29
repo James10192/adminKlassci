@@ -162,6 +162,11 @@ final class SaasMappingReviewResource extends Resource
                     ]),
             ])
             ->headerActions([
+                Tables\Actions\Action::make('browse_inventory')
+                    ->label('Parcourir les instances')
+                    ->icon('heroicon-o-magnifying-glass')
+                    ->color('gray')
+                    ->url(fn (): string => SaasDiscoveryResource::getUrl('index')),
                 Tables\Actions\Action::make('new_review')
                     ->label('Examiner une instance')
                     ->icon('heroicon-o-plus')
