@@ -27,7 +27,7 @@ class SetPasswordController extends Controller
         // because the middleware skips them, but defensive against session
         // staleness after an admin-side reset.
         if (! $member->mustChangePassword()) {
-            return redirect()->route('filament.group.pages.dashboard');
+            return redirect()->to(\App\Filament\Group\Pages\GroupDashboard::getUrl(panel: 'group'));
         }
 
         return response()->view('groupe.set-password', [
@@ -54,7 +54,7 @@ class SetPasswordController extends Controller
 
         session()->forget('gp_invitation_member_id');
 
-        return redirect()->route('filament.group.pages.dashboard')
+        return redirect()->to(\App\Filament\Group\Pages\GroupDashboard::getUrl(panel: 'group'))
             ->with('status', 'Mot de passe mis à jour. Bienvenue sur le portail.');
     }
 }
