@@ -29,62 +29,7 @@ class MembersRelationManager extends RelationManager
 
     public function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->label('Nom complet')
-                    ->required()
-                    ->maxLength(255),
-
-                Forms\Components\TextInput::make('email')
-                    ->label('Email')
-                    ->email()
-                    ->live(onBlur: true)
-                    ->unique(ignoreRecord: true)
-                    ->maxLength(255)
-                    ->helperText('Laissez vide si le membre n\'a pas d\'email — un nom d\'utilisateur sera généré automatiquement.'),
-
-                Forms\Components\TextInput::make('username')
-                    ->label('Nom d\'utilisateur')
-                    ->unique(ignoreRecord: true)
-                    ->maxLength(80)
-                    ->alphaDash()
-                    ->helperText('Généré automatiquement si vide et pas d\'email. Utilisé pour la connexion lorsqu\'il n\'y a pas d\'email.'),
-
-                // Jamais de mot de passe ni hash dans la modale d'édition.
-                // La création manuelle demeure disponible uniquement quand
-                // l'invitation par email n'est pas possible.
-                Forms\Components\TextInput::make('password')
-                    ->label('Mot de passe initial')
-                    ->password()
-                    ->revealable()
-                    ->autocomplete('new-password')
-                    ->visible(fn (string $operation, Forms\Get $get): bool =>
-                        $operation === 'create'
-                        && (! config('group_portal.invite_flow_enabled') || blank($get('email'))))
-                    ->required(fn (string $operation, Forms\Get $get): bool =>
-                        $operation === 'create'
-                        && (! config('group_portal.invite_flow_enabled') || blank($get('email'))))
-                    ->dehydrated(fn (string $operation, $state): bool =>
-                        $operation === 'create' && filled($state))
-                    ->minLength(8)
-                    ->helperText("À communiquer uniquement par un canal vérifié. Le membre devra personnaliser son mot de passe à la connexion."),
-
-                Forms\Components\Select::make('role')
-                    ->label('Rôle')
-                    ->options(GroupMemberRole::options())
-                    ->required()
-                    ->default(GroupMemberRole::Fondateur->value),
-
-                Forms\Components\TextInput::make('phone')
-                    ->label('Téléphone')
-                    ->tel()
-                    ->maxLength(255),
-
-                Forms\Components\Toggle::make('is_active')
-                    ->label('Actif')
-                    ->default(true),
-            ]);
+        return $form->schema(\App\Filament\Forms\Group\GroupMemberFields::make());
     }
 
     public function table(Table $table): Table
