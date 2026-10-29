@@ -6,6 +6,7 @@ use App\Models\User;
 use Tests\Feature\Care\Support;
 
 beforeEach(function () {
+    config(['care.interventions.routing_preview_enabled' => true]);
     $this->ecole = Support::instance('presentation');
     $this->autre = Support::instance('uic');
     $this->jeton = Support::jeton($this->ecole);
