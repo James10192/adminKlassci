@@ -85,3 +85,24 @@ it('refuse une cible externe incorrecte sans créer de demande', function () {
 
     expect(SupportTicketIntervention::count())->toBe(0);
 });
+
+
+it('rejoue une intervention existante après résolution sans en créer une seconde', function () {
+    $initiale = preparerTestIntervention($this->ticket, $this->support);
+    $this->ticket->forceFill(['status' => StatutTicket::Resolved])->save();
+
+    $rejouee = preparerTestIntervention($this->ticket, $this->support);
+
+    expect($rejouee->getKey())->toBe($initiale->getKey())
+        ->and(SupportTicketIntervention::count())->toBe(1)
+        ->and(DB::table('support_ticket_intervention_events')->count())->toBe(1);
+});
+
+it('refuse même le rejeu d une intervention devenue restreinte', function () {
+    preparerTestIntervention($this->ticket, $this->support);
+    $this->ticket->forceFill(['is_security_restricted' => true])->save();
+
+    expect(fn () => preparerTestIntervention($this->ticket, $this->support))
+        ->toThrow(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+    expect(SupportTicketIntervention::count())->toBe(1);
+});
