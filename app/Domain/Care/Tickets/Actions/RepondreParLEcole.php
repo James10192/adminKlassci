@@ -31,11 +31,11 @@ class RepondreParLEcole
     ) {
     }
 
-    public function executer(SupportTicket $ticket, int $rapporteur, ?string $nom, string $corps, string $cle): bool
+    public function executer(SupportTicket $ticket, int $rapporteur, ?string $nom, string $corps, string $cle, bool $personnelEtablissement = false): bool
     {
         $corps = trim($corps);
 
-        return DB::transaction(function () use ($ticket, $rapporteur, $nom, $corps, $cle) {
+        return DB::transaction(function () use ($ticket, $rapporteur, $nom, $corps, $cle, $personnelEtablissement) {
             $courant = SupportTicket::whereKey($ticket->getKey())->lockForUpdate()->firstOrFail();
 
             $existant = $courant->messages()->where('client_key', $cle)->first();
@@ -47,6 +47,10 @@ class RepondreParLEcole
                 return true;
             }
 
+            if ($personnelEtablissement && ! ($courant->status === \App\Domain\Care\Tickets\Enums\StatutTicket::WaitingCustomer && $courant->waiting_on === 'school_staff')) {
+                throw new DemandeClose("Aucune action de l'administration n'est actuellement demandée sur ce dossier.");
+            }
+
             if (TicketStateMachine::fermeeALEcole($courant->status)) {
                 throw new DemandeClose('Cette demande est close. Signalez un nouveau problème si besoin.');
             }
@@ -56,7 +60,7 @@ class RepondreParLEcole
                 'author_type' => $acteur->type,
                 'author_ref' => $acteur->reference,
                 'author_name' => $nom,
-                'visibility' => VisibiliteMessage::PublicClient,
+                'visibility' => $personnelEtablissement ? VisibiliteMessage::Administration : VisibiliteMessage::PublicClient,
                 'body' => $corps,
                 'client_key' => $cle,
             ]);
