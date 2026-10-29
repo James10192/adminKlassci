@@ -40,7 +40,7 @@ it('refuse une configuration non HTTPS, sans envoyer le jeton', function () {
 });
 
 it('envoie une notification email via MailPulse et non un fournisseur direct', function () {
-    Http::fake(['mailpulse.example/api/v1/messages' => Http::response([
+    Http::fake(['https://mailpulse.example/api/v1/messages' => Http::response([
         'message' => ['id' => 'msg-42', 'status' => 'queued'],
     ], 202)]);
 
@@ -62,7 +62,7 @@ it('envoie une notification email via MailPulse et non un fournisseur direct', f
 });
 
 it('ne suppose jamais un consentement marketing lors de la synchronisation contact', function () {
-    Http::fake(['mailpulse.example/api/v1/contacts' => Http::response([
+    Http::fake(['https://mailpulse.example/api/v1/contacts' => Http::response([
         'contact' => ['id' => 'contact-1'],
     ], 200)]);
 
@@ -77,7 +77,7 @@ it('ne suppose jamais un consentement marketing lors de la synchronisation conta
 });
 
 it('laisse le worker outbox gerer les reprises sans retenter immediatement', function () {
-    Http::fake(['mailpulse.example/api/v1/messages' => Http::response(['error' => 'unavailable'], 503)]);
+    Http::fake(['https://mailpulse.example/api/v1/messages' => Http::response(['error' => 'unavailable'], 503)]);
 
     expect(app(MailPulseClient::class)->sendEmail('admin@ecole.ci', 'Activation', 'Message', 'event-1'))
         ->toMatchArray(['ok' => false, 'error_code' => 'transient_failure']);
@@ -86,7 +86,7 @@ it('laisse le worker outbox gerer les reprises sans retenter immediatement', fun
 });
 
 it('ne retente pas aveuglement apres une erreur de permissions', function () {
-    Http::fake(['mailpulse.example/api/v1/messages' => Http::response(['error' => 'invalid key'], 401)]);
+    Http::fake(['https://mailpulse.example/api/v1/messages' => Http::response(['error' => 'invalid key'], 401)]);
 
     expect(app(MailPulseClient::class)->sendEmail('admin@ecole.ci', 'Activation', 'Message', 'event-1'))
         ->toMatchArray(['ok' => false, 'error_code' => 'unauthorized']);
