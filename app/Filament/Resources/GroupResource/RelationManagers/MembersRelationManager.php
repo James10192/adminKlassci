@@ -139,7 +139,7 @@ class MembersRelationManager extends RelationManager
                     ->requiresConfirmation()
                     ->modalHeading('Réinitialiser l’accès du membre ?')
                     ->modalDescription(
-                        "Le mot de passe actuel sera invalidé et un nouvel accès temporaire sera préparé pour l'adresse e-mail enregistrée. La remise du message dépendra du service de messagerie."
+                        "Un lien sécurisé à usage unique sera envoyé à l’adresse e-mail du membre. Son mot de passe actuel reste utilisable jusqu’à sa confirmation."
                     )
                     ->modalSubmitActionLabel('Confirmer la réinitialisation')
                     ->visible(fn (GroupMember $record): bool =>
@@ -159,7 +159,7 @@ class MembersRelationManager extends RelationManager
                         \Filament\Notifications\Notification::make()
                             ->success()
                             ->title('Réinitialisation prise en compte')
-                            ->body("Le message d'accès a été mis en file d'envoi. Sa livraison n'est pas encore confirmée.")
+                            ->body("Le lien sécurisé a été mis en file d’envoi. Sa livraison n’est pas encore confirmée.")
                             ->send();
                     }),
                 Tables\Actions\EditAction::make()
