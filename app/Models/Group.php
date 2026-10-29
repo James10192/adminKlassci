@@ -28,6 +28,12 @@ class Group extends Model
         'founded_year' => 'integer',
     ];
 
+    /** Pont explicite vers le registre SaaS : pas de rapprochement automatique. */
+    public function saasOrganization()
+    {
+        return $this->hasOne(SaasOrganization::class, 'legacy_group_id');
+    }
+
     public function tenants()
     {
         return $this->hasMany(Tenant::class);
