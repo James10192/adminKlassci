@@ -28,7 +28,7 @@ final class SaasDiscoveryResource extends Resource
     protected static ?string $navigationLabel = 'Instances à qualifier';
     protected static ?string $modelLabel = 'instance historique';
     protected static ?string $pluralModelLabel = 'instances historiques';
-    protected static ?string $navigationIcon = 'heroicon-o-magnifying-glass-circle';
+    protected static ?string $navigationIcon = 'heroicon-o-magnifying-glass';
     protected static ?int $navigationSort = 3;
     protected static ?string $slug = 'instances-a-qualifier';
 
