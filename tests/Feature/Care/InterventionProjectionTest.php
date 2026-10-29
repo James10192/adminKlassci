@@ -57,3 +57,11 @@ it('refuse les identifiants d instance sans portee de lecture', function () {
     $sans = Support::jeton($this->ecole, ['support:create']);
     $this->withToken($sans)->getJson('/api/v1/support/interventions')->assertForbidden();
 });
+
+it('desactive la projection tant que le protocole de livraison ne fonctionne pas', function () {
+    config(['care.interventions.routing_preview_enabled' => false]);
+
+    $this->withToken($this->jeton)
+        ->getJson('/api/v1/support/interventions')
+        ->assertNotFound();
+});
