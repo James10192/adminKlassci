@@ -2,7 +2,7 @@
 
 namespace App\Services\Group;
 
-use App\Mail\Group\GroupMemberInvitationMail;
+use App\Mail\Group\GroupMemberPasswordResetMail;
 use App\Models\GroupMember;
 use App\Models\User;
 use App\Services\Saas\SaasCapabilities;
@@ -15,22 +15,18 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Réinitialisation explicite d'un membre existant, sans divulgation des hashes
- * ou mot de passe au personnel. Pas de mise à jour silencieuse depuis EditAction.
+ * Réinitialisation par lien à usage unique, sans exposer ni modifier
+ * le mot de passe courant avant la validation par le membre lui-même.
  */
 final class GroupMemberAccessReset
 {
-    public function __construct(private TemporaryPasswordGenerator $generator)
-    {
-    }
-
     public function reset(User $operator, int $groupId, int $memberId): void
     {
         Gate::forUser($operator)->authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS);
 
         if (! config('group_portal.invite_flow_enabled', false)) {
             throw ValidationException::withMessages([
-                'reset' => "Les invitations par e-mail sont désactivées. Réactivez le flux ou utilisez la procédure d'assistance vérifiée.",
+                'reset' => "Les invitations par e-mail sont désactivées. Utilisez la procédure d'assistance vérifiée.",
             ]);
         }
 
@@ -39,39 +35,41 @@ final class GroupMemberAccessReset
         $decay = max(60, (int) config('group_portal.member_reset_window_seconds', 3600));
         if (RateLimiter::tooManyAttempts($key, $max)) {
             throw ValidationException::withMessages([
-                'reset' => "Trop de demandes de réinitialisation. Réessayez plus tard.",
+                'reset' => 'Trop de demandes de réinitialisation. Réessayez plus tard.',
             ]);
         }
 
-        DB::transaction(function () use ($operator, $groupId, $memberId): void {
+        DB::transaction(function () use ($groupId, $memberId): void {
             $member = GroupMember::query()->whereKey($memberId)->lockForUpdate()->firstOrFail();
-
             if ((int) $member->group_id !== $groupId || ! $member->is_active || blank($member->email)) {
                 throw ValidationException::withMessages([
-                    'reset' => "Ce membre n'est pas éligible à une réinitialisation par e-mail dans ce groupe.",
+                    'reset' => "Ce membre n'est pas éligible à la réinitialisation par e-mail dans ce groupe.",
                 ]);
             }
 
-            $temporaryPassword = $this->generator->generate();
-            $rawToken = Str::random(64);
+            $token = Str::random(64);
+            $validUntil = now()->addHours(max(1, (int) config('group_portal.invitation_ttl_hours', 24)));
+
+            // Le secret d'authentification actuel reste INCHANGÉ. Seul le
+            // jeton de récupération est renouvelé, révoquant les anciens.
+            $member->forceFill([
+                'invitation_token' => hash('sha256', $token),
+                'invitation_sent_at' => now(),
+            ])->save();
+
             $url = URL::temporarySignedRoute(
-                'groupe.invitation.activate',
-                now()->addHours(max(1, (int) config('group_portal.invitation_ttl_hours', 24))),
-                ['member' => $member->id, 'token' => $rawToken],
+                'groupe.password-reset.show',
+                $validUntil,
+                ['member' => $member->id, 'token' => $token],
             );
 
-            // Nouvelle empreinte d'accès et invitation persistées ensemble.
-            // La mise en file doit être acquittée, sinon la transaction annule
-            // le reset pour ne pas laisser l'ancien membre sans identifiants.
-            $member->assignInvitationCredentials($temporaryPassword, hash('sha256', $rawToken));
-
             Mail::to($member->email)->queue(
-                (new GroupMemberInvitationMail($member, $temporaryPassword, $url))->afterCommit()
+                (new GroupMemberPasswordResetMail($member, $url))->afterCommit()
             );
         });
 
         RateLimiter::hit($key, $decay);
-        // L'envoi est mis en file, pas garanti délivré : la notification UI
-        // ne doit jamais prétendre que le destinataire a reçu son e-mail.
+        // Aucune garantie de livraison : seule la mise en file est confirmée.
+        // Si la file échoue après commit, l'ancien mot de passe reste utilisable.
     }
 }
