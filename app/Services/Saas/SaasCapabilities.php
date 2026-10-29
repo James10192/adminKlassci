@@ -10,6 +10,7 @@ final class SaasCapabilities
     public const PROPOSE = 'saas.reconciliation.propose';
     public const REVIEW = 'saas.reconciliation.review';
     public const MANAGE_CATALOG = 'saas.catalog.manage';
+    public const MANAGE_GROUP_MEMBERSHIP = 'saas.groups.membership.manage';
 
     public static function allows(?User $user, string $ability): bool
     {
