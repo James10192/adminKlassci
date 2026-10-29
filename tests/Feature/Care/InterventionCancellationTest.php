@@ -69,3 +69,13 @@ it('refuse le dossier devenu restreint et un motif insuffisant', function () {
     ))->toThrow(\Symfony\Component\HttpKernel\Exception\HttpException::class);
     expect(DB::table('support_ticket_intervention_events')->count())->toBe(1);
 });
+
+
+it('ne permet pas d annuler une intervention déjà attribuée sans révocation distante', function () {
+    $this->intervention->forceFill(['status' => SupportTicketIntervention::WAITING_ASSIGNEE])->save();
+    expect(fn () => app(AnnulerIntervention::class)->executer(
+        $this->intervention->id, $this->support, 'Action non necessaire'
+    ))->toThrow(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+    expect($this->intervention->fresh()->status)->toBe(SupportTicketIntervention::WAITING_ASSIGNEE)
+        ->and(DB::table('support_ticket_intervention_events')->count())->toBe(1);
+});
