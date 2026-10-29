@@ -40,6 +40,28 @@ it('ne rend que les demandes touchees depuis la date donnee', function () {
         ->assertJsonPath('data.0.derniere_reponse_support_le', now()->toIso8601String());
 });
 
+it('separe une sollicitation de scolarite des messages visibles par l etudiant', function () {
+    $this->actingAs($this->staff);
+    app(\App\Domain\Care\Tickets\Actions\RepondreTicket::class)
+        ->executer($this->ticket, $this->staff, 'Vérifiez les inscriptions du groupe.', VisibiliteMessage::Administration);
+    app(\App\Domain\Care\Tickets\Services\TicketStateMachine::class)
+        ->franchir($this->ticket, \App\Domain\Care\Tickets\Enums\StatutTicket::WaitingCustomer,
+            \App\Domain\Care\Tickets\Services\Acteur::personnel($this->staff), destinataire: 'school_staff');
+
+    $this->withToken($this->jeton)->getJson("/api/v1/support/tickets/{$this->reference}?reporter=42&scope=mine")
+        ->assertOk()->assertJsonPath('statut.code', 'EN_ANALYSE')
+        ->assertJsonCount(0, 'messages')
+        ->assertJsonMissing(['corps' => 'Vérifiez les inscriptions du groupe.'])
+        ->assertJsonMissingPath('derniere_demande_etablissement_le');
+
+    $this->withToken($this->jeton)->getJson("/api/v1/support/tickets/{$this->reference}?scope=school")
+        ->assertOk()->assertJsonPath('statut.code', 'ACTION_REQUISE')
+        ->assertJsonPath('action_cible', 'ETABLISSEMENT')
+        ->assertJsonPath('messages.0.destinataire', 'ETABLISSEMENT')
+        ->assertJsonPath('messages.0.corps', 'Vérifiez les inscriptions du groupe.')
+        ->assertJsonStructure(['derniere_demande_etablissement_le']);
+});
+
 it('ne signale pas une note interne a l ecole', function () {
     Carbon::setTestNow(now()->addHour());
     $repere = now()->toIso8601String();
