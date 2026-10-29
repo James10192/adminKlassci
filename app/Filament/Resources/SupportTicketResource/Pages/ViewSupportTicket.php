@@ -95,7 +95,7 @@ class ViewSupportTicket extends ViewRecord
             ->label('Écrire un message')
             ->icon('heroicon-o-chat-bubble-left-right')
             ->modalHeading('Réponse à l’école ou note interne')
-            ->modalDescription("Une réponse publique apparaîtra dans le suivi de l'école. Une note interne ou technique reste réservée au personnel habilité.")
+            ->modalDescription("Une réponse publique apparaît dans le suivi de la demande et peut notifier son auteur. Une note interne ou technique reste réservée au personnel habilité. Ce formulaire ne contacte pas directement l'administration de l'établissement.")
             ->modalSubmitActionLabel('Valider le message')
             ->color('primary')
             ->visible(fn () => Gate::allows('support.tickets.reply') || Gate::allows('support.internal_notes'))
@@ -124,23 +124,32 @@ class ViewSupportTicket extends ViewRecord
                 Forms\Components\Placeholder::make('destination')
                     ->label('Conséquence de cet envoi')
                     ->content(fn (Forms\Get $get) => match ($get('visibilite')) {
-                        VisibiliteMessage::PublicClient->value => "Cette réponse sera visible par l'école dans son suivi. Son instance notifiera le rapporteur si le suivi automatique est actif.",
+                        VisibiliteMessage::PublicClient->value => "Cette réponse apparaîtra dans le suivi de la demande. Le rapporteur (".($this->record->reporter_name_snapshot ?: 'auteur du signalement').") pourra la lire et être notifié si son instance a activé le suivi. Ce n'est pas une demande adressée directement à la scolarité.",
                         VisibiliteMessage::InterneSupport->value => "Cette note restera interne au support et ne sera pas visible par l'école.",
                         VisibiliteMessage::Technique->value => "Cette note sera réservée au personnel technique habilité et ne sera pas visible par l'école.",
                         VisibiliteMessage::Securite->value => "Cette note sera réservée aux personnes habilitées à la sécurité et ne sera pas visible par l'école.",
                         default => "Choisissez d'abord le destinataire : rien ne sera envoyé tant qu'aucune option n'est sélectionnée.",
                     }),
                 Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
-                // Une question posee a l'ecole : la demande passe en « Action requise » chez elle,
-                // et sa reponse la ramene d'elle-meme en attente support.
-                // Propose seulement si le dossier peut attendre l'ecole. Livewire relit le dossier
-                // a chaque requete : si son etat change entre l'ouverture et l'envoi, le champ se
-                // masque, et sans dehydratedWhenHidden() le choix de l'agent disparaitrait en
-                // silence (le message partirait seul). La machine a etats tranche alors sous
-                // verrou, et un refus garde le texte saisi.
+                // WAITING_CUSTOMER est l'attente du rapporteur du ticket, pas
+                // une affectation au service de scolarite de l'etablissement.
+                // Le false explicite evite que l'action soit cochee par defaut.
+                // Ne jamais perdre une demande d'attente deja cochee si l'etat
+                // change pendant l'edition : la machine refuse sous verrou.
                 Forms\Components\Toggle::make('attendre_ecole')
-                    ->label("J'attends une réponse de l'école")
+                    ->label('Une réponse du demandeur est nécessaire pour continuer')
+                    ->helperText(fn () => 'À activer uniquement si '.($this->record->reporter_name_snapshot ?: 'la personne ayant signalé le problème').' doit vous répondre. Le dossier passera à « Action requise » dans son suivi. Cette option ne transmet aucune instruction directement à la direction ni au service scolarité de l’établissement.')
+                    ->default(false)
+                    ->live()
                     ->dehydratedWhenHidden()
+                    ->visible(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
+                        && Gate::allows('support.tickets.manage')
+                        && app(TicketStateMachine::class)->peut($this->record->status, StatutTicket::WaitingCustomer)),
+                Forms\Components\Placeholder::make('attente_consequence')
+                    ->label('Suite du traitement')
+                    ->content(fn (Forms\Get $get) => $get('attendre_ecole')
+                        ? 'Après envoi, le dossier attendra une réponse de son rapporteur. Sa réponse le replacera dans la file du support.'
+                        : 'Votre message sera publié sans changer le statut du dossier.')
                     ->visible(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
                         && Gate::allows('support.tickets.manage')
                         && app(TicketStateMachine::class)->peut($this->record->status, StatutTicket::WaitingCustomer)),
@@ -155,7 +164,9 @@ class ViewSupportTicket extends ViewRecord
                     if ($attendre) {
                         app(TicketStateMachine::class)->franchir($this->record, StatutTicket::WaitingCustomer, Acteur::personnel(auth()->user()));
                     }
-                }), $visibilite === VisibiliteMessage::PublicClient ? "Réponse publiée dans le suivi de l'école." : 'Note interne enregistrée (non visible par l’école).', garder: $action);
+                }), $visibilite === VisibiliteMessage::PublicClient
+                    ? ($attendre ? 'Réponse publiée : le dossier attend maintenant le demandeur.' : 'Réponse publiée au demandeur, sans changement de statut.')
+                    : 'Note interne enregistrée (non visible par le demandeur).', garder: $action);
             });
     }
 

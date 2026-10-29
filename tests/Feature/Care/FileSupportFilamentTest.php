@@ -60,7 +60,34 @@ it('ne trahit pas une demande restreinte par le badge de navigation', function (
     expect(SupportTicketResource::getNavigationBadge())->toBeNull();
 });
 
-it('pose la demande en attente de l ecole quand le support lui pose une question', function () {
+it('ne confond pas le rapporteur avec administration de son etablissement', function () {
+    $this->actingAs($this->support);
+    $this->ticket->forceFill(['reporter_name_snapshot' => 'Étudiant Exemple', 'reporter_roles_snapshot' => ['etudiant']])->save();
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->mountAction('repondre')
+        ->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
+        ->assertSee('Une réponse du demandeur est nécessaire pour continuer')
+        ->assertSee('Étudiant Exemple')
+        ->assertSee('Cette option ne transmet aucune instruction directement')
+        ->assertSee('Votre message sera publié sans changer le statut')
+        ->assertSet('mountedActionsData.0.attendre_ecole', false)
+        ->set('mountedActionsData.0.attendre_ecole', true)
+        ->assertSee('le dossier attendra une réponse de son rapporteur');
+});
+
+it('ne met pas le ticket en attente lorsque le bouton reste eteint', function () {
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->callAction('repondre', ['visibilite' => VisibiliteMessage::PublicClient->value, 'corps' => 'Veuillez contacter la scolarité.', 'attendre_ecole' => false])
+        ->assertHasNoActionErrors();
+
+    expect($this->ticket->fresh()->status)->toBe(StatutTicket::TriagePending)
+        ->and($this->ticket->messages()->count())->toBe(1);
+});
+
+it('pose la demande en attente du rapporteur quand le support lui pose une question', function () {
     $this->actingAs($this->support);
 
     Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
@@ -116,7 +143,7 @@ it('affiche immediatement la bonne destination et garde la valeur choisie', func
         ->mountAction('repondre');
 
     $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
-        ->assertSee("Cette réponse sera visible par l'école")
+        ->assertSee('Cette réponse apparaîtra dans le suivi de la demande')
         ->assertSet('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value);
 
     $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::InterneSupport->value)
