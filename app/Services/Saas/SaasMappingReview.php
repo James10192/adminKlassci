@@ -31,13 +31,13 @@ final class SaasMappingReview
         // projetes. Ne JAMAIS deviner un type a partir de l'adapter.
         $groupCodes = [];
         foreach ($groups as $group) {
-            $key = mb_strtolower((string) $group['group_code']);
+            $key = strtolower((string) $group['group_code']);
             $groupCodes[$key][] = $group;
         }
 
         $tenantCodes = [];
         foreach ($tenants as $tenant) {
-            $key = mb_strtolower((string) $tenant['legacy_code']);
+            $key = strtolower((string) $tenant['legacy_code']);
             $tenantCodes[$key][] = $tenant;
         }
 
@@ -56,7 +56,7 @@ final class SaasMappingReview
             $type = trim((string) ($proposal['establishment_type'] ?? ''));
             $groupCode = trim((string) ($proposal['group_code'] ?? ''));
             $evidence = trim((string) ($proposal['evidence_reference'] ?? ''));
-            $key = mb_strtolower($code);
+            $key = strtolower($code);
 
             if ($code === '' || strlen($code) > 100 || ! preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]*$/', $code)) {
                 $issues[] = 'invalid_tenant_code';
@@ -101,7 +101,7 @@ final class SaasMappingReview
                 }
 
                 if ($groupCode !== '') {
-                    $groupMatches = $groupCodes[mb_strtolower($groupCode)] ?? [];
+                    $groupMatches = $groupCodes[strtolower($groupCode)] ?? [];
                     if (count($groupMatches) !== 1) {
                         $issues[] = count($groupMatches) === 0
                             ? 'unknown_legacy_group' : 'ambiguous_legacy_group';
