@@ -21,7 +21,7 @@ class ListSupportTickets extends ListRecords
                 ->modifyQueryUsing(fn (Builder $query) => $query->ouverts()->where('assigned_admin_id', auth()->id())),
             'attente_support' => Tab::make('Attente support')
                 ->modifyQueryUsing(fn (Builder $query) => $query->whereIn('status', [S::WaitingSupport->value, S::Triaged->value, S::Confirmed->value])),
-            'attente_client' => Tab::make('Attente client')
+            'attente_client' => Tab::make('Réponse attendue')
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('status', S::WaitingCustomer->value)),
             'ouvertes' => Tab::make('Ouvertes')
                 ->modifyQueryUsing(fn (Builder $query) => $query->ouverts()),
