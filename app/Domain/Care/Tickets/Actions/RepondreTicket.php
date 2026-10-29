@@ -60,7 +60,7 @@ class RepondreTicket
 
             $this->journal->consigner(
                 $courant,
-                $public ? TypeEvenement::ReponseSupport : TypeEvenement::NoteInterne,
+                $public ? TypeEvenement::ReponseSupport : ($visibilite === VisibiliteMessage::Administration ? TypeEvenement::DemandeAdministration : TypeEvenement::NoteInterne),
                 $acteur,
                 vers: $visibilite->value,
                 details: ['message_id' => $message->id],
