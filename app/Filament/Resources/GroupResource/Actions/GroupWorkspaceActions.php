@@ -6,6 +6,7 @@ use App\Filament\Forms\Group\AssociateTenantFields;
 use App\Filament\Forms\Group\GroupMemberFields;
 use App\Models\Group;
 use App\Services\Group\GroupMemberCreator;
+use App\Services\Group\GroupWorkspacePermissionInfo;
 use App\Services\Group\GroupTenantMembershipService;
 use App\Services\Saas\SaasCapabilities;
 use Filament\Actions\Action;
@@ -24,14 +25,21 @@ final class GroupWorkspaceActions
         return Action::make('quickAssociateTenant')
             ->label('Ajouter un établissement')
             ->icon('heroicon-o-building-office-2')
-            ->color('primary')
-            ->disabled(fn (): bool => ! self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP))
-            ->tooltip(fn (): ?string => self::unavailableReason($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP))
-            ->modalHeading('Associer un établissement à '.$group->name)
-            ->modalDescription("Recherchez une instance existante et sans groupe. L'opération change sa visibilité dans le portail Groupe et sera journalisée, sans modifier son abonnement.")
+            ->color(fn (): string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP) ? 'primary' : 'gray')
+            // Un bouton bloque ne fournit aucune explication sur mobile/clavier.
+            // L'ouvrir affiche le motif SANS formulaire ni bouton de validation.
+            ->tooltip(fn (): ?string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP)
+                ? null : 'Consulter pourquoi cette opération est indisponible')
+            ->modalHeading(fn (): string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP)
+                ? 'Associer un établissement à '.$group->name : 'Rattachement indisponible')
+            ->modalDescription(fn (): string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP)
+                ? "Recherchez une instance existante et sans groupe. L'opération change sa visibilité dans le portail Groupe et sera journalisée, sans modifier son abonnement."
+                : app(GroupWorkspacePermissionInfo::class)->explanation($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP))
             ->modalSubmitActionLabel('Associer au groupe')
             ->modalWidth('lg')
-            ->form(AssociateTenantFields::make())
+            ->form(fn (): array => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP)
+                ? AssociateTenantFields::make() : [])
+            ->modalSubmitAction(fn ($action) => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERSHIP) ? $action : false)
             ->action(function (array $data, Component $livewire) use ($group): void {
                 Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERSHIP);
                 app(GroupTenantMembershipService::class)->associate(
@@ -53,14 +61,20 @@ final class GroupWorkspaceActions
         return Action::make('quickAddMember')
             ->label('Ajouter un membre')
             ->icon('heroicon-o-user-plus')
-            ->color('gray')
-            ->disabled(fn (): bool => ! self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERS))
-            ->tooltip(fn (): ?string => self::unavailableReason($group, SaasCapabilities::MANAGE_GROUP_MEMBERS))
-            ->modalHeading('Inviter un membre de '.$group->name)
-            ->modalDescription('Renseignez les informations du membre et son profil. La procédure d’accès dépend de la configuration des invitations du portail.')
+            // Un bouton gris n'indique pas s'il est secondaire ou desactive.
+            ->color(fn (): string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERS) ? 'primary' : 'gray')
+            ->tooltip(fn (): ?string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERS)
+                ? null : 'Consulter pourquoi cette opération est indisponible')
+            ->modalHeading(fn (): string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERS)
+                ? 'Inviter un membre de '.$group->name : 'Ajout de membre indisponible')
+            ->modalDescription(fn (): string => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERS)
+                ? 'Renseignez les informations du membre et son profil. La procédure d’accès dépend de la configuration des invitations du portail.'
+                : app(GroupWorkspacePermissionInfo::class)->explanation($group, SaasCapabilities::MANAGE_GROUP_MEMBERS))
             ->modalSubmitActionLabel('Ajouter le membre')
             ->modalWidth('lg')
-            ->form(GroupMemberFields::make(quickCreate: true))
+            ->form(fn (): array => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERS)
+                ? GroupMemberFields::make(quickCreate: true) : [])
+            ->modalSubmitAction(fn ($action) => self::mayManage($group, SaasCapabilities::MANAGE_GROUP_MEMBERS) ? $action : false)
             ->action(function (array $data, Component $livewire) use ($group): void {
                 Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS);
                 app(GroupMemberCreator::class)->create(
@@ -80,17 +94,6 @@ final class GroupWorkspaceActions
 
     private static function mayManage(Group $group, string $ability): bool
     {
-        return ! $group->trashed() && $group->status === 'active' && Gate::allows($ability);
-    }
-
-    private static function unavailableReason(Group $group, string $ability): ?string
-    {
-        if ($group->trashed() || $group->status !== 'active') {
-            return "Le groupe est suspendu ou archivé. Réactivez-le avant d'ajouter des accès.";
-        }
-
-        return Gate::allows($ability)
-            ? null
-            : 'Votre compte ne dispose pas de la permission nécessaire. Contactez un administrateur habilité.';
+        return app(GroupWorkspacePermissionInfo::class)->canManage($group, $ability);
     }
 }
