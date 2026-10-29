@@ -12,6 +12,7 @@ return [
             'saas.reconciliation.propose',
             'saas.reconciliation.review',
             'saas.catalog.manage',
+            'saas.groups.membership.manage',
         ],
         'support' => [
             'saas.reconciliation.view',

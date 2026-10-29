@@ -90,8 +90,9 @@ class TenantResource extends Resource
                                             ->relationship('group', 'name')
                                             ->searchable()
                                             ->preload()
+                                            ->disabledOn('edit')
                                             ->placeholder('Aucun groupe — établissement indépendant')
-                                            ->helperText('Associer cet établissement à un groupe permet au fondateur de le voir dans son portail groupe.')
+                                            ->helperText("Après création, modifiez ce rattachement exclusivement depuis Groupes → Établissements, avec validation, contrôle d'accès et journal d'audit.")
                                             ->nullable(),
                                     ])->columns(2),
                             ]),
