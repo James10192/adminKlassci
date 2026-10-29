@@ -65,3 +65,23 @@ it('refuse une permission absente ou malformee', function () {
     ))->toThrow(ValidationException::class);
     expect(SupportTicketIntervention::count())->toBe(0);
 });
+
+
+it('refuse un operateur sans permission de gestion meme avec le ticket connu', function () {
+    config(['care.capacites_par_role.billing' => []]);
+    $autre = User::create(['name' => 'Comptable', 'email' => 'comptable@klassci.com', 'password' => 'x', 'role' => 'billing', 'is_active' => true]);
+
+    expect(fn () => preparerTestIntervention($this->ticket, $autre))
+        ->toThrow(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+
+    expect(SupportTicketIntervention::count())->toBe(0);
+});
+
+it('refuse une cible externe incorrecte sans créer de demande', function () {
+    expect(fn () => app(PreparerIntervention::class)->executer(
+        $this->ticket, $this->support, 'action-key-0003', 'Valider inscription',
+        'Veuillez verifier ce dossier et son inscription.', 'inscriptions.validate', 0,
+    ))->toThrow(ValidationException::class);
+
+    expect(SupportTicketIntervention::count())->toBe(0);
+});
