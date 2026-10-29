@@ -39,6 +39,8 @@ class ProjectionClient
             : $ticket->messagesPublics()->where('author_type', '!=', TypeActeur::Client->value)->latest('id')->first();
 
         $derniereAdministration = $personnelEtablissement
+            && $ticket->status === StatutTicket::WaitingCustomer
+            && $ticket->waiting_on === 'school_staff'
             ? $ticket->messages()->where('visibility', VisibiliteMessage::Administration->value)
                 ->where('author_type', '!=', TypeActeur::Client->value)->latest('id')->first()
             : null;
