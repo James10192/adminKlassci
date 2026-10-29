@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <meta name="robots" content="noindex, nofollow">
-    <title>Sécuriser mon accès — KLASSCI Groupe</title>
+    <meta name="referrer" content="no-referrer">
+    <title>{{ ($resetMode ?? false) ? "Réinitialiser mon mot de passe" : "Sécuriser mon accès" }} — KLASSCI Groupe</title>
     <link rel="icon" href="{{ asset('images/LOGO-KLASSCI-PNG.png') }}">
     <style>
         :root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color-scheme: light; }
@@ -70,21 +71,21 @@
             </div>
             <div>
                 <p class="eyebrow">Sécurité de votre compte</p>
-                <h1>Votre espace de direction, votre mot de passe.</h1>
+                <h1>{{ ($resetMode ?? false) ? "Retrouvez un accès sécurisé à votre espace." : "Votre espace de direction, votre mot de passe." }}</h1>
                 <p>Définissez un mot de passe personnel pour protéger l'accès aux établissements de votre groupe.</p>
             </div>
             <p class="footnote">Accès protégé · Les mots de passe ne sont jamais visibles par les administrateurs.</p>
         </section>
 
         <section class="content" aria-labelledby="form-heading">
-            <h2 id="form-heading">Finaliser mon accès</h2>
-            <p class="sub">Bienvenue, {{ $member->name }}. Choisissez votre nouveau mot de passe puis confirmez-le.</p>
+            <h2 id="form-heading">{{ ($resetMode ?? false) ? "Réinitialiser mon mot de passe" : "Finaliser mon accès" }}</h2>
+            <p class="sub">{{ ($resetMode ?? false) ? "Bonjour" : "Bienvenue" }}, {{ $member->name }}. Choisissez votre nouveau mot de passe puis confirmez-le.</p>
 
             @if(session('status'))
                 <div class="status" role="status">{{ session('status') }}</div>
             @endif
 
-            <form method="POST" action="{{ route('groupe.set-password.store') }}" autocomplete="off">
+            <form method="POST" action="{{ $formAction ?? route('groupe.set-password.store') }}" autocomplete="off">
                 @csrf
 
                 <div class="field">
@@ -128,7 +129,7 @@
                     </ul>
                 </div>
 
-                <button class="submit" type="submit">Enregistrer et accéder au portail</button>
+                <button class="submit" type="submit">{{ ($resetMode ?? false) ? "Enregistrer et revenir à la connexion" : "Enregistrer et accéder au portail" }}</button>
                 <p class="privacy">Votre mot de passe est protégé par un hachage non réversible.</p>
             </form>
         </section>
