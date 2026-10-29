@@ -205,3 +205,26 @@ it('un dossier refusé peut être révisé par son auteur sans effacer son histo
         ->and($edited->reviewed_by)->toBeNull()
         ->and($edited->review_note)->toBeNull();
 });
+
+
+it('rend le centre de rapprochement dans le panel admin pour un support autorisé', function () {
+    $support = saasWorkspaceOperator('support-ui@example.invalid', 'support');
+    $this->actingAs($support);
+
+    \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+    $this->get(\App\Filament\Resources\SaasMappingReviewResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('Rapprochement', false);
+});
+
+it('interdit le centre de rapprochement aux comptes sans accès actif', function () {
+    $support = saasWorkspaceOperator('support-off@example.invalid', 'support');
+    $support->forceFill(['is_active' => false])->save();
+    $this->actingAs($support);
+
+    \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+    $this->get(\App\Filament\Resources\SaasMappingReviewResource::getUrl('index'))
+        ->assertForbidden();
+});
