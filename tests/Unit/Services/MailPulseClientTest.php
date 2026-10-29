@@ -61,18 +61,27 @@ it('envoie une notification email via MailPulse et non un fournisseur direct', f
     Http::assertSentCount(1);
 });
 
-it('ne suppose jamais un consentement marketing lors de la synchronisation contact', function () {
+it('refuse un contact sans consentement explicite car MailPulse cree subscribed=true par defaut', function () {
+    expect(app(MailPulseClient::class)->upsertContact('direction@ecole.ci', 'school:42', 'contact:42'))
+        ->toMatchArray(['ok' => false, 'error_code' => 'consent_required']);
+
+    Http::assertNothingSent();
+});
+
+it('ne donne pas de consentement marketing a un contact transactionnel', function () {
     Http::fake(['https://mailpulse.example/api/v1/contacts' => Http::response([
         'contact' => ['id' => 'contact-1'],
     ], 200)]);
 
-    $result = app(MailPulseClient::class)->upsertContact('direction@ecole.ci', 'school:42', 'contact:42');
+    $result = app(MailPulseClient::class)->upsertContact(
+        'direction@ecole.ci', 'school:42', 'contact:42', false
+    );
 
     expect($result['ok'])->toBeTrue();
     Http::assertSent(function (Request $request) {
         return $request->url() === 'https://mailpulse.example/api/v1/contacts'
             && $request->hasHeader('Idempotency-Key', 'contact:42')
-            && ! array_key_exists('subscribed', $request->data());
+            && $request['subscribed'] === false;
     });
 });
 
