@@ -16,6 +16,13 @@ return [
     // Version du contrat /api/v1/support. Ajouts seulement ; une rupture ouvre /v2.
     'api_version' => 1,
 
+    // Interventions métier : lecture de routage désactivée tant que l'API
+    // d'acquittement, les permissions et la distribution ne sont pas validées.
+    // Kill-switch administrateur ; aucune activation implicite à la fusion.
+    'interventions' => [
+        'routing_preview_enabled' => (bool) env('CARE_INTERVENTIONS_ROUTING_PREVIEW_ENABLED', false),
+    ],
+
     /*
     | Capacites du personnel KLASSCI. Aucune regle n'est ecrite contre un nom
     | de role : le code demande une capacite (Gate), et c'est ce tableau qui dit
