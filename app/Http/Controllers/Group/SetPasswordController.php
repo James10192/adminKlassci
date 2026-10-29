@@ -19,7 +19,7 @@ use Illuminate\View\View;
  */
 class SetPasswordController extends Controller
 {
-    public function show(): View|RedirectResponse
+    public function show(): \Illuminate\Http\Response|RedirectResponse
     {
         $member = auth('group')->user();
 
@@ -30,22 +30,27 @@ class SetPasswordController extends Controller
             return redirect()->route('filament.group.pages.dashboard');
         }
 
-        return view('groupe.set-password', [
+        return response()->view('groupe.set-password', [
             'member' => $member,
-        ]);
+            'minPasswordLength' => max(8, (int) config('group_portal.member_password_min_length', 10)),
+        ])->header('Cache-Control', 'private, no-store, max-age=0');
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $member = auth('group')->user();
+        abort_unless($member?->is_active, 403);
+
         $validated = $request->validate([
             'password' => [
                 'required',
                 'confirmed',
-                Password::min(8)->letters()->numbers(),
+                Password::min(max(8, (int) config('group_portal.member_password_min_length', 10)))->letters()->numbers(),
             ],
         ]);
 
-        auth('group')->user()->recordPasswordRotation($validated['password']);
+        $member->recordPasswordRotation($validated['password']);
+        $request->session()->regenerate();
 
         session()->forget('gp_invitation_member_id');
 
