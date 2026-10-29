@@ -2,7 +2,7 @@
 
 use App\Filament\Resources\GroupResource\Pages\EditGroup;
 use App\Filament\Resources\GroupResource\RelationManagers\MembersRelationManager;
-use App\Mail\Group\GroupMemberInvitationMail;
+use App\Mail\Group\GroupMemberPasswordResetMail;
 use App\Models\Group;
 use App\Models\GroupMember;
 use App\Models\User;
@@ -51,10 +51,10 @@ it('envoie une nouvelle invitation de reset, sans exposer le mot de passe en int
     $priorHash = $this->member->password;
     app(GroupMemberAccessReset::class)->reset($this->admin, $this->group->id, $this->member->id);
 
-    Mail::assertQueued(GroupMemberInvitationMail::class);
+    Mail::assertQueued(GroupMemberPasswordResetMail::class);
     $member = $this->member->fresh();
-    expect($member->password)->not->toBe($priorHash)
-        ->and($member->password_changed_at)->toBeNull()
+    expect($member->password)->toBe($priorHash)
+        ->and($member->password_changed_at)->not->toBeNull()
         ->and($member->invitation_token)->toMatch('/^[0-9a-f]{64}$/')
         ->and($member->invitation_sent_at)->not->toBeNull();
 });
@@ -100,7 +100,7 @@ it('applique une limite de fréquence par membre, sans fuite du mot de passe', f
         $this->admin, $this->group->id, $this->member->id
     ))->toThrow(ValidationException::class);
 
-    Mail::assertQueued(GroupMemberInvitationMail::class, 2);
+    Mail::assertQueued(GroupMemberPasswordResetMail::class, 2);
 });
 
 it('ne détruit pas les identifiants existants si le système de queue refuse la mise en file', function () {
@@ -137,4 +137,44 @@ it('retire tout champ password du formulaire de modification de membre', functio
     ])->mountTableAction('edit', $this->member)
         ->assertDontSee($this->member->password)
         ->assertDontSee('Mot de passe initial');
+});
+
+
+it('permet de choisir un mot de passe via un lien signé, sans connaître le mot de passe précédent', function () {
+    $before = $this->member->password;
+    app(GroupMemberAccessReset::class)->reset($this->admin, $this->group->id, $this->member->id);
+
+    $mailable = Mail::queued(GroupMemberPasswordResetMail::class)->first();
+    expect($mailable)->not->toBeNull()
+        ->and($mailable->resetUrl)->toContain('/groupe/reinitialiser-mot-de-passe/')
+        ->and($mailable->resetUrl)->toContain('signature=')
+        ->and($mailable->resetUrl)->not->toContain('password=');
+
+    $this->get($mailable->resetUrl)
+        ->assertOk()->assertSee('Réinitialiser mon mot de passe');
+
+    $this->post($mailable->resetUrl, [
+        'password' => 'NewGroupPassword2026',
+        'password_confirmation' => 'NewGroupPassword2026',
+    ])->assertRedirect(route('filament.group.auth.login'));
+
+    $member = $this->member->fresh();
+    expect($member->password)->not->toBe($before)
+        ->and(Hash::check('NewGroupPassword2026', $member->password))->toBeTrue()
+        ->and($member->invitation_token)->toBeNull()
+        ->and($member->password_changed_at)->not->toBeNull();
+
+    $this->get($mailable->resetUrl)->assertForbidden(); // lien à usage unique
+});
+
+it('ne réinitialise rien via un lien invalide, expiré ou pour un membre désactivé', function () {
+    app(GroupMemberAccessReset::class)->reset($this->admin, $this->group->id, $this->member->id);
+    $url = Mail::queued(GroupMemberPasswordResetMail::class)->first()->resetUrl;
+    $hash = $this->member->password;
+
+    $this->get(str_replace('token=', 'token=altered', $url))->assertForbidden();
+    $this->member->forceFill(['is_active' => false])->save();
+    $this->get($url)->assertForbidden();
+
+    expect($this->member->fresh()->password)->toBe($hash);
 });
