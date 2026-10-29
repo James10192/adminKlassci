@@ -36,7 +36,7 @@ explicites avec idempotency key utilisent le réseau.
 
 1. Table événements/outbox, transaction commit avant dispatch, clé stable par
    événement + destinataire + canal, traitements asynchrones et reprise.
-2. Consentement : ne jamais considérer subscribed=true pour un contact transactionnel.
+2. Consentement : le serveur MailPulse crée actuellement un nouveau contact avec subscribed=true si le champ est absent. Le client PHP refuse donc désormais l'upsert sans subscribed explicite : fournir false pour un nouveau contact transactionnel, ou l'état de consentement déjà enregistré afin de ne pas écraser un opt-in existant. Corriger aussi la valeur par défaut chez MailPulse avant toute synchronisation large.
 3. Mapping événements métier -> templates, statuts, quotas et tenant/produit.
 4. Webhook signé MailPulse pour délivrabilité + dead-letter/retry/backoff.
 5. Tests intégration et isolation multi-tenant; pilote sur staging; rollback.
