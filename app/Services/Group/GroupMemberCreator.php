@@ -24,7 +24,7 @@ final class GroupMemberCreator
         $data = Validator::make($input, [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', Rule::unique('group_members', 'email')],
-            'username' => ['nullable', 'string', 'max:80', 'alpha_dash', Rule::unique('group_members', 'username')],
+            'username' => ['nullable', 'string', 'max:80', 'regex:'.\App\Support\Group\MemberUsernameRules::PATTERN, Rule::unique('group_members', 'username')],
             'password' => ['nullable', 'string', 'min:8'],
             'role' => ['required', Rule::in(array_keys(GroupMemberRole::options()))],
             'phone' => ['nullable', 'string', 'max:255'],
