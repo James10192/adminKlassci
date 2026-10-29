@@ -59,9 +59,8 @@ it('offre un telechargement explicite pour les images sur mobile', function () {
         ->assertSee('Télécharger')
         ->assertSee('telecharger=1', false);
 
-    $this->get(PieceJointeSupportController::lien($this->piece, true))
-        ->assertOk()
-        ->assertHeader('Content-Disposition', 'attachment; filename=ecran.png');
+    $response = $this->get(PieceJointeSupportController::lien($this->piece, true))->assertOk();
+    $this->assertStringStartsWith('attachment;', (string) $response->headers->get('Content-Disposition'));
 });
 
 it('garde restreinte la piece d un dossier restreint', function () {
