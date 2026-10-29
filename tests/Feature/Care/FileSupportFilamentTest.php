@@ -106,6 +106,18 @@ it('refuse une reponse sans visibilite choisie', function () {
         ->assertHasActionErrors(['visibilite' => 'required']);
 });
 
+it('prendre en charge fait progresser la demande et la rend visible en resolution', function () {
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->callAction('prendre')
+        ->assertHasNoActionErrors();
+
+    expect($this->ticket->fresh()->assigned_admin_id)->toBe($this->support->id)
+        ->and($this->ticket->fresh()->status)->toBe(StatutTicket::InProgress)
+        ->and($this->ticket->fresh()->status->statutClient()->value)->toBe('EN_RESOLUTION');
+});
+
 it('change le statut par la machine a etats', function () {
     $this->actingAs($this->support);
 
