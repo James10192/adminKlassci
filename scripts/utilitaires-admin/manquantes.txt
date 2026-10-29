@@ -91,7 +91,6 @@ hover:shadow-md
 hover:text-primary-500
 hover:text-primary-700
 hover:text-red-400
-hover:underline
 id
 info
 last:mb-0
