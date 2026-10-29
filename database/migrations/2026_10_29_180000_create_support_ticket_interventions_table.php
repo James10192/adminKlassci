@@ -21,7 +21,10 @@ return new class extends Migration
             $table->string('required_permission', 160);
             $table->unsignedBigInteger('target_external_user_id')->nullable();
             $table->string('status', 32)->default('PENDING_ROUTING');
-            $table->foreignId('created_by_admin_id')->constrained('users');
+            // Les comptes admin sont sur une connexion potentiellement distincte :
+            // meme convention que support_tickets.assigned_admin_id.
+            $table->unsignedBigInteger('created_by_admin_id');
+            $table->index('created_by_admin_id');
             $table->timestamp('due_at')->nullable();
             $table->timestamp('routed_at')->nullable();
             $table->timestamp('completed_at')->nullable();
