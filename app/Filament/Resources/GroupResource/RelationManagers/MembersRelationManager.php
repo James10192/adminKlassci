@@ -108,6 +108,16 @@ class MembersRelationManager extends RelationManager
                     ->color(fn (string $state): string => GroupMemberRole::tryFrom($state)?->badgeColor() ?? 'gray')
                     ->formatStateUsing(fn (string $state): string => GroupMemberRole::tryFrom($state)?->label() ?? $state),
 
+                Tables\Columns\TextColumn::make('access_state')
+                    ->label('Accès')
+                    ->state(fn (GroupMember $record): string => $record->password_changed_at !== null
+                        ? 'Mot de passe défini'
+                        : ($record->invitation_sent_at !== null ? 'Activation en attente' : 'Accès à initialiser'))
+                    ->badge()
+                    ->color(fn (GroupMember $record): string => $record->password_changed_at !== null
+                        ? 'success'
+                        : 'warning')
+                    ->toggleable(),
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Actif')
                     ->boolean(),
@@ -121,6 +131,7 @@ class MembersRelationManager extends RelationManager
                 Tables\Actions\CreateAction::make()
                     ->label('Ajouter un membre')
                     ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS))
+                    ->before(fn () => Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS))
                     ->mutateFormDataUsing(function (array $data): array {
                         // NOT NULL en base. L'observer remplace ensuite le
                         // secret provisoire par une invitation si activée.
@@ -163,9 +174,11 @@ class MembersRelationManager extends RelationManager
                             ->send();
                     }),
                 Tables\Actions\EditAction::make()
-                    ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS)),
+                    ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS))
+                    ->before(fn () => Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS)),
                 Tables\Actions\DeleteAction::make()
                     ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERS))
+                    ->before(fn () => Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERS))
                     ->requiresConfirmation(),
             ]);
     }
