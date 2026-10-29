@@ -11,6 +11,7 @@ return [
             'saas.reconciliation.view',
             'saas.reconciliation.propose',
             'saas.reconciliation.review',
+            'saas.catalog.manage',
         ],
         'support' => [
             'saas.reconciliation.view',
@@ -19,5 +20,9 @@ return [
         'billing' => [
             'saas.reconciliation.view',
         ],
+    ],
+    'adapter_keys' => [
+        'laravel-v2' => 'KLASSCIv2 (moteur établissements supérieurs)',
+        'fastapi-college' => 'KLASSCI Collège (moteur séparé)',
     ],
 ];
