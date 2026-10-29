@@ -71,7 +71,36 @@ it('ne repond que la ou l ecole peut lire', function () {
 
     repondreEcole($this, $this->reference, jeton: $jetonAutre)->assertNotFound();
     repondreEcole($this, $this->reference, requete: 'reporter=7')->assertNotFound();
-    repondreEcole($this, $this->reference, requete: 'reporter=7&scope=school')->assertCreated();
+    // Lire tout l'établissement ne permet plus de répondre à la place d'un
+    // collègue hors demande explicite adressée à l'administration.
+    repondreEcole($this, $this->reference, requete: 'reporter=7&scope=school')
+        ->assertStatus(409)->assertJsonPath('error', 'school_action_closed');
+});
+
+it('une intervention de la scolarite revient au support sans apparaitre chez l etudiant', function () {
+    $agent = \App\Models\User::create(['name' => 'Support', 'email' => 'support@klassci.test', 'password' => 'x', 'role' => 'support', 'is_active' => true]);
+    app(\App\Domain\Care\Tickets\Actions\RepondreTicket::class)->executer(
+        $this->ticket, $agent, "Veuillez vérifier l'inscription.", \App\Domain\Care\Tickets\Enums\VisibiliteMessage::Administration);
+    app(TicketStateMachine::class)->franchir($this->ticket, StatutTicket::WaitingCustomer,
+        Acteur::systeme(), destinataire: 'school_staff');
+
+    repondreEcole($this, $this->reference, ['body' => 'La scolarité a effectué la validation.'],
+        requete: 'reporter=7&scope=school')->assertCreated()->assertJsonPath('statut.code', 'EN_ANALYSE');
+
+    $this->withToken($this->jeton)->getJson("/api/v1/support/tickets/{$this->reference}?reporter=42&scope=mine")
+        ->assertOk()->assertJsonCount(0, 'messages');
+    $this->withToken($this->jeton)->getJson("/api/v1/support/tickets/{$this->reference}?scope=school")
+        ->assertOk()->assertJsonCount(2, 'messages')
+        ->assertJsonPath('messages.1.destinataire', 'ETABLISSEMENT');
+    expect($this->ticket->fresh()->waiting_on)->toBeNull();
+});
+
+it('une reponse de l etudiant ne leve pas une action reservee a la scolarite', function () {
+    app(TicketStateMachine::class)->franchir($this->ticket, StatutTicket::WaitingCustomer, Acteur::systeme(), destinataire: 'school_staff');
+
+    repondreEcole($this, $this->reference)->assertCreated();
+    expect($this->ticket->fresh()->status)->toBe(StatutTicket::WaitingCustomer)
+        ->and($this->ticket->fresh()->waiting_on)->toBe('school_staff');
 });
 
 it('exige la portee support:update et une cle', function () {
