@@ -161,3 +161,28 @@ it('rejette un manifeste incorrect sans SQL ni fuite de chemin', function () {
     expect($exit)->toBe(1)
         ->and($result['error_code'])->toBe('invalid_manifest_file');
 });
+
+
+it('bloque les champs JSON de type tableau sans warning ou conversion implicite', function () {
+    $result = app(SaasMappingReview::class)->review(
+        [
+            'schema_version' => 1,
+            'proposals' => [[
+                'tenant_code' => ['islg'],
+                'kind' => 'school',
+                'group_code' => ['ROSTAN'],
+                'establishment_type' => ['grande_ecole_bts'],
+                'evidence_reference' => ['fichier-prive'],
+            ]],
+        ],
+        app(LegacyInventoryReport::class)->generate()
+    );
+
+    expect($result['blocked'])->toBe(1)
+        ->and($result['can_apply'])->toBeFalse()
+        ->and($result['proposals'][0]['issues'])->toContain(
+            'invalid_tenant_code',
+            'invalid_group_code',
+            'evidence_reference_required'
+        );
+});
