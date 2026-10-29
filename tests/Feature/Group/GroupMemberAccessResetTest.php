@@ -42,6 +42,9 @@ beforeEach(function () {
         'is_active' => true,
     ]);
     RateLimiter::clear('group:reset-access:'.$this->member->id);
+    // Ignore l'invitation automatique initiale : les assertions portent
+    // exclusivement sur l'action de réinitialisation de ce test.
+    Mail::fake();
 });
 
 it('envoie une nouvelle invitation de reset, sans exposer le mot de passe en interface', function () {
