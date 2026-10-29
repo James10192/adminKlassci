@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\GroupResource\RelationManagers;
 
 use App\Models\Tenant;
+use App\Filament\Forms\Group\AssociateTenantFields;
+use Livewire\Attributes\On;
 use App\Services\Group\GroupTenantMembershipService;
 use App\Services\Saas\SaasCapabilities;
 use Filament\Forms;
@@ -24,12 +26,23 @@ class TenantsRelationManager extends RelationManager
 
     public function isReadOnly(): bool
     {
-        return ! Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERSHIP);
+        // Ne jamais rendre toute la relation read-only selon le Gate :
+        // Filament masque alors même les actions explicitement autorisées.
+        // Les boutons sont contrôlés individuellement et le service revérifie la capacité.
+        return false;
+    }
+
+    #[On('group-workspace-updated')]
+    public function refreshWorkspace(): void
+    {
+        // Livewire déclenche un rerender et Filament réinterroge la table.
     }
 
     public function table(Table $table): Table
     {
         return $table
+            ->emptyStateHeading('Aucun établissement rattaché')
+            ->emptyStateDescription('Utilisez « Ajouter un établissement » pour rechercher une instance existante sans groupe.')
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->label('Établissement')->searchable()->weight('bold'),
@@ -55,39 +68,12 @@ class TenantsRelationManager extends RelationManager
                     ->label('Ajouter un établissement')
                     ->icon('heroicon-o-plus-circle')
                     ->color('primary')
-                    ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERSHIP))
+                    ->visible(fn (): bool => Gate::allows(SaasCapabilities::MANAGE_GROUP_MEMBERSHIP) && $this->getOwnerRecord()->status === 'active')
                     ->modalHeading('Associer un établissement existant au groupe')
                     ->modalDescription('Seuls les établissements sans groupe sont proposés. Leur accès dans le portail Groupe peut changer ; aucun contrat, forfait ou produit SaaS ne sera modifié.')
                     ->modalSubmitActionLabel('Confirmer le rattachement')
                     ->modalWidth('lg')
-                    ->form([
-                        Forms\Components\Select::make('tenant_id')
-                            ->label('Établissement à rattacher')
-                            ->placeholder('Rechercher par nom ou code')
-                            ->searchable()
-                            ->required()
-                            ->getSearchResultsUsing(fn (string $search): array => Tenant::query()
-                                ->whereNull('group_id')
-                                ->where(fn ($query) => $query
-                                    ->where('name', 'like', '%'.$search.'%')
-                                    ->orWhere('code', 'like', '%'.$search.'%'))
-                                ->orderBy('name')
-                                ->limit(30)
-                                ->get(['id', 'code', 'name'])
-                                ->mapWithKeys(fn (Tenant $tenant) => [
-                                    $tenant->id => $tenant->name.' ('.$tenant->code.')',
-                                ])->all())
-                            ->getOptionLabelUsing(fn ($value): ?string => Tenant::query()
-                                ->whereNull('group_id')->whereKey($value)
-                                ->first(['id', 'name', 'code'])
-                                ?->getAttribute('name')),
-                        Forms\Components\Textarea::make('reason')
-                            ->label('Motif du rattachement')
-                            ->placeholder('Référence de la décision et validation du groupe…')
-                            ->required()->minLength(10)->maxLength(500)
-                            ->rows(3)
-                            ->helperText('Une trace de cette décision sera conservée ; ne collez pas de mot de passe ni de données personnelles.'),
-                    ])
+                    ->form(AssociateTenantFields::make())
                     ->action(function (array $data): void {
                         Gate::authorize(SaasCapabilities::MANAGE_GROUP_MEMBERSHIP);
                         app(GroupTenantMembershipService::class)->associate(
