@@ -49,6 +49,10 @@ class RepondreTicket
 
             $public = $visibilite === VisibiliteMessage::PublicClient;
             if ($public || $visibilite === VisibiliteMessage::Administration) {
+                // Toucher updated_at : l'instance découvre les messages destinés
+                // au demandeur ou à l'administration par le polling. Seuls
+                // les premiers sont envoyés au rapporteur. Les notes internes
+                // ne touchent pas la demande.
                 // Toucher updated_at : l'ecole decouvre les reponses par
                 // GET /tickets?mis_a_jour_depuis=. Une note interne, elle, ne
                 // touche rien — l'ecole n'a rien de nouveau a lire.
