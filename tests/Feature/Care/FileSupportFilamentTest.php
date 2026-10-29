@@ -98,12 +98,49 @@ it('ne propose pas d attendre l ecole quand le dossier ne peut pas l attendre', 
         ->assertFormFieldIsHidden('attendre_ecole', 'mountedActionForm');
 });
 
-it('refuse une reponse sans visibilite choisie', function () {
+it('ne donne aucune fausse impression de destinataire selectionne avant le choix', function () {
+    $this->actingAs($this->support);
+
+    Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->mountAction('repondre')
+        ->assertSet('mountedActionsData.0.visibilite', null)
+        ->assertSee("Choisissez d'abord le destinataire")
+        ->assertDontSee("Cette note restera interne au support")
+        ->assertDontSee("Cette réponse sera visible par l'école");
+});
+
+it('affiche immediatement la bonne destination et garde la valeur choisie', function () {
+    $this->actingAs($this->support);
+
+    $page = Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
+        ->mountAction('repondre');
+
+    $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
+        ->assertSee("Cette réponse sera visible par l'école")
+        ->assertSet('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value);
+
+    $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::InterneSupport->value)
+        ->assertSee('Cette note restera interne au support')
+        ->assertSet('mountedActionsData.0.visibilite', VisibiliteMessage::InterneSupport->value);
+
+    $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
+        ->set('mountedActionsData.0.corps', 'Votre inscription doit être validée par votre établissement.')
+        ->callMountedAction()
+        ->assertHasNoActionErrors();
+
+    expect($this->ticket->messages()->first()->visibility)->toBe(VisibiliteMessage::PublicClient)
+        ->and($this->ticket->messages()->count())->toBe(1);
+});
+
+it('refuse une reponse sans visibilite choisie en francais et sans publier de message', function () {
     $this->actingAs($this->support);
 
     Livewire::test(ViewSupportTicket::class, ['record' => $this->ticket->getRouteKey()])
         ->callAction('repondre', ['corps' => 'Bonjour.'])
-        ->assertHasActionErrors(['visibilite' => 'required']);
+        ->assertHasActionErrors(['visibilite' => 'required'])
+        ->assertSee('Sélectionnez qui pourra lire le message');
+
+    expect($this->ticket->messages()->count())->toBe(0);
 });
 
 it('prendre en charge fait progresser la demande et la rend visible en resolution', function () {

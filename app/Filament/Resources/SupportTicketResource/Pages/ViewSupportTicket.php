@@ -100,20 +100,36 @@ class ViewSupportTicket extends ViewRecord
             ->color('primary')
             ->visible(fn () => Gate::allows('support.tickets.reply') || Gate::allows('support.internal_notes'))
             ->form([
-                // Pas de valeur par defaut : choisir qui lira ce message est un geste explicite.
-                Forms\Components\ToggleButtons::make('visibilite')
+                // Ne jamais colorer une option non selectionnee comme si elle etait
+                // deja validee : le bouton vert donnait un faux signal d'envoi
+                // public, alors que Livewire gardait visibilite = null.
+                // Les radios natifs rendent l'etat choisi explicite, au clavier
+                // comme au toucher, et conservent la permission effective.
+                Forms\Components\Radio::make('visibilite')
                     ->label('Qui verra ce message ?')
                     ->required()
-                    ->inline()
                     ->options(fn () => collect($this->visibilitesAutorisees())->mapWithKeys(fn ($v) => [$v->value => $v->libelle()]))
-                    ->colors([VisibiliteMessage::PublicClient->value => 'success'])
-                    ->helperText("Choisissez « Visible par l'école » pour lui répondre. Les autres types ne lui sont jamais transmis.")
+                    ->descriptions([
+                        VisibiliteMessage::PublicClient->value => "Réponse envoyée au suivi de l'école.",
+                        VisibiliteMessage::InterneSupport->value => 'Réservée au personnel support habilité.',
+                        VisibiliteMessage::Technique->value => 'Réservée au personnel technique habilité.',
+                        VisibiliteMessage::Securite->value => 'Réservée aux personnes habilitées à la sécurité.',
+                    ])
+                    ->columns(['default' => 1, 'md' => 2])
+                    ->validationMessages([
+                        'required' => 'Sélectionnez qui pourra lire le message avant de continuer.',
+                    ])
+                    ->helperText("Aucun destinataire n'est choisi par défaut. Une note interne n'est jamais envoyée à l'école.")
                     ->live(),
                 Forms\Components\Placeholder::make('destination')
                     ->label('Conséquence de cet envoi')
-                    ->content(fn (Forms\Get $get) => $get('visibilite') === VisibiliteMessage::PublicClient->value
-                        ? "L'école pourra lire cette réponse dans son espace support. Son instance notifiera le rapporteur si le suivi automatique est actif."
-                        : "La note sera conservée dans ce dossier et ne sera pas visible par l'école."),
+                    ->content(fn (Forms\Get $get) => match ($get('visibilite')) {
+                        VisibiliteMessage::PublicClient->value => "Cette réponse sera visible par l'école dans son suivi. Son instance notifiera le rapporteur si le suivi automatique est actif.",
+                        VisibiliteMessage::InterneSupport->value => "Cette note restera interne au support et ne sera pas visible par l'école.",
+                        VisibiliteMessage::Technique->value => "Cette note sera réservée au personnel technique habilité et ne sera pas visible par l'école.",
+                        VisibiliteMessage::Securite->value => "Cette note sera réservée aux personnes habilitées à la sécurité et ne sera pas visible par l'école.",
+                        default => "Choisissez d'abord le destinataire : rien ne sera envoyé tant qu'aucune option n'est sélectionnée.",
+                    }),
                 Forms\Components\Textarea::make('corps')->label('Message')->required()->rows(6)->maxLength(5000),
                 // Une question posee a l'ecole : la demande passe en « Action requise » chez elle,
                 // et sa reponse la ramene d'elle-meme en attente support.
