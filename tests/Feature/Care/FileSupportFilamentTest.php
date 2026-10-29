@@ -143,7 +143,7 @@ it('affiche immediatement la bonne destination et garde la valeur choisie', func
         ->mountAction('repondre');
 
     $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value)
-        ->assertSee("Cette réponse sera visible par l'école")
+        ->assertSee('Cette réponse apparaîtra dans le suivi de la demande')
         ->assertSet('mountedActionsData.0.visibilite', VisibiliteMessage::PublicClient->value);
 
     $page->set('mountedActionsData.0.visibilite', VisibiliteMessage::InterneSupport->value)
