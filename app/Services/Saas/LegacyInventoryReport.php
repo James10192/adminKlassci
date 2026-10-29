@@ -38,7 +38,7 @@ final class LegacyInventoryReport
             ->get(['id', 'organization_id', 'product_id', 'name', 'slug'])
             ->keyBy('id');
         $products = SaasProduct::query()
-            ->get(['id', 'code', 'establishment_type', 'adapter_key'])
+            ->get(['id', 'code', 'establishment_type', 'adapter_key', 'is_active'])
             ->keyBy('id');
         $instances = SaasProductInstance::query()
             ->get(['id', 'establishment_id', 'product_id', 'legacy_tenant_id', 'external_tenant_code', 'status'])
@@ -169,6 +169,12 @@ final class LegacyInventoryReport
             'groups' => $groupRows,
             'legacy_tenants' => $tenantRows,
             'saas_establishments' => $saasRows,
+            'saas_products' => $products->map(fn (SaasProduct $product) => [
+                'code' => $product->code,
+                'establishment_type' => $product->establishment_type,
+                'adapter_key' => $product->adapter_key,
+                'is_active' => (bool) $product->is_active,
+            ])->values()->all(),
             'rules' => [
                 'never_infer_product_from_name_or_branch',
                 'one_product_per_establishment',
