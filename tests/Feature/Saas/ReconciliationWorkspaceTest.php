@@ -228,3 +228,80 @@ it('interdit le centre de rapprochement aux comptes sans accès actif', function
     $this->get(\App\Filament\Resources\SaasMappingReviewResource::getUrl('index'))
         ->assertForbidden();
 });
+
+
+it('montre le nouvel inventaire sécurisé sans charger de secrets techniques', function () {
+    $support = saasWorkspaceOperator('inventory-support@example.invalid', 'support');
+    $group = Group::create(['code' => 'GROUPE1', 'name' => 'Groupe d’essai']);
+    $tenant = saasWorkspaceTenant('test-a', $group);
+    $archived = saasWorkspaceTenant('test-b');
+    $archived->delete();
+
+    $this->actingAs($support);
+    \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+    $this->get(\App\Filament\Resources\SaasDiscoveryResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('Instances', false);
+
+    $rows = \App\Filament\Resources\SaasDiscoveryResource::getEloquentQuery()
+        ->orderBy('code')->get();
+    expect($rows)->toHaveCount(2)
+        ->and($rows->first()->getAttributes())->not->toHaveKey('database_credentials')
+        ->and($rows->first()->getAttributes())->not->toHaveKey('api_token')
+        ->and($rows->last()->trashed())->toBeTrue()
+        ->and(Tenant::query()->whereDoesntHave('mappingReview')->count())->toBe(1);
+});
+
+it('ne laisse pas un membre désactivé ouvrir l’inventaire des sources', function () {
+    $user = saasWorkspaceOperator('disabled-source@example.invalid', 'support');
+    $user->forceFill(['is_active' => false])->save();
+    $this->actingAs($user);
+    \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+
+    $this->get(\App\Filament\Resources\SaasDiscoveryResource::getUrl('index'))
+        ->assertForbidden();
+});
+
+it('refuse une approbation lorsque le groupe historique change après soumission', function () {
+    $maker = saasWorkspaceOperator('maker-drift@example.invalid', 'support');
+    $checker = saasWorkspaceOperator('checker-drift@example.invalid', 'super_admin');
+    $group = Group::create(['code' => 'GROUPE2', 'name' => 'Deuxième groupe']);
+    $tenant = saasWorkspaceTenant('test-drift');
+    $product = saasWorkspaceProduct('drift');
+
+    $review = saasWorkspaceDraft($maker, $tenant, $product, $group);
+    app(SaasMappingWorkflow::class)->submit($maker, $review->id);
+
+    // Modification concurrente de SSO dans une autre partie du master.
+    $tenant->update(['group_id' => $group->id]);
+
+    expect(fn () => app(SaasMappingWorkflow::class)->decide(
+        $checker, $review->id, true,
+        'Validation requise avec groupe explicite.', true
+    ))->toThrow(ValidationException::class);
+
+    expect($review->fresh()->state)->toBe('submitted')
+        ->and(SaasMappingReviewEvent::where('action', 'approved')->count())->toBe(0)
+        ->and(SaasProductInstance::count())->toBe(0);
+
+    // Le second contrôleur peut renvoyer le dossier pour re-soumission.
+    $result = app(SaasMappingWorkflow::class)->decide(
+        $checker, $review->id, false,
+        'Le groupe historique a changé entre-temps.'
+    );
+    expect($result->state)->toBe('rejected');
+});
+
+it('contrôle les options d’interface depuis la configuration et les produits actifs', function () {
+    $product = saasWorkspaceProduct('ui');
+    $product->forceFill(['is_active' => false])->save();
+
+    $fields = \App\Filament\Forms\Saas\ReconciliationDraftFields::make(false);
+    $productField = collect($fields)->first(fn ($field) => $field->getName() === 'product_id');
+    $kindField = collect($fields)->first(fn ($field) => $field->getName() === 'kind');
+
+    expect($productField)->not->toBeNull()
+        ->and($productField->getOptions())->not->toHaveKey($product->id)
+        ->and($kindField->getOptions())->toBe(config('saas.instance_kinds'));
+});

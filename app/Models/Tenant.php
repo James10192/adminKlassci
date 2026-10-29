@@ -150,6 +150,12 @@ class Tenant extends Model
         return $this->belongsTo(Group::class);
     }
 
+    /** Dossier de qualification SaaS, sans impact sur le tenant historique. */
+    public function mappingReview()
+    {
+        return $this->hasOne(SaasMappingReviewRecord::class, 'legacy_tenant_id');
+    }
+
     /**
      * Scopes
      */

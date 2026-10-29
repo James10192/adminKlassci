@@ -91,45 +91,7 @@ final class SaasMappingReviewResource extends Resource
     /** @return array<int, \Filament\Forms\Components\Component> */
     public static function draftFields(bool $creating = false): array
     {
-        return [
-            Forms\Components\Select::make('legacy_tenant_id')
-                ->label('Instance historique à examiner')
-                ->options(fn () => Tenant::query()->orderBy('code')->limit(500)->pluck('code', 'id')->all())
-                ->searchable()
-                ->required($creating)
-                ->disabled(! $creating)
-                ->dehydrated($creating)
-                ->helperText("Les instances déjà rapprochées et archivées seront bloquées par les contrôles."),
-            Forms\Components\Select::make('kind')
-                ->label('Nature de l’instance')
-                ->options([
-                    'school' => 'Établissement scolaire',
-                    'technical' => 'Instance technique (non facturable)',
-                    'demonstration' => 'Environnement de démonstration',
-                ])
-                ->required()
-                ->live()
-                ->helperText('Choix humain explicite : aucune déduction automatique depuis le nom.'),
-            Forms\Components\Select::make('product_id')
-                ->label('Produit scolaire')
-                ->options(fn () => SaasProduct::query()->orderBy('name')->pluck('name', 'id')->all())
-                ->searchable()
-                ->visible(fn (Forms\Get $get) => $get('kind') === 'school')
-                ->helperText("Catalogue vide ? Configurez d'abord les produits, sans toucher aux contrats."),
-            Forms\Components\Select::make('proposed_group_id')
-                ->label('Groupe commercial proposé')
-                ->options(fn () => Group::query()->orderBy('name')->pluck('name', 'id')->all())
-                ->searchable()
-                ->placeholder('Aucun — établissement indépendant')
-                ->visible(fn (Forms\Get $get) => $get('kind') === 'school')
-                ->helperText("Un écart avec le groupe historique sera signalé au second valideur ; aucune modification SSO."),
-            Forms\Components\Textarea::make('evidence_reference')
-                ->label('Justificatif / référence de décision')
-                ->required()
-                ->maxLength(255)
-                ->rows(2)
-                ->helperText('Référence interne de la validation contractuelle ; ne pas copier un contrat, un secret ou des données d’élève.'),
-        ];
+        return \App\Filament\Forms\Saas\ReconciliationDraftFields::make($creating);
     }
 
     public static function table(Table $table): Table
@@ -200,6 +162,11 @@ final class SaasMappingReviewResource extends Resource
                     ]),
             ])
             ->headerActions([
+                Tables\Actions\Action::make('browse_inventory')
+                    ->label('Parcourir les instances')
+                    ->icon('heroicon-o-magnifying-glass')
+                    ->color('gray')
+                    ->url(fn (): string => SaasDiscoveryResource::getUrl('index')),
                 Tables\Actions\Action::make('new_review')
                     ->label('Examiner une instance')
                     ->icon('heroicon-o-plus')

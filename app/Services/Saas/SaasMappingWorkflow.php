@@ -109,12 +109,13 @@ final class SaasMappingWorkflow
             $record->state = 'submitted';
             $record->submitted_at = now();
             $record->save();
-            $this->recordEvent($record, $actor, 'submitted', 'draft', [
-                'tenant_id' => $record->legacy_tenant_id,
-                'kind' => $record->kind,
-                'group_discrepancy' => $this->hasGroupDiscrepancy($record),
-                'product_id' => $record->product_id,
-            ]);
+            $this->recordEvent($record, $actor, 'submitted', 'draft', array_merge(
+                [
+                    'tenant_id' => $record->legacy_tenant_id,
+                    'group_discrepancy' => $this->hasGroupDiscrepancy($record),
+                ],
+                app(SubmittedMappingSnapshot::class)->capture($record)
+            ));
 
             return $record->refresh();
         });
@@ -144,6 +145,9 @@ final class SaasMappingWorkflow
 
             if ($approve) {
                 $this->validateCurrentReferences($record);
+                // Une divergence survenue depuis la soumission ne doit jamais
+                // etre avalisee par un simple interrupteur UX.
+                app(SubmittedMappingSnapshot::class)->assertUnchanged($record);
                 if ($this->hasGroupDiscrepancy($record) && ! $acknowledgeGroupDiscrepancy) {
                     throw ValidationException::withMessages([
                         'group_discrepancy' => "Écart avec le groupe historique : reconnaissance explicite obligatoire. L'accès SSO n'est pas modifié.",

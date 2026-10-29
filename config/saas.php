@@ -21,6 +21,11 @@ return [
             'saas.reconciliation.view',
         ],
     ],
+    'instance_kinds' => [
+        'school' => 'Établissement scolaire',
+        'technical' => 'Instance technique (non facturable)',
+        'demonstration' => 'Environnement de démonstration',
+    ],
     'adapter_keys' => [
         'laravel-v2' => 'KLASSCIv2 (moteur établissements supérieurs)',
         'fastapi-college' => 'KLASSCI Collège (moteur séparé)',
