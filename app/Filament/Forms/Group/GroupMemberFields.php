@@ -29,7 +29,7 @@ final class GroupMemberFields
                     ->label('Nom d\'utilisateur')
                     ->unique(table: \App\Models\GroupMember::class, ignoreRecord: ! $quickCreate)
                     ->maxLength(80)
-                    ->alphaDash()
+                    ->regex(\App\Support\Group\MemberUsernameRules::PATTERN)
                     ->helperText('Généré automatiquement si vide et pas d\'email. Utilisé pour la connexion lorsqu\'il n\'y a pas d\'email.'),
 
                 // Jamais de mot de passe ni hash dans la modale d'édition.
