@@ -126,7 +126,7 @@ class ViewSupportTicket extends ViewRecord
                     ->label('Conséquence de cet envoi')
                     ->content(fn (Forms\Get $get) => match ($get('visibilite')) {
                         VisibiliteMessage::PublicClient->value => 'Le demandeur initial verra cette réponse et sera notifié si son suivi est actif. Cela ne sollicite PAS la scolarité.',
-                        VisibiliteMessage::Administration->value => "Seul le personnel de l'établissement habilité à consulter les demandes pourra lire ce message et recevoir une alerte dans KLASSCI. Le demandeur ne le verra pas.",
+                        VisibiliteMessage::Administration->value => "Ce message est réservé au personnel habilité de l'établissement. Pour déclencher une alerte d'intervention et attendre sa réponse, activez « Demander une action à l'administration ». Le demandeur ne le verra pas.",
                         VisibiliteMessage::InterneSupport->value => "Cette note restera interne au support et ne sera pas visible par l'école.",
                         VisibiliteMessage::Technique->value => "Cette note sera réservée au personnel technique habilité et ne sera pas visible par l'école.",
                         VisibiliteMessage::Securite->value => "Cette note sera réservée aux personnes habilitées à la sécurité et ne sera pas visible par l'école.",
