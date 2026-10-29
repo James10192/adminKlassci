@@ -24,6 +24,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('saas_organizations', function (Blueprint $table) {
+            $table->dropUnique('saas_org_legacy_group_unique');
             $table->dropConstrainedForeignId('legacy_group_id');
         });
     }
